@@ -7,6 +7,10 @@ import json
 from datetime import datetime, timedelta
 from qdrant_client import QdrantClient
 from groq import Groq
+import google.generativeai as genai
+import time
+import logging
+from logging.handlers import RotatingFileHandler
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 sys.path.append(str(Path(__file__).parent.parent.resolve()))
@@ -22,11 +26,145 @@ from config.appconfig import (
 #-----------------------------------------------------
 # Configs
 #-----------------------------------------------------
-GEMINI_MODEL_NAME = "gemini/gemini-2.0-flash"
 GEMINI_EMBEDDING_MODEL = "models/text-embedding-004"
-# MODELS = "mixtral-8x7b-32768" "llama-3.3-70b-versatile" "llama-3.1-8b-instant" "llama3-70b-8192"
-SYNTHETIC_DATA_MODEL = "llama-3.3-70b-versatile"   # For generating customer profiles
-CUSTOMER_CHAT_MODEL = "llama-3.3-70b-versatile" # For handling customer conversations
+SYNTHETIC_DATA_MODEL = "gemini-2.0-flash"   # For generating customer profiles
+CUSTOMER_CHAT_MODEL = "llama3-70b-8192" # For handling customer conversations
+
+# MODELS = {
+#     "llama-3.3-70b-versatile",
+#     "llama-3.1-8b-instant",
+#     "llama3-70b-8192",
+#     "gemini-2.5-flash-preview-04-17"
+# }
+# streamlit cache clear
+
+# Configure Gemini
+genai.configure(api_key=GOOGLE_API_KEY)
+
+# Import logging configuration
+from config.logging_config import setup_logging
+
+# Initialize loggers
+app_logger, api_logger, error_logger = setup_logging()
+
+#-----------------------------------------------------
+# Usage Tracking
+#-----------------------------------------------------
+class APIUsageTracker:
+    def __init__(self):
+        self.usage_data = {
+            "google_api": {
+                "total_requests": 0,
+                "total_tokens": 0,
+                "requests_today": 0,
+                "tokens_today": 0,
+                "last_reset": datetime.now().date(),
+                "request_history": []
+            },
+            "groq_api": {
+                "total_requests": 0,
+                "total_tokens": 0,
+                "requests_today": 0,
+                "tokens_today": 0,
+                "last_reset": datetime.now().date(),
+                "request_history": []
+            }
+        }
+
+    def track_google_request(self, tokens_used=0, request_type="generation"):
+        current_date = datetime.now().date()
+
+        # Reset daily counters if new day
+        if current_date != self.usage_data["google_api"]["last_reset"]:
+            api_logger.info(f"🔄 Daily GOOGLE usage reset - Previous day: {self.usage_data['google_api']['requests_today']} requests, {self.usage_data['google_api']['tokens_today']} tokens")
+            self.usage_data["google_api"]["requests_today"] = 0
+            self.usage_data["google_api"]["tokens_today"] = 0
+            self.usage_data["google_api"]["last_reset"] = current_date
+
+        # Update counters
+        self.usage_data["google_api"]["total_requests"] += 1
+        self.usage_data["google_api"]["total_tokens"] += tokens_used
+        self.usage_data["google_api"]["requests_today"] += 1
+        self.usage_data["google_api"]["tokens_today"] += tokens_used
+
+        # Log API usage
+        api_logger.info(f"📊 GOOGLE API Call - Type: {request_type}, Tokens: {tokens_used}, Daily Total: {self.usage_data['google_api']['requests_today']} requests, {self.usage_data['google_api']['tokens_today']} tokens")
+
+        # Add to history
+        self.usage_data["google_api"]["request_history"].append({
+            "timestamp": datetime.now(),
+            "tokens": tokens_used,
+            "type": request_type
+        })
+
+        # Keep only last 100 requests in history
+        if len(self.usage_data["google_api"]["request_history"]) > 100:
+            self.usage_data["google_api"]["request_history"] = \
+                self.usage_data["google_api"]["request_history"][-100:]
+
+        # Warning thresholds
+        if self.usage_data["google_api"]["requests_today"] >= 80:
+            app_logger.warning(f"⚠️ High GOOGLE API usage: {self.usage_data['google_api']['requests_today']} requests today")
+        elif self.usage_data["google_api"]["tokens_today"] >= 40000:
+            app_logger.warning(f"⚠️ High GOOGLE token usage: {self.usage_data['google_api']['tokens_today']} tokens today")
+
+    def track_groq_request(self, tokens_used=0, request_type="customer_chat"):
+        current_date = datetime.now().date()
+
+        # Reset daily counters if new day
+        if current_date != self.usage_data["groq_api"]["last_reset"]:
+            api_logger.info(f"🔄 Daily GROQ usage reset - Previous day: {self.usage_data['groq_api']['requests_today']} requests, {self.usage_data['groq_api']['tokens_today']} tokens")
+            self.usage_data["groq_api"]["requests_today"] = 0
+            self.usage_data["groq_api"]["tokens_today"] = 0
+            self.usage_data["groq_api"]["last_reset"] = current_date
+
+        # Update counters
+        self.usage_data["groq_api"]["total_requests"] += 1
+        self.usage_data["groq_api"]["total_tokens"] += tokens_used
+        self.usage_data["groq_api"]["requests_today"] += 1
+        self.usage_data["groq_api"]["tokens_today"] += tokens_used
+
+        # Log API usage
+        api_logger.info(f"📊 GROQ API Call - Type: {request_type}, Tokens: {tokens_used}, Daily Total: {self.usage_data['groq_api']['requests_today']} requests, {self.usage_data['groq_api']['tokens_today']} tokens")
+
+        # Add to history
+        self.usage_data["groq_api"]["request_history"].append({
+            "timestamp": datetime.now(),
+            "tokens": tokens_used,
+            "type": request_type
+        })
+
+        # Keep only last 100 requests in history
+        if len(self.usage_data["groq_api"]["request_history"]) > 100:
+            self.usage_data["groq_api"]["request_history"] = \
+                self.usage_data["groq_api"]["request_history"][-100:]
+
+        # Warning thresholds
+        if self.usage_data["groq_api"]["requests_today"] >= 100:
+            app_logger.warning(f"⚠️ High GROQ API usage: {self.usage_data['groq_api']['requests_today']} requests today")
+        elif self.usage_data["groq_api"]["tokens_today"] >= 50000:
+            app_logger.warning(f"⚠️ High GROQ token usage: {self.usage_data['groq_api']['tokens_today']} tokens today")
+
+    def get_usage_stats(self):
+        return self.usage_data
+
+    def estimate_cost(self):
+        # Gemini 2.0 Flash pricing (approximate)
+        # Input: $0.075 per 1M tokens
+        # Output: $0.30 per 1M tokens
+        # Assuming 50/50 split for estimation
+        tokens = self.usage_data["google_api"]["total_tokens"]
+        estimated_cost = (tokens / 1000000) * 0.1875  # Average of input/output
+        return estimated_cost
+
+
+
+# Initialize usage tracker
+@st.cache_resource
+def get_usage_tracker():
+    return APIUsageTracker()
+
+usage_tracker = get_usage_tracker()
 
 #--------------------------------------
 # Streamlit App Initialization
@@ -35,7 +173,7 @@ CUSTOMER_CHAT_MODEL = "llama-3.3-70b-versatile" # For handling customer conversa
 st.set_page_config(
     page_title="AI Customer Support Agent",
     page_icon="🗨️",
-    layout="wide",
+    layout="centered",
     initial_sidebar_state="expanded"
 )
 st.markdown("""
@@ -296,25 +434,25 @@ class CustomerSupportAIAgent:
                 timeout=10
             )
             collections = client.get_collections()
-            print("Connection successful! Collections:", collections)
+            app_logger.info(f"🔗 Qdrant connection successful! Collections: {collections}")
             return True
         except Exception as e:
-            print("Connection failed:", e)
+            error_logger.error(f"❌ Qdrant connection failed: {e}")
             return False
 
     if test_qdrant_connection():
-        print("Qdrant is ready!")
+        app_logger.info("✅ Qdrant is ready!")
     else:
-        print("Please start Qdrant first: docker run -p 6333:6333 qdrant/qdrant")
+        app_logger.error("❌ Please start Qdrant first: docker run -p 6333:6333 qdrant/qdrant")
 
     def __init__(self, model_choice):
         # Initialize Mem0 with Qdrant as the vector store
+
         config = {
             "llm": {
-                "provider": "groq",
+                "provider": "litellm",
                 "config": {
-                    "model": CUSTOMER_CHAT_MODEL,
-                    "api_key": GROQ_API_KEY,
+                    "model": "gemini/gemini-2.0-flash",
                     "temperature": 0.2,
                     "max_tokens": 1000,
                 }
@@ -322,9 +460,8 @@ class CustomerSupportAIAgent:
             "embeddings": {
                 "provider": "google",
                 "model": GEMINI_EMBEDDING_MODEL,
-                # "api_key": GOOGLE_API_KEY,
+                "api_key": GOOGLE_API_KEY,
                 "params": {
-                    "api_key": GOOGLE_API_KEY,
                     "task_type": "RETRIEVAL_DOCUMENT"
                 }
             },
@@ -346,12 +483,17 @@ class CustomerSupportAIAgent:
             # },
         }
         try:
-            # st.write("Attempting to initialize memory with config:", config)
+            # Debug: Print config (without sensitive data)
+            debug_config = config.copy()
+            debug_config["llm"]["config"]["api_key"] = "***HIDDEN***"
+            debug_config["embeddings"]["api_key"] = "***HIDDEN***"
+            app_logger.info(f"🔧 Initializing Mem0 with config: {debug_config}")
+
             self.memory = Memory.from_config(config)
+            app_logger.info("✅ Memory initialized successfully")
         except Exception as e:
+            error_logger.error(f"❌ Memory initialization failed: {e}", exc_info=True)
             st.error(f"Failed to initialize memory: {e}")
-            import traceback
-            st.error(traceback.format_exc())
             st.stop()
 
         self.model_choice = model_choice
@@ -369,14 +511,14 @@ class CustomerSupportAIAgent:
                     if "memory" in memory:
                         context += f"- {memory['memory']}\n"
 
-            groq_client = Groq(api_key=GROQ_API_KEY)
+            # Use GROQ ONLY for customer chat - NO GEMINI TOKENS
+            app_logger.info(f"💬 Processing customer query for user: {user_id} using GROQ model: {CUSTOMER_CHAT_MODEL}")
 
             full_prompt = f"""
             I need you to act as a customer support agent for raqibtech.com, a leading Nigerian e-commerce platform specializing in electronics and general merchandise.
 
             CUSTOMER'S HISTORY:
             {context}
-
 
             Customer ID: {user_id}
 
@@ -399,13 +541,27 @@ class CustomerSupportAIAgent:
 
             Your response:
             """
+
+            # Track API usage
+            start_time = time.time()
+
+            groq_client = Groq(api_key=GROQ_API_KEY)
             response = groq_client.chat.completions.create(
-                model=CUSTOMER_CHAT_MODEL ,
+                model=CUSTOMER_CHAT_MODEL,
                 messages=[
                     {"role": "system", "content": "You are a customer support AI agent for raqibtech.com, a leading Nigerian online electronics and general merchandise store. You should be familiar with Nigerian terminology, locations, and common shopping concerns. Always be helpful, professional, and considerate of Nigerian cultural context."},
                     {"role": "user", "content": full_prompt}
                 ]
             )
+
+                        # Track GROQ usage (NOT Google/Gemini)
+            tokens_used = response.usage.total_tokens if hasattr(response, 'usage') and response.usage else 0
+            usage_tracker.track_groq_request(tokens_used, "customer_chat")
+
+            # Log usage with explicit GROQ model name
+            elapsed_time = time.time() - start_time
+            app_logger.info(f"💬 GROQ Customer chat response - Model: {CUSTOMER_CHAT_MODEL}, Tokens: {tokens_used}, Time: {elapsed_time:.2f}s, User: {user_id}")
+
             answer = response.choices[0].message.content
 
             # Add the query and answer to memory
@@ -414,9 +570,8 @@ class CustomerSupportAIAgent:
 
             return answer
         except Exception as e:
+            error_logger.error(f"❌ Error in handle_query for user {user_id}: {e}", exc_info=True)
             st.error(f"An error occurred while handling the query: {e}")
-            import traceback
-            st.error(traceback.format_exc())
             return "Sorry, I encountered an error. Please try again later."
 
 
@@ -432,7 +587,6 @@ class CustomerSupportAIAgent:
         try:
             if user_id in persistent_state["message_history"]:
                 persistent_state["message_history"][user_id] = []
-
             return True
         except Exception as e:
             st.error(f"Failed to clear memories: {e}")
@@ -440,10 +594,14 @@ class CustomerSupportAIAgent:
 
     def generate_synthetic_data(self, user_id: str) -> dict | None:
         try:
+            app_logger.info(f"🔄 Starting synthetic data generation for user: {user_id}")
             today = datetime.now()
             order_date = (today - timedelta(days=10)).strftime("%B %d, %Y")
             expected_delivery = (today + timedelta(days=2)).strftime("%B %d, %Y")
-            groq_client = Groq(api_key=GROQ_API_KEY)
+
+            # Use Gemini instead of Groq
+            model = genai.GenerativeModel(SYNTHETIC_DATA_MODEL)
+            app_logger.info(f"📝 Using Gemini model: {SYNTHETIC_DATA_MODEL}")
 
             prompt = f"""Generate a detailed UNIQUE Nigerian customer profile for raqibtech.com customer ID {user_id}.
             Strict requirements:
@@ -491,18 +649,32 @@ class CustomerSupportAIAgent:
             }}
             RESPOND ONLY WITH VALID JSON. NO EXPLANATIONS OR MARKDOWN."""
 
-            response = groq_client.chat.completions.create(
-                model=SYNTHETIC_DATA_MODEL,
-                messages=[
-                    {"role": "system", "content": "You are a Nigerian e-commerce data generator. Use authentic Nigerian formats, locations, and naming conventions."},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.4
+            # Track API usage
+            start_time = time.time()
+
+            # Generate with Gemini
+            full_prompt = f"""You are a Nigerian e-commerce data generator. Use authentic Nigerian formats, locations, and naming conventions.
+
+{prompt}"""
+
+            response = model.generate_content(
+                full_prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.4,
+                    response_mime_type="application/json"
+                )
             )
 
-            # Handle markdown formatting and validate JSON
-            raw_content = response.choices[0].message.content
+            # Track usage
+            tokens_used = response.usage_metadata.total_token_count if hasattr(response, 'usage_metadata') else 0
+            usage_tracker.track_google_request(tokens_used, "synthetic_data_generation")
+
+            # Log usage
+            elapsed_time = time.time() - start_time
+            app_logger.info(f"🔍 Synthetic data generated - Tokens: {tokens_used}, Time: {elapsed_time:.2f}s, User: {user_id}")
+
+            # Handle response
+            raw_content = response.text
 
             # Remove markdown code blocks if present
             if raw_content.startswith("```json"):
@@ -527,9 +699,11 @@ class CustomerSupportAIAgent:
             return customer_data
 
         except json.JSONDecodeError as e:
-            st.error(f"Invalid JSON response from model: {e}\nRaw response: {raw_content}")
+            error_logger.error(f"❌ JSON decode error for user {user_id}: {e}", exc_info=True)
+            st.error(f"Invalid JSON response from model: {e}")
             return None
         except Exception as e:
+            error_logger.error(f"❌ Failed to generate synthetic data for user {user_id}: {e}", exc_info=True)
             st.error(f"Failed to generate synthetic data: {e}")
             return None
 
@@ -537,8 +711,81 @@ class CustomerSupportAIAgent:
 st.sidebar.markdown("<div class='sidebar-header'>🔧 Settings</div>", unsafe_allow_html=True)
 model_choice = "Groq"
 
+# Add usage metrics in sidebar
+st.sidebar.markdown("<div class='sidebar-header'>📊 API Usage Metrics</div>", unsafe_allow_html=True)
+
+def display_usage_metrics():
+    stats = usage_tracker.get_usage_stats()
+    google_stats = stats["google_api"]
+    groq_stats = stats.get("groq_api", {
+    "total_requests": 0,
+    "total_tokens": 0,
+    "requests_today": 0,
+    "tokens_today": 0,
+    "last_reset": None,
+        "request_history": []
+    })
+
+    # Google/Gemini metrics
+    st.sidebar.markdown("**🔵 Google/Gemini (Synthetic Data)**")
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        st.metric(
+            label="Google Requests",
+            value=google_stats["requests_today"],
+            delta=f"Total: {google_stats['total_requests']}"
+        )
+    with col2:
+        st.metric(
+            label="Google Tokens",
+            value=f"{google_stats['tokens_today']:,}",
+            delta=f"Total: {google_stats['total_tokens']:,}"
+        )
+
+    # Groq metrics
+    st.sidebar.markdown("**🟠 Groq (Customer Chat)**")
+    col3, col4 = st.sidebar.columns(2)
+    with col3:
+        st.metric(
+            label="Groq Requests",
+            value=groq_stats["requests_today"],
+            delta=f"Total: {groq_stats['total_requests']}"
+        )
+    with col4:
+        st.metric(
+            label="Groq Tokens",
+            value=f"{groq_stats['tokens_today']:,}",
+            delta=f"Total: {groq_stats['total_tokens']:,}"
+        )
+
+    # Cost estimation
+    estimated_cost = usage_tracker.estimate_cost()
+    st.sidebar.metric(
+        label="Estimated Cost (USD)",
+        value=f"${estimated_cost:.4f}",
+        help="Approximate cost based on Gemini 2.0 Flash pricing"
+    )
+
+    # Usage warning
+    if google_stats["requests_today"] > 50:
+        st.sidebar.warning("⚠️ High API usage today!")
+    elif google_stats["requests_today"] > 20:
+        st.sidebar.info("ℹ️ Moderate API usage")
+    else:
+        st.sidebar.success("✅ Low API usage")
+
+    # Recent activity
+    if google_stats["request_history"]:
+        with st.sidebar.expander("📈 Recent Activity", expanded=False):
+            recent_requests = google_stats["request_history"][-5:]  # Last 5 requests
+            for req in reversed(recent_requests):
+                timestamp = req["timestamp"].strftime("%H:%M:%S")
+                st.write(f"🕐 {timestamp} - {req['tokens']} tokens ({req['type']})")
+
+display_usage_metrics()
+
 # Initialize tabs for main content
-tab1, tab2 = st.tabs(["💬 Chat Interface", "👥 Customer Profiles"])
+tab1, tab2, tab3 = st.tabs(["💬 Chat Interface", "👥 Customer Profiles", "📊 Usage Analytics"])
 
 # Handle tab switching
 if "switch_to_tab" in st.session_state:
@@ -897,6 +1144,155 @@ with tab2:
 
     else:
         st.info("No customer profiles available. Generate customer profiles from the sidebar first.")
+
+
+with tab3:
+    st.markdown("<div class='sub-header'>📊 Comprehensive Usage Analytics</div>", unsafe_allow_html=True)
+
+    stats = usage_tracker.get_usage_stats()
+    google_stats = stats["google_api"]
+
+    # Overview metrics
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric(
+            label="Total Requests",
+            value=google_stats["total_requests"],
+            help="Total API requests made"
+        )
+
+    with col2:
+        st.metric(
+            label="Total Tokens",
+            value=f"{google_stats['total_tokens']:,}",
+            help="Total tokens consumed"
+        )
+
+    with col3:
+        st.metric(
+            label="Today's Requests",
+            value=google_stats["requests_today"],
+            help="API requests made today"
+        )
+
+    with col4:
+        estimated_cost = usage_tracker.estimate_cost()
+        st.metric(
+            label="Estimated Cost",
+            value=f"${estimated_cost:.4f}",
+            help="Approximate cost in USD"
+        )
+
+    # Usage breakdown
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("### 📈 Usage Trends")
+        if google_stats["request_history"]:
+            # Create a simple chart of recent usage
+            recent_requests = google_stats["request_history"][-20:]  # Last 20 requests
+            timestamps = [req["timestamp"].strftime("%H:%M") for req in recent_requests]
+            tokens = [req["tokens"] for req in recent_requests]
+
+            chart_data = {
+                "Time": timestamps,
+                "Tokens": tokens
+            }
+            st.line_chart(chart_data, x="Time", y="Tokens")
+        else:
+            st.info("No usage data available yet.")
+
+    with col2:
+        st.markdown("### 🔍 Request Types")
+        if google_stats["request_history"]:
+            # Count request types
+            type_counts = {}
+            for req in google_stats["request_history"]:
+                req_type = req["type"]
+                type_counts[req_type] = type_counts.get(req_type, 0) + 1
+
+            st.bar_chart(type_counts)
+        else:
+            st.info("No request type data available yet.")
+
+    # Recent activity table
+    st.markdown("### 📋 Recent Activity")
+    if google_stats["request_history"]:
+        recent_requests = google_stats["request_history"][-10:]  # Last 10 requests
+
+        activity_data = []
+        for req in reversed(recent_requests):
+            activity_data.append({
+                "Timestamp": req["timestamp"].strftime("%Y-%m-%d %H:%M:%S"),
+                "Type": req["type"],
+                "Tokens": req["tokens"]
+            })
+
+        st.dataframe(activity_data, use_container_width=True)
+    else:
+        st.info("No recent activity to display.")
+
+    # Usage limits and warnings
+    st.markdown("### ⚠️ Usage Monitoring")
+
+    # Daily limits (you can adjust these)
+    DAILY_REQUEST_LIMIT = 100
+    DAILY_TOKEN_LIMIT = 50000
+
+    request_percentage = (google_stats["requests_today"] / DAILY_REQUEST_LIMIT) * 100
+    token_percentage = (google_stats["tokens_today"] / DAILY_TOKEN_LIMIT) * 100
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.progress(min(request_percentage / 100, 1.0))
+        st.write(f"Daily Requests: {google_stats['requests_today']}/{DAILY_REQUEST_LIMIT} ({request_percentage:.1f}%)")
+
+        if request_percentage > 90:
+            st.error("🚨 Approaching daily request limit!")
+        elif request_percentage > 70:
+            st.warning("⚠️ High request usage today")
+        else:
+            st.success("✅ Request usage is healthy")
+
+    with col2:
+        st.progress(min(token_percentage / 100, 1.0))
+        st.write(f"Daily Tokens: {google_stats['tokens_today']:,}/{DAILY_TOKEN_LIMIT:,} ({token_percentage:.1f}%)")
+
+        if token_percentage > 90:
+            st.error("🚨 Approaching daily token limit!")
+        elif token_percentage > 70:
+            st.warning("⚠️ High token usage today")
+        else:
+            st.success("✅ Token usage is healthy")
+
+    # Cost breakdown
+    st.markdown("### 💰 Cost Analysis")
+
+    # Estimate costs for different usage levels
+    cost_data = {
+        "Usage Level": ["Current", "10x Current", "100x Current"],
+        "Requests": [google_stats["total_requests"], google_stats["total_requests"] * 10, google_stats["total_requests"] * 100],
+        "Tokens": [google_stats["total_tokens"], google_stats["total_tokens"] * 10, google_stats["total_tokens"] * 100],
+        "Estimated Cost": [f"${estimated_cost:.4f}", f"${estimated_cost * 10:.4f}", f"${estimated_cost * 100:.4f}"]
+    }
+
+    st.dataframe(cost_data, use_container_width=True)
+
+    # Reset button
+    if st.button("🔄 Reset Usage Statistics", type="secondary"):
+        # Reset the usage tracker
+        usage_tracker.usage_data["google_api"] = {
+            "total_requests": 0,
+            "total_tokens": 0,
+            "requests_today": 0,
+            "tokens_today": 0,
+            "last_reset": datetime.now().date(),
+            "request_history": []
+        }
+        st.success("Usage statistics have been reset!")
+        st.rerun()
 
 
 # Footer
