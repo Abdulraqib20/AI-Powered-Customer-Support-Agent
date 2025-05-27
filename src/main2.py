@@ -1132,13 +1132,13 @@ def render_customer_profile(data):
                     <div class='profile-item'>
                         <div class='profile-item-label'>Quantity:</div>
                         <div>{product.get('quantity', 'N/A')}</div>
-                    </div>
-                    <div class='profile-item'>
-                        <div class='profile-item-label'>Status:</div>
+            </div>
+            <div class='profile-item'>
+                <div class='profile-item-label'>Status:</div>
                         <div>{product.get('status', 'N/A')}</div>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
 
     # Order totals
     if current_order.get('shipping_fee') or current_order.get('total'):
