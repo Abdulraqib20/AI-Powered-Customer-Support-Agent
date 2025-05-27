@@ -9,8 +9,6 @@ from qdrant_client import QdrantClient
 from groq import Groq
 import google.generativeai as genai
 import time
-import logging
-from logging.handlers import RotatingFileHandler
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 sys.path.append(str(Path(__file__).parent.parent.resolve()))
@@ -28,13 +26,14 @@ from config.appconfig import (
 #-----------------------------------------------------
 GEMINI_EMBEDDING_MODEL = "models/text-embedding-004"
 SYNTHETIC_DATA_MODEL = "gemini-2.0-flash"   # For generating customer profiles
-CUSTOMER_CHAT_MODEL = "llama3-70b-8192" # For handling customer conversations
+CUSTOMER_CHAT_MODEL = "llama-3.1-8b-instant" # For handling customer conversations
 
 # MODELS = {
 #     "llama-3.3-70b-versatile",
 #     "llama-3.1-8b-instant",
 #     "llama3-70b-8192",
-#     "gemini-2.5-flash-preview-04-17"
+#     "gemini-2.5-flash-preview-04-17",
+#     "gemini-2.0-flash"
 # }
 # streamlit cache clear
 
@@ -48,28 +47,74 @@ from config.logging_config import setup_logging
 app_logger, api_logger, error_logger = setup_logging()
 
 #-----------------------------------------------------
-# Usage Tracking
+# Usage Tracking with Enhanced Gemini 2.0 Flash Quotas
 #-----------------------------------------------------
 class APIUsageTracker:
     def __init__(self):
+        # Official Gemini 2.0 Flash quotas from Google Cloud documentation
+        self.gemini_quotas = {
+            "requests_per_minute": 1000,  # Default quota for gemini-2.0-flash
+            "tokens_per_minute": 4000000,  # 4M tokens per minute
+            "requests_per_day": 50000,     # Estimated daily limit
+            "concurrent_requests": 100,    # Max concurrent requests
+            "max_output_tokens": 8192,     # Max output tokens per request
+            "max_input_tokens": 2097152,   # ~2M input tokens per request
+        }
+
+        # Groq quotas for comparison
+        self.groq_quotas = {
+            "requests_per_minute": 30,     # Groq free tier
+            "tokens_per_minute": 100000,   # 100K tokens per minute
+            "requests_per_day": 14400,     # Estimated daily limit
+        }
+
         self.usage_data = {
             "google_api": {
                 "total_requests": 0,
                 "total_tokens": 0,
                 "requests_today": 0,
                 "tokens_today": 0,
+                "requests_this_minute": 0,
+                "tokens_this_minute": 0,
                 "last_reset": datetime.now().date(),
-                "request_history": []
+                "last_minute_reset": datetime.now().replace(second=0, microsecond=0),
+                "request_history": [],
+                "peak_rpm": 0,  # Peak requests per minute
+                "peak_tpm": 0,  # Peak tokens per minute
             },
             "groq_api": {
                 "total_requests": 0,
                 "total_tokens": 0,
                 "requests_today": 0,
                 "tokens_today": 0,
+                "requests_this_minute": 0,
+                "tokens_this_minute": 0,
                 "last_reset": datetime.now().date(),
-                "request_history": []
+                "last_minute_reset": datetime.now().replace(second=0, microsecond=0),
+                "request_history": [],
+                "peak_rpm": 0,
+                "peak_tpm": 0,
             }
         }
+
+    def _reset_minute_counters(self, api_type):
+        """Reset per-minute counters if a new minute has started"""
+        current_minute = datetime.now().replace(second=0, microsecond=0)
+        if current_minute != self.usage_data[api_type]["last_minute_reset"]:
+            # Update peak values before reset
+            self.usage_data[api_type]["peak_rpm"] = max(
+                self.usage_data[api_type]["peak_rpm"],
+                self.usage_data[api_type]["requests_this_minute"]
+            )
+            self.usage_data[api_type]["peak_tpm"] = max(
+                self.usage_data[api_type]["peak_tpm"],
+                self.usage_data[api_type]["tokens_this_minute"]
+            )
+
+            # Reset minute counters
+            self.usage_data[api_type]["requests_this_minute"] = 0
+            self.usage_data[api_type]["tokens_this_minute"] = 0
+            self.usage_data[api_type]["last_minute_reset"] = current_minute
 
     def track_google_request(self, tokens_used=0, request_type="generation"):
         current_date = datetime.now().date()
@@ -81,20 +126,32 @@ class APIUsageTracker:
             self.usage_data["google_api"]["tokens_today"] = 0
             self.usage_data["google_api"]["last_reset"] = current_date
 
-        # Update counters
+        # Reset minute counters if needed
+        self._reset_minute_counters("google_api")
+
+        # Update all counters
         self.usage_data["google_api"]["total_requests"] += 1
         self.usage_data["google_api"]["total_tokens"] += tokens_used
         self.usage_data["google_api"]["requests_today"] += 1
         self.usage_data["google_api"]["tokens_today"] += tokens_used
+        self.usage_data["google_api"]["requests_this_minute"] += 1
+        self.usage_data["google_api"]["tokens_this_minute"] += tokens_used
 
-        # Log API usage
-        api_logger.info(f"📊 GOOGLE API Call - Type: {request_type}, Tokens: {tokens_used}, Daily Total: {self.usage_data['google_api']['requests_today']} requests, {self.usage_data['google_api']['tokens_today']} tokens")
+        # Log API usage with quota context
+        rpm_percentage = (self.usage_data["google_api"]["requests_this_minute"] / self.gemini_quotas["requests_per_minute"]) * 100
+        tpm_percentage = (self.usage_data["google_api"]["tokens_this_minute"] / self.gemini_quotas["tokens_per_minute"]) * 100
+
+        api_logger.info(f"📊 GOOGLE API Call - Type: {request_type}, Tokens: {tokens_used}, "
+                       f"RPM: {self.usage_data['google_api']['requests_this_minute']}/{self.gemini_quotas['requests_per_minute']} ({rpm_percentage:.1f}%), "
+                       f"TPM: {self.usage_data['google_api']['tokens_this_minute']}/{self.gemini_quotas['tokens_per_minute']} ({tpm_percentage:.1f}%)")
 
         # Add to history
         self.usage_data["google_api"]["request_history"].append({
             "timestamp": datetime.now(),
             "tokens": tokens_used,
-            "type": request_type
+            "type": request_type,
+            "rpm_at_time": self.usage_data["google_api"]["requests_this_minute"],
+            "tpm_at_time": self.usage_data["google_api"]["tokens_this_minute"]
         })
 
         # Keep only last 100 requests in history
@@ -102,11 +159,13 @@ class APIUsageTracker:
             self.usage_data["google_api"]["request_history"] = \
                 self.usage_data["google_api"]["request_history"][-100:]
 
-        # Warning thresholds
-        if self.usage_data["google_api"]["requests_today"] >= 80:
-            app_logger.warning(f"⚠️ High GOOGLE API usage: {self.usage_data['google_api']['requests_today']} requests today")
-        elif self.usage_data["google_api"]["tokens_today"] >= 40000:
-            app_logger.warning(f"⚠️ High GOOGLE token usage: {self.usage_data['google_api']['tokens_today']} tokens today")
+        # Enhanced warning thresholds based on official quotas
+        if self.usage_data["google_api"]["requests_this_minute"] >= self.gemini_quotas["requests_per_minute"] * 0.9:
+            app_logger.warning(f"🚨 CRITICAL: Approaching Gemini RPM limit! {self.usage_data['google_api']['requests_this_minute']}/{self.gemini_quotas['requests_per_minute']}")
+        elif self.usage_data["google_api"]["tokens_this_minute"] >= self.gemini_quotas["tokens_per_minute"] * 0.9:
+            app_logger.warning(f"🚨 CRITICAL: Approaching Gemini TPM limit! {self.usage_data['google_api']['tokens_this_minute']}/{self.gemini_quotas['tokens_per_minute']}")
+        elif self.usage_data["google_api"]["requests_today"] >= self.gemini_quotas["requests_per_day"] * 0.8:
+            app_logger.warning(f"⚠️ High daily usage: {self.usage_data['google_api']['requests_today']}/{self.gemini_quotas['requests_per_day']} requests")
 
     def track_groq_request(self, tokens_used=0, request_type="customer_chat"):
         current_date = datetime.now().date()
@@ -118,20 +177,32 @@ class APIUsageTracker:
             self.usage_data["groq_api"]["tokens_today"] = 0
             self.usage_data["groq_api"]["last_reset"] = current_date
 
-        # Update counters
+        # Reset minute counters if needed
+        self._reset_minute_counters("groq_api")
+
+        # Update all counters
         self.usage_data["groq_api"]["total_requests"] += 1
         self.usage_data["groq_api"]["total_tokens"] += tokens_used
         self.usage_data["groq_api"]["requests_today"] += 1
         self.usage_data["groq_api"]["tokens_today"] += tokens_used
+        self.usage_data["groq_api"]["requests_this_minute"] += 1
+        self.usage_data["groq_api"]["tokens_this_minute"] += tokens_used
 
-        # Log API usage
-        api_logger.info(f"📊 GROQ API Call - Type: {request_type}, Tokens: {tokens_used}, Daily Total: {self.usage_data['groq_api']['requests_today']} requests, {self.usage_data['groq_api']['tokens_today']} tokens")
+        # Log API usage with quota context
+        rpm_percentage = (self.usage_data["groq_api"]["requests_this_minute"] / self.groq_quotas["requests_per_minute"]) * 100
+        tpm_percentage = (self.usage_data["groq_api"]["tokens_this_minute"] / self.groq_quotas["tokens_per_minute"]) * 100
+
+        api_logger.info(f"📊 GROQ API Call - Type: {request_type}, Tokens: {tokens_used}, "
+                       f"RPM: {self.usage_data['groq_api']['requests_this_minute']}/{self.groq_quotas['requests_per_minute']} ({rpm_percentage:.1f}%), "
+                       f"TPM: {self.usage_data['groq_api']['tokens_this_minute']}/{self.groq_quotas['tokens_per_minute']} ({tpm_percentage:.1f}%)")
 
         # Add to history
         self.usage_data["groq_api"]["request_history"].append({
             "timestamp": datetime.now(),
             "tokens": tokens_used,
-            "type": request_type
+            "type": request_type,
+            "rpm_at_time": self.usage_data["groq_api"]["requests_this_minute"],
+            "tpm_at_time": self.usage_data["groq_api"]["tokens_this_minute"]
         })
 
         # Keep only last 100 requests in history
@@ -139,17 +210,24 @@ class APIUsageTracker:
             self.usage_data["groq_api"]["request_history"] = \
                 self.usage_data["groq_api"]["request_history"][-100:]
 
-        # Warning thresholds
-        if self.usage_data["groq_api"]["requests_today"] >= 100:
-            app_logger.warning(f"⚠️ High GROQ API usage: {self.usage_data['groq_api']['requests_today']} requests today")
-        elif self.usage_data["groq_api"]["tokens_today"] >= 50000:
-            app_logger.warning(f"⚠️ High GROQ token usage: {self.usage_data['groq_api']['tokens_today']} tokens today")
+        # Warning thresholds for Groq
+        if self.usage_data["groq_api"]["requests_this_minute"] >= self.groq_quotas["requests_per_minute"] * 0.9:
+            app_logger.warning(f"🚨 CRITICAL: Approaching Groq RPM limit! {self.usage_data['groq_api']['requests_this_minute']}/{self.groq_quotas['requests_per_minute']}")
+        elif self.usage_data["groq_api"]["tokens_this_minute"] >= self.groq_quotas["tokens_per_minute"] * 0.9:
+            app_logger.warning(f"🚨 CRITICAL: Approaching Groq TPM limit! {self.usage_data['groq_api']['tokens_this_minute']}/{self.groq_quotas['tokens_per_minute']}")
 
     def get_usage_stats(self):
         return self.usage_data
 
+    def get_quota_info(self):
+        """Get detailed quota information for both APIs"""
+        return {
+            "gemini": self.gemini_quotas,
+            "groq": self.groq_quotas
+        }
+
     def estimate_cost(self):
-        # Gemini 2.0 Flash pricing (approximate)
+        # Updated Gemini 2.0 Flash pricing (from Google Cloud documentation)
         # Input: $0.075 per 1M tokens
         # Output: $0.30 per 1M tokens
         # Assuming 50/50 split for estimation
@@ -157,7 +235,37 @@ class APIUsageTracker:
         estimated_cost = (tokens / 1000000) * 0.1875  # Average of input/output
         return estimated_cost
 
+    def get_quota_status(self):
+        """Get current quota utilization status"""
+        google_stats = self.usage_data["google_api"]
+        groq_stats = self.usage_data["groq_api"]
 
+        return {
+            "gemini": {
+                "rpm_usage": (google_stats["requests_this_minute"] / self.gemini_quotas["requests_per_minute"]) * 100,
+                "tpm_usage": (google_stats["tokens_this_minute"] / self.gemini_quotas["tokens_per_minute"]) * 100,
+                "daily_usage": (google_stats["requests_today"] / self.gemini_quotas["requests_per_day"]) * 100,
+                "status": self._get_status_level(google_stats["requests_this_minute"], self.gemini_quotas["requests_per_minute"])
+            },
+            "groq": {
+                "rpm_usage": (groq_stats["requests_this_minute"] / self.groq_quotas["requests_per_minute"]) * 100,
+                "tpm_usage": (groq_stats["tokens_this_minute"] / self.groq_quotas["tokens_per_minute"]) * 100,
+                "daily_usage": (groq_stats["requests_today"] / self.groq_quotas["requests_per_day"]) * 100,
+                "status": self._get_status_level(groq_stats["requests_this_minute"], self.groq_quotas["requests_per_minute"])
+            }
+        }
+
+    def _get_status_level(self, current, limit):
+        """Get status level based on usage percentage"""
+        percentage = (current / limit) * 100
+        if percentage >= 90:
+            return "critical"
+        elif percentage >= 70:
+            return "warning"
+        elif percentage >= 50:
+            return "moderate"
+        else:
+            return "healthy"
 
 # Initialize usage tracker
 @st.cache_resource
@@ -472,18 +580,16 @@ class CustomerSupportAIAgent:
                     "port": 6333,
                 }
             },
-            # cloud
+            ############################ for Qdrant Cloud ###########################
             # "vector_store": {
             #     "provider": "qdrant",
             #     "config": {
             #         "url": QDRANT_URL_CLOUD,
             #         "api_key": QDRANT_API_KEY,
-
             #     }
             # },
         }
         try:
-            # Debug: Print config (without sensitive data)
             debug_config = config.copy()
             debug_config["llm"]["config"]["api_key"] = "***HIDDEN***"
             debug_config["embeddings"]["api_key"] = "***HIDDEN***"
@@ -501,46 +607,72 @@ class CustomerSupportAIAgent:
 
     def handle_query(self, query, user_id=None):
         try:
-            # Search for relevant memories
-            relevant_memories = self.memory.search(query=query, user_id=user_id)
+            # Get complete customer profile from persistent state
+            customer_profile = persistent_state["all_customer_data"].get(user_id, {})
 
-            # Build context from relevant memories
-            context = "Relevant past information:\n"
-            if relevant_memories and "results" in relevant_memories:
-                for memory in relevant_memories["results"]:
-                    if "memory" in memory:
-                        context += f"- {memory['memory']}\n"
+            # Build comprehensive context from customer profile
+            context = ""
+            if customer_profile:
+                customer_info = customer_profile.get("customer_info", {})
+                current_order = customer_profile.get("current_order", {})
+                order_history = customer_profile.get("order_history", [])
+                account = customer_profile.get("account", {})
 
-            # Use GROQ ONLY for customer chat - NO GEMINI TOKENS
+                # Format customer information for AI
+                context = f"""
+CUSTOMER PROFILE:
+Name: {customer_info.get('name', 'Unknown')}
+Email: {customer_info.get('email', 'Unknown')}
+Phone: {customer_info.get('phone', 'Unknown')}
+Address: {customer_info.get('shipping_address', 'Unknown')}
+State: {customer_info.get('state', 'Unknown')}
+Member Since: {account.get('member_since', 'Unknown')}
+Tier: {account.get('tier', 'Unknown')}
+Points: {account.get('points', 'Unknown')}
+
+CURRENT ORDER:
+Order ID: {current_order.get('order_id', 'No current order')}
+Order Date: {current_order.get('order_date', 'N/A')}
+Expected Delivery: {current_order.get('expected_delivery', 'N/A')}
+Delivery Method: {current_order.get('delivery_method', 'N/A')}
+Payment Method: {current_order.get('payment_method', 'N/A')}
+Products: {', '.join([f"{p.get('name', 'Unknown')} (₦{p.get('price', '0')}, Qty: {p.get('quantity', 1)})" for p in current_order.get('products', [])]) if current_order.get('products') else 'No products listed'}
+Shipping Fee: {current_order.get('shipping_fee', 'N/A')}
+Total: {current_order.get('total', 'N/A')}
+
+RECENT ORDER HISTORY:
+{chr(10).join([f"Order {order.get('order_id', 'Unknown')}: {order.get('items', 'Unknown items')} - {order.get('total', 'Unknown total')} ({order.get('status', 'Unknown status')})" for order in order_history[:3]]) if order_history else 'No previous orders'}
+"""
+            else:
+                # Fallback to memory search if no profile available
+                relevant_memories = self.memory.search(query=query, user_id=user_id, limit=3)
+                if relevant_memories and "results" in relevant_memories:
+                    memories = [memory.get('memory', '') for memory in relevant_memories["results"][:2]]
+                    context = " | ".join(memories) if memories else "No customer information available"
+                else:
+                    context = "No customer information available"
+
             app_logger.info(f"💬 Processing customer query for user: {user_id} using GROQ model: {CUSTOMER_CHAT_MODEL}")
 
-            full_prompt = f"""
-            I need you to act as a customer support agent for raqibtech.com, a leading Nigerian e-commerce platform specializing in electronics and general merchandise.
+            full_prompt = f"""You are a customer support agent for raqibtech.com Nigerian e-commerce store.
 
-            CUSTOMER'S HISTORY:
+            CUSTOMER INFORMATION:
             {context}
-
             Customer ID: {user_id}
 
-            CUSTOMER QUERY:
-            {query}
+            CUSTOMER QUERY: {query}
 
-            YOUR RESPONSE GUIDELINES:
-            As a customer support agent for raqibtech.com (a leading Nigerian e-commerce platform):
-            1. Be warm, professional and conversational - use "I" not "we"
-            2. Address the customer by name when appropriate
-            3. Reference specific details from their profile and order history
-            4. Provide clear, actionable solutions
-            5. Use Nigerian English where appropriate (not exaggerated)
-            6. Acknowledge Nigerian-specific challenges (delivery logistics, payment issues)
-            7. For order status, reference their specific order details
-            8. For product questions, provide relevant information for the Nigerian market
-            9. Keep responses concise but complete
+            RESPONSE RULES:
+            1. ALWAYS greet customer by their ACTUAL NAME from their profile (never use "valued customer" or customer ID)
+            2. ONLY reference order details that are EXPLICITLY provided in the customer information above
+            3. DO NOT make up or invent any order details, products, or dates not shown above
+            4. If order details are not available, say "Let me check your account" and provide general help
+            5. Be warm, professional, and conversational
+            6. Use Nigerian context appropriately
+            7. Sign off as "Best regards, Customer Support Team - raqibtech.com" (NO placeholder names)
+            8. Keep responses concise and helpful
 
-            Your response should feel personalized to this specific customer and their situation in Nigeria.
-
-            Your response:
-            """
+            Respond naturally and professionally:"""
 
             # Track API usage
             start_time = time.time()
@@ -549,16 +681,15 @@ class CustomerSupportAIAgent:
             response = groq_client.chat.completions.create(
                 model=CUSTOMER_CHAT_MODEL,
                 messages=[
-                    {"role": "system", "content": "You are a customer support AI agent for raqibtech.com, a leading Nigerian online electronics and general merchandise store. You should be familiar with Nigerian terminology, locations, and common shopping concerns. Always be helpful, professional, and considerate of Nigerian cultural context."},
+                    {"role": "system", "content": "You are a helpful customer support agent for raqibtech.com Nigerian e-commerce store. Be professional, warm, and concise."},
                     {"role": "user", "content": full_prompt}
-                ]
+                ],
+                max_tokens=300,
+                temperature=0.1
             )
 
-                        # Track GROQ usage (NOT Google/Gemini)
             tokens_used = response.usage.total_tokens if hasattr(response, 'usage') and response.usage else 0
             usage_tracker.track_groq_request(tokens_used, "customer_chat")
-
-            # Log usage with explicit GROQ model name
             elapsed_time = time.time() - start_time
             app_logger.info(f"💬 GROQ Customer chat response - Model: {CUSTOMER_CHAT_MODEL}, Tokens: {tokens_used}, Time: {elapsed_time:.2f}s, User: {user_id}")
 
@@ -599,54 +730,66 @@ class CustomerSupportAIAgent:
             order_date = (today - timedelta(days=10)).strftime("%B %d, %Y")
             expected_delivery = (today + timedelta(days=2)).strftime("%B %d, %Y")
 
-            # Use Gemini instead of Groq
             model = genai.GenerativeModel(SYNTHETIC_DATA_MODEL)
             app_logger.info(f"📝 Using Gemini model: {SYNTHETIC_DATA_MODEL}")
 
             prompt = f"""Generate a detailed UNIQUE Nigerian customer profile for raqibtech.com customer ID {user_id}.
-            Strict requirements:
+
+            STRICT REQUIREMENTS:
             1. Create a COMPLETELY UNIQUE Nigerian full name that has NEVER been used before
             2. Ensure the name follows Nigerian naming conventions but is distinguishable from all previous customers
             3. The name must NOT match or resemble any existing names: {[data['customer_info']['name'] for data in persistent_state["all_customer_data"].values()]}
 
-            Generate realistic profile with:
-            - Name reflecting specific Nigerian ethnic groups (Yoruba/Igbo/Hausa/Edo/etc.)
-            - Valid Nigerian address format with accurate city/state combinations
-            - Nigerian phone number format (e.g., +234 or 080x)
-            - Realistic order history with appropriate Nigerian products and pricing
+            Generate realistic profile with DETAILED ORDER INFORMATION:
+            - Full Nigerian name (First + Last name from Yoruba/Igbo/Hausa/Edo/etc.)
+            - Valid Nigerian address with specific street, area, city, and state
+            - Nigerian phone number format (+234 or 080x format)
+            - DETAILED order history with SPECIFIC REALISTIC PRODUCTS
+            - Consistent pricing in Nigerian Naira
             - Appropriate payment methods common in Nigeria
 
-            Format as JSON with this structure:
+            PRODUCT CATEGORIES TO USE (pick realistic items):
+            Electronics: Samsung Galaxy phones, iPhone, HP laptops, Dell computers, LG TVs, Sony headphones
+            Home & Kitchen: Rice cookers, blenders, microwaves, refrigerators, gas cookers
+            Food Items: Indomie noodles, Golden Penny semovita, Peak milk, Maggi cubes, vegetable oil
+            Fashion: Ankara fabrics, shoes, bags, watches, jewelry
+            Beauty: skincare products, hair products, makeup, perfumes
+
+            Format as JSON with this EXACT structure:
             {{
                 "customer_info": {{
-                    "name": "Full Nigerian name",
-                    "email": "Email address with common Nigerian domains like gmail.com or yahoo.com",
-                    "shipping_address": "Specific Nigerian address with estate/area, street, city and state (e.g. '15 Adeniyi Jones Avenue, Ikeja, Lagos')",
-                    "phone": "Nigerian mobile number format (e.g. '0803-123-4567' or '+234 813 456 7890')",
-                    "state": "Actual Nigerian state",
+                    "name": "Full Nigerian name (e.g., 'Adebayo Okonkwo' or 'Fatima Abdullahi')",
+                    "email": "realistic email with gmail.com or yahoo.com",
+                    "shipping_address": "Specific address like '15 Adeniyi Jones Avenue, Ikeja, Lagos' or '23 Uselu-Lagos Road, Benin City, Edo'",
+                    "phone": "Nigerian format like '+234 813 456 7890' or '0803-123-4567'",
+                    "state": "Actual Nigerian state (Lagos, Abuja, Kano, Rivers, etc.)",
                     "lga": "Corresponding Local Government Area"
                 }},
                 "current_order": {{
                     "order_id": "JMT-NG-{user_id[-6:]}",
                     "order_date": "{order_date}",
                     "expected_delivery": "{expected_delivery}",
-                    "delivery_method": "One of: raqibtech Express, PickUp Station, Courier Service",
-                    "payment_method": "One of: Pay on Delivery, Card Payment, Bank Transfer, RaqibTechPay",
+                    "delivery_method": "raqibtech Express OR PickUp Station OR Courier Service",
+                    "payment_method": "Pay on Delivery OR Card Payment OR Bank Transfer OR RaqibTechPay",
                     "products": [
-                        {{"name": "Realistic Nigerian product name", "price": "Price in Naira format with ₦ symbol", "quantity": X, "status": "Processing/Shipped/Delivered"}}
+                        {{"name": "Specific product name with brand", "price": "₦XX,XXX", "quantity": 1, "status": "Processing"}},
+                        {{"name": "Another specific product", "price": "₦XX,XXX", "quantity": 2, "status": "Processing"}}
                     ],
-                    "shipping_fee": "₦x,xxx",
-                    "total": "₦xx,xxx"
+                    "shipping_fee": "₦2,500",
+                    "total": "₦XX,XXX"
                 }},
                 "order_history": [
-                    {{"order_id": "JMT-NG-xxxxxx", "date": "YYYY-MM-DD", "items": X, "total": "₦xx,xxx", "status": "Delivered/Returned/Cancelled"}}
+                    {{"order_id": "JMT-NG-{user_id[-6:].replace(user_id[-1], '1')}", "date": "2024-11-15", "items": "Samsung Galaxy A15, Phone case", "total": "₦185,000", "status": "Delivered"}},
+                    {{"order_id": "JMT-NG-{user_id[-6:].replace(user_id[-1], '2')}", "date": "2024-09-22", "items": "HP Laptop 15-inch, Laptop bag", "total": "₦420,000", "status": "Delivered"}},
+                    {{"order_id": "JMT-NG-{user_id[-6:].replace(user_id[-1], '3')}", "date": "2024-07-10", "items": "Indomie Noodles (carton), Peak Milk", "total": "₦12,500", "status": "Delivered"}}
                 ],
                 "account": {{
-                    "member_since": "Month YYYY",
-                    "tier": "One of: Bronze, Silver, Gold, Platinum",
-                    "points": "raqibtech reward points number"
+                    "member_since": "March 2024 OR June 2023 OR January 2024",
+                    "tier": "Bronze OR Silver OR Gold OR Platinum",
+                    "points": "realistic points number (500-5000)"
                 }}
             }}
+
             RESPOND ONLY WITH VALID JSON. NO EXPLANATIONS OR MARKDOWN."""
 
             # Track API usage
@@ -655,7 +798,7 @@ class CustomerSupportAIAgent:
             # Generate with Gemini
             full_prompt = f"""You are a Nigerian e-commerce data generator. Use authentic Nigerian formats, locations, and naming conventions.
 
-{prompt}"""
+            {prompt}"""
 
             response = model.generate_content(
                 full_prompt,
@@ -722,12 +865,17 @@ def display_usage_metrics():
     "total_tokens": 0,
     "requests_today": 0,
     "tokens_today": 0,
+    "requests_this_minute": 0,
+    "tokens_this_minute": 0,
     "last_reset": None,
-        "request_history": []
+    "last_minute_reset": None,
+    "request_history": [],
+    "peak_rpm": 0,
+    "peak_tpm": 0,
     })
 
     # Google/Gemini metrics
-    st.sidebar.markdown("**🔵 Google/Gemini (Synthetic Data)**")
+    st.sidebar.markdown("**🔵 Google/Gemini (Customer Data)**")
     col1, col2 = st.sidebar.columns(2)
     with col1:
         st.metric(
@@ -781,6 +929,65 @@ def display_usage_metrics():
             for req in reversed(recent_requests):
                 timestamp = req["timestamp"].strftime("%H:%M:%S")
                 st.write(f"🕐 {timestamp} - {req['tokens']} tokens ({req['type']})")
+
+    # Quota status
+    quota_status = usage_tracker.get_quota_status()
+    st.sidebar.markdown("**🔵 Quota Status**")
+    col5, col6 = st.sidebar.columns(2)
+    with col5:
+        st.metric(
+            label="Gemini RPM Usage",
+            value=f"{quota_status['gemini']['rpm_usage']:.1f}%",
+            help="Percentage of current requests per minute"
+        )
+    with col6:
+        st.metric(
+            label="Gemini TPM Usage",
+            value=f"{quota_status['gemini']['tpm_usage']:.1f}%",
+            help="Percentage of current tokens per minute"
+        )
+
+    col7, col8 = st.sidebar.columns(2)
+    with col7:
+        st.metric(
+            label="Gemini Daily Usage",
+            value=f"{quota_status['gemini']['daily_usage']:.1f}%",
+            help="Percentage of current requests per day"
+        )
+    with col8:
+        st.metric(
+            label="Gemini Status",
+            value=quota_status['gemini']['status'],
+            help="Usage level for Gemini"
+        )
+
+    col9, col10 = st.sidebar.columns(2)
+    with col9:
+        st.metric(
+            label="Groq RPM Usage",
+            value=f"{quota_status['groq']['rpm_usage']:.1f}%",
+            help="Percentage of current requests per minute"
+        )
+    with col10:
+        st.metric(
+            label="Groq TPM Usage",
+            value=f"{quota_status['groq']['tpm_usage']:.1f}%",
+            help="Percentage of current tokens per minute"
+        )
+
+    col11, col12 = st.sidebar.columns(2)
+    with col11:
+        st.metric(
+            label="Groq Daily Usage",
+            value=f"{quota_status['groq']['daily_usage']:.1f}%",
+            help="Percentage of current requests per day"
+        )
+    with col12:
+        st.metric(
+            label="Groq Status",
+            value=quota_status['groq']['status'],
+            help="Usage level for Groq"
+        )
 
 display_usage_metrics()
 
@@ -898,11 +1105,58 @@ def render_customer_profile(data):
                 <div>{current_order.get('expected_delivery', 'N/A')}</div>
             </div>
             <div class='profile-item'>
-                <div class='profile-item-label'>Status:</div>
-                <div>{current_order.get('status', 'N/A')}</div>
+                <div class='profile-item-label'>Delivery Method:</div>
+                <div>{current_order.get('delivery_method', 'N/A')}</div>
+            </div>
+            <div class='profile-item'>
+                <div class='profile-item-label'>Payment Method:</div>
+                <div>{current_order.get('payment_method', 'N/A')}</div>
             </div>
         </div>
     """, unsafe_allow_html=True)
+
+    # Display products if available
+    if current_order.get('products'):
+        st.markdown("<div class='profile-section-title'>Order Items</div>", unsafe_allow_html=True)
+        for i, product in enumerate(current_order['products']):
+            st.markdown(f"""
+                <div class='profile-order'>
+                    <div class='profile-item'>
+                        <div class='profile-item-label'>Product {i+1}:</div>
+                        <div>{product.get('name', 'Unknown Product')}</div>
+                    </div>
+                    <div class='profile-item'>
+                        <div class='profile-item-label'>Price:</div>
+                        <div>{product.get('price', 'N/A')}</div>
+                    </div>
+                    <div class='profile-item'>
+                        <div class='profile-item-label'>Quantity:</div>
+                        <div>{product.get('quantity', 'N/A')}</div>
+                    </div>
+                    <div class='profile-item'>
+                        <div class='profile-item-label'>Status:</div>
+                        <div>{product.get('status', 'N/A')}</div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+
+    # Order totals
+    if current_order.get('shipping_fee') or current_order.get('total'):
+        st.markdown("<div class='profile-section-title'>Order Summary</div>", unsafe_allow_html=True)
+        st.markdown(f"""
+            <div class='profile-order'>
+                <div class='profile-item'>
+                    <div class='profile-item-label'>Shipping Fee:</div>
+                    <div>{current_order.get('shipping_fee', 'N/A')}</div>
+                </div>
+                <div class='profile-item'>
+                    <div class='profile-item-label'><strong>Total Amount:</strong></div>
+                    <div><strong>{current_order.get('total', 'N/A')}</strong></div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 with tab1:
@@ -1150,30 +1404,90 @@ with tab3:
     st.markdown("<div class='sub-header'>📊 Comprehensive Usage Analytics</div>", unsafe_allow_html=True)
 
     stats = usage_tracker.get_usage_stats()
+    quota_info = usage_tracker.get_quota_info()
+    quota_status = usage_tracker.get_quota_status()
     google_stats = stats["google_api"]
+    groq_stats = stats["groq_api"]
+
+    # Real-time quota monitoring section
+    st.markdown("### 🚨 Real-Time Quota Monitoring")
+    st.markdown("*Based on official Google Cloud Vertex AI quotas*")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("#### 🔵 Gemini 2.0 Flash Quotas")
+
+        # RPM Progress
+        rpm_percentage = quota_status['gemini']['rpm_usage']
+        st.markdown(f"**Requests Per Minute: {google_stats['requests_this_minute']}/{quota_info['gemini']['requests_per_minute']}**")
+        progress_color = "🟢" if rpm_percentage < 50 else "🟡" if rpm_percentage < 80 else "🔴"
+        st.progress(min(rpm_percentage / 100, 1.0))
+        st.write(f"{progress_color} {rpm_percentage:.1f}% of RPM quota used")
+
+        # TPM Progress
+        tpm_percentage = quota_status['gemini']['tpm_usage']
+        st.markdown(f"**Tokens Per Minute: {google_stats['tokens_this_minute']:,}/{quota_info['gemini']['tokens_per_minute']:,}**")
+        progress_color = "🟢" if tpm_percentage < 50 else "🟡" if tpm_percentage < 80 else "🔴"
+        st.progress(min(tpm_percentage / 100, 1.0))
+        st.write(f"{progress_color} {tpm_percentage:.1f}% of TPM quota used")
+
+        # Daily Progress
+        daily_percentage = quota_status['gemini']['daily_usage']
+        st.markdown(f"**Daily Requests: {google_stats['requests_today']}/{quota_info['gemini']['requests_per_day']}**")
+        progress_color = "🟢" if daily_percentage < 50 else "🟡" if daily_percentage < 80 else "🔴"
+        st.progress(min(daily_percentage / 100, 1.0))
+        st.write(f"{progress_color} {daily_percentage:.1f}% of daily quota used")
+
+    with col2:
+        st.markdown("#### 🟠 Groq API Quotas")
+
+        # RPM Progress
+        rpm_percentage = quota_status['groq']['rpm_usage']
+        st.markdown(f"**Requests Per Minute: {groq_stats['requests_this_minute']}/{quota_info['groq']['requests_per_minute']}**")
+        progress_color = "🟢" if rpm_percentage < 50 else "🟡" if rpm_percentage < 80 else "🔴"
+        st.progress(min(rpm_percentage / 100, 1.0))
+        st.write(f"{progress_color} {rpm_percentage:.1f}% of RPM quota used")
+
+        # TPM Progress
+        tpm_percentage = quota_status['groq']['tpm_usage']
+        st.markdown(f"**Tokens Per Minute: {groq_stats['tokens_this_minute']:,}/{quota_info['groq']['tokens_per_minute']:,}**")
+        progress_color = "🟢" if tpm_percentage < 50 else "🟡" if tpm_percentage < 80 else "🔴"
+        st.progress(min(tpm_percentage / 100, 1.0))
+        st.write(f"{progress_color} {tpm_percentage:.1f}% of TPM quota used")
+
+        # Daily Progress
+        daily_percentage = quota_status['groq']['daily_usage']
+        st.markdown(f"**Daily Requests: {groq_stats['requests_today']}/{quota_info['groq']['requests_per_day']}**")
+        progress_color = "🟢" if daily_percentage < 50 else "🟡" if daily_percentage < 80 else "🔴"
+        st.progress(min(daily_percentage / 100, 1.0))
+        st.write(f"{progress_color} {daily_percentage:.1f}% of daily quota used")
 
     # Overview metrics
+    st.markdown("### 📈 Usage Overview")
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         st.metric(
-            label="Total Requests",
+            label="Total Requests (Gemini)",
             value=google_stats["total_requests"],
-            help="Total API requests made"
+            delta=f"Today: {google_stats['requests_today']}",
+            help="Total API requests made to Gemini"
         )
 
     with col2:
         st.metric(
-            label="Total Tokens",
+            label="Total Tokens (Gemini)",
             value=f"{google_stats['total_tokens']:,}",
-            help="Total tokens consumed"
+            delta=f"Today: {google_stats['tokens_today']:,}",
+            help="Total tokens consumed by Gemini"
         )
 
     with col3:
         st.metric(
-            label="Today's Requests",
-            value=google_stats["requests_today"],
-            help="API requests made today"
+            label="Peak RPM (Gemini)",
+            value=google_stats["peak_rpm"],
+            help="Highest requests per minute recorded"
         )
 
     with col4:
@@ -1181,27 +1495,85 @@ with tab3:
         st.metric(
             label="Estimated Cost",
             value=f"${estimated_cost:.4f}",
-            help="Approximate cost in USD"
+            help="Approximate cost in USD based on Gemini 2.0 Flash pricing"
         )
+
+    # Detailed quota information
+    st.markdown("### 📋 Official API Quotas & Limits")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("#### 🔵 Gemini 2.0 Flash (Official Limits)")
+        gemini_quota_data = {
+            "Metric": [
+                "Requests per minute",
+                "Tokens per minute",
+                "Requests per day (est.)",
+                "Max concurrent requests",
+                "Max output tokens",
+                "Max input tokens"
+            ],
+            "Limit": [
+                f"{quota_info['gemini']['requests_per_minute']:,}",
+                f"{quota_info['gemini']['tokens_per_minute']:,}",
+                f"{quota_info['gemini']['requests_per_day']:,}",
+                f"{quota_info['gemini']['concurrent_requests']:,}",
+                f"{quota_info['gemini']['max_output_tokens']:,}",
+                f"{quota_info['gemini']['max_input_tokens']:,}"
+            ],
+            "Current Usage": [
+                f"{google_stats['requests_this_minute']} ({quota_status['gemini']['rpm_usage']:.1f}%)",
+                f"{google_stats['tokens_this_minute']:,} ({quota_status['gemini']['tpm_usage']:.1f}%)",
+                f"{google_stats['requests_today']} ({quota_status['gemini']['daily_usage']:.1f}%)",
+                "N/A",
+                "N/A",
+                "N/A"
+            ]
+        }
+        st.dataframe(gemini_quota_data, use_container_width=True)
+
+    with col2:
+        st.markdown("#### 🟠 Groq API (Free Tier Limits)")
+        groq_quota_data = {
+            "Metric": [
+                "Requests per minute",
+                "Tokens per minute",
+                "Requests per day (est.)"
+            ],
+            "Limit": [
+                f"{quota_info['groq']['requests_per_minute']:,}",
+                f"{quota_info['groq']['tokens_per_minute']:,}",
+                f"{quota_info['groq']['requests_per_day']:,}"
+            ],
+            "Current Usage": [
+                f"{groq_stats['requests_this_minute']} ({quota_status['groq']['rpm_usage']:.1f}%)",
+                f"{groq_stats['tokens_this_minute']:,} ({quota_status['groq']['tpm_usage']:.1f}%)",
+                f"{groq_stats['requests_today']} ({quota_status['groq']['daily_usage']:.1f}%)"
+            ]
+        }
+        st.dataframe(groq_quota_data, use_container_width=True)
 
     # Usage breakdown
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown("### 📈 Usage Trends")
+        st.markdown("### 📈 Usage Trends (Gemini)")
         if google_stats["request_history"]:
             # Create a simple chart of recent usage
             recent_requests = google_stats["request_history"][-20:]  # Last 20 requests
             timestamps = [req["timestamp"].strftime("%H:%M") for req in recent_requests]
             tokens = [req["tokens"] for req in recent_requests]
+            rpm_data = [req.get("rpm_at_time", 0) for req in recent_requests]
 
             chart_data = {
                 "Time": timestamps,
-                "Tokens": tokens
+                "Tokens": tokens,
+                "RPM": rpm_data
             }
-            st.line_chart(chart_data, x="Time", y="Tokens")
+            st.line_chart(chart_data, x="Time", y=["Tokens", "RPM"])
         else:
-            st.info("No usage data available yet.")
+            st.info("No Gemini usage data available yet.")
 
     with col2:
         st.markdown("### 🔍 Request Types")
@@ -1226,59 +1598,60 @@ with tab3:
             activity_data.append({
                 "Timestamp": req["timestamp"].strftime("%Y-%m-%d %H:%M:%S"),
                 "Type": req["type"],
-                "Tokens": req["tokens"]
+                "Tokens": req["tokens"],
+                "RPM at Time": req.get("rpm_at_time", 0),
+                "TPM at Time": req.get("tpm_at_time", 0)
             })
 
         st.dataframe(activity_data, use_container_width=True)
     else:
         st.info("No recent activity to display.")
 
-    # Usage limits and warnings
-    st.markdown("### ⚠️ Usage Monitoring")
-
-    # Daily limits (you can adjust these)
-    DAILY_REQUEST_LIMIT = 100
-    DAILY_TOKEN_LIMIT = 50000
-
-    request_percentage = (google_stats["requests_today"] / DAILY_REQUEST_LIMIT) * 100
-    token_percentage = (google_stats["tokens_today"] / DAILY_TOKEN_LIMIT) * 100
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.progress(min(request_percentage / 100, 1.0))
-        st.write(f"Daily Requests: {google_stats['requests_today']}/{DAILY_REQUEST_LIMIT} ({request_percentage:.1f}%)")
-
-        if request_percentage > 90:
-            st.error("🚨 Approaching daily request limit!")
-        elif request_percentage > 70:
-            st.warning("⚠️ High request usage today")
-        else:
-            st.success("✅ Request usage is healthy")
-
-    with col2:
-        st.progress(min(token_percentage / 100, 1.0))
-        st.write(f"Daily Tokens: {google_stats['tokens_today']:,}/{DAILY_TOKEN_LIMIT:,} ({token_percentage:.1f}%)")
-
-        if token_percentage > 90:
-            st.error("🚨 Approaching daily token limit!")
-        elif token_percentage > 70:
-            st.warning("⚠️ High token usage today")
-        else:
-            st.success("✅ Token usage is healthy")
-
-    # Cost breakdown
+    # Cost breakdown with enhanced pricing info
     st.markdown("### 💰 Cost Analysis")
+    st.markdown("*Based on official Gemini 2.0 Flash pricing: Input $0.075/1M tokens, Output $0.30/1M tokens*")
 
     # Estimate costs for different usage levels
     cost_data = {
-        "Usage Level": ["Current", "10x Current", "100x Current"],
-        "Requests": [google_stats["total_requests"], google_stats["total_requests"] * 10, google_stats["total_requests"] * 100],
-        "Tokens": [google_stats["total_tokens"], google_stats["total_tokens"] * 10, google_stats["total_tokens"] * 100],
-        "Estimated Cost": [f"${estimated_cost:.4f}", f"${estimated_cost * 10:.4f}", f"${estimated_cost * 100:.4f}"]
+        "Usage Level": ["Current", "10x Current", "100x Current", "1000x Current"],
+        "Requests": [
+            google_stats["total_requests"],
+            google_stats["total_requests"] * 10,
+            google_stats["total_requests"] * 100,
+            google_stats["total_requests"] * 1000
+        ],
+        "Tokens": [
+            google_stats["total_tokens"],
+            google_stats["total_tokens"] * 10,
+            google_stats["total_tokens"] * 100,
+            google_stats["total_tokens"] * 1000
+        ],
+        "Estimated Cost": [
+            f"${estimated_cost:.4f}",
+            f"${estimated_cost * 10:.4f}",
+            f"${estimated_cost * 100:.2f}",
+            f"${estimated_cost * 1000:.2f}"
+        ]
     }
 
     st.dataframe(cost_data, use_container_width=True)
+
+    # Quota recommendations
+    st.markdown("### 💡 Quota Recommendations")
+
+    if quota_status['gemini']['rpm_usage'] > 80:
+        st.error("🚨 **CRITICAL**: You're approaching Gemini RPM limits! Consider implementing request queuing or rate limiting.")
+    elif quota_status['gemini']['rpm_usage'] > 60:
+        st.warning("⚠️ **WARNING**: High Gemini RPM usage. Monitor closely and consider optimizing request patterns.")
+    elif quota_status['gemini']['daily_usage'] > 70:
+        st.warning("⚠️ **WARNING**: High daily usage. You may hit daily limits if usage continues at this rate.")
+    else:
+        st.success("✅ **HEALTHY**: Your usage is within safe limits. Current patterns are sustainable.")
+
+    # Additional insights
+    if google_stats["peak_rpm"] > 0:
+        efficiency = (google_stats["total_tokens"] / max(google_stats["total_requests"], 1))
+        st.info(f"📊 **Usage Insights**: Average tokens per request: {efficiency:.1f} | Peak RPM: {google_stats['peak_rpm']} | Peak TPM: {google_stats['peak_tpm']}")
 
     # Reset button
     if st.button("🔄 Reset Usage Statistics", type="secondary"):
@@ -1288,8 +1661,26 @@ with tab3:
             "total_tokens": 0,
             "requests_today": 0,
             "tokens_today": 0,
+            "requests_this_minute": 0,
+            "tokens_this_minute": 0,
             "last_reset": datetime.now().date(),
-            "request_history": []
+            "last_minute_reset": datetime.now().replace(second=0, microsecond=0),
+            "request_history": [],
+            "peak_rpm": 0,
+            "peak_tpm": 0,
+        }
+        usage_tracker.usage_data["groq_api"] = {
+            "total_requests": 0,
+            "total_tokens": 0,
+            "requests_today": 0,
+            "tokens_today": 0,
+            "requests_this_minute": 0,
+            "tokens_this_minute": 0,
+            "last_reset": datetime.now().date(),
+            "last_minute_reset": datetime.now().replace(second=0, microsecond=0),
+            "request_history": [],
+            "peak_rpm": 0,
+            "peak_tpm": 0,
         }
         st.success("Usage statistics have been reset!")
         st.rerun()
