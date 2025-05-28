@@ -122,7 +122,7 @@ humbug==0.3.2
 hyperframe==6.0.1
 idna==3.7
 imagesize==1.4.1
-importlib_metadata @ file:///home/conda/feedstock_root/build_artifacts/importlib-metadata_1710971335535/work       
+importlib_metadata @ file:///home/conda/feedstock_root/build_artifacts/importlib-metadata_1710971335535/work
 importlib_resources==6.4.0
 iniconfig==2.0.0
 intel-openmp==2021.4.0
@@ -144,7 +144,7 @@ jsonpointer==2.4
 jsonschema==4.22.0
 jsonschema-specifications==2023.12.1
 jupyter_client @ file:///home/conda/feedstock_root/build_artifacts/jupyter_client_1716472197302/work
-jupyter_core @ file:///C:/Users/dev-admin/perseverance-python-buildout/croot/jupyter_core_1701796658071/work       
+jupyter_core @ file:///C:/Users/dev-admin/perseverance-python-buildout/croot/jupyter_core_1701796658071/work
 jupyterlab_pygments==0.3.0
 jupyterlab_widgets==3.0.13
 jupytext==1.16.7
@@ -280,7 +280,7 @@ protobuf==4.25.6
 protoc-gen-openapiv2==0.0.1
 psutil @ file:///C:/Users/dev-admin/perseverance-python-buildout/croot/psutil_1699482842340/work
 psycopg2==2.9.9
-psycopg2-binary==2.9.10
+psycopg2-binary==2.9.9
 pure-eval @ file:///home/conda/feedstock_root/build_artifacts/pure_eval_1642875951954/work
 py-cpuinfo==9.0.0
 pyarrow==16.1.0
@@ -361,7 +361,7 @@ sphinxcontrib-htmlhelp==2.1.0
 sphinxcontrib-jsmath==1.0.1
 sphinxcontrib-qthelp==2.0.0
 sphinxcontrib-serializinghtml==2.0.0
-SQLAlchemy==2.0.39
+SQLAlchemy==2.0.32
 sqlglot==25.3.3
 sqlglotrs==0.2.8
 sqlpipe==0.2.1
@@ -427,3 +427,8 @@ zipp @ file:///home/conda/feedstock_root/build_artifacts/zipp_1695255097490/work
 zope.event==5.0
 zope.interface==6.4.post2
 zstandard==0.23.0
+
+# SDV (Synthetic Data Vault) for realistic bulk data generation
+sdv==1.15.0
+copulas==0.11.1
+rdt==1.12.1

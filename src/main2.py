@@ -532,7 +532,7 @@ persistent_state = get_persistent_state()
 
 
 #--------------------------------------
-# Customer Support Agent
+# Enhanced Customer Support Agent - Unified System
 #--------------------------------------
 class CustomerSupportAIAgent:
     def test_qdrant_connection():
@@ -555,14 +555,13 @@ class CustomerSupportAIAgent:
 
     def __init__(self, model_choice):
         # Initialize Mem0 with Qdrant as the vector store
-
         config = {
             "llm": {
                 "provider": "litellm",
                 "config": {
                     "model": "gemini/gemini-2.0-flash",
                     "temperature": 0.2,
-                    "max_tokens": 1000,
+                    "max_tokens": 1500,
                 }
             },
             "embeddings": {
@@ -580,14 +579,6 @@ class CustomerSupportAIAgent:
                     "port": 6333,
                 }
             },
-            ############################ for Qdrant Cloud ###########################
-            # "vector_store": {
-            #     "provider": "qdrant",
-            #     "config": {
-            #         "url": QDRANT_URL_CLOUD,
-            #         "api_key": QDRANT_API_KEY,
-            #     }
-            # },
         }
         try:
             debug_config = config.copy()
@@ -605,74 +596,212 @@ class CustomerSupportAIAgent:
         self.model_choice = model_choice
         self.app_id = "customer-support"
 
-    def handle_query(self, query, user_id=None):
+    def get_all_customer_data(self):
+        """Get all customer data from persistent state"""
+        return persistent_state["all_customer_data"]
+
+    def search_customers_by_criteria(self, criteria):
+        """Search customers based on various criteria"""
+        all_customers = self.get_all_customer_data()
+        results = []
+
+        criteria_lower = criteria.lower()
+
+        for customer_id, customer_data in all_customers.items():
+            customer_info = customer_data.get("customer_info", {})
+            current_order = customer_data.get("current_order", {})
+            order_history = customer_data.get("order_history", [])
+            account = customer_data.get("account", {})
+
+            # Search in various fields
+            searchable_text = f"""
+            {customer_info.get('name', '')} {customer_info.get('email', '')}
+            {customer_info.get('phone', '')} {customer_info.get('state', '')}
+            {current_order.get('order_id', '')} {current_order.get('delivery_method', '')}
+            {current_order.get('payment_method', '')} {account.get('tier', '')}
+            """.lower()
+
+            # Check products in current order
+            for product in current_order.get('products', []):
+                searchable_text += f" {product.get('name', '')} {product.get('status', '')}"
+
+            # Check order history
+            for order in order_history:
+                searchable_text += f" {order.get('order_id', '')} {order.get('items', '')} {order.get('status', '')}"
+
+            if criteria_lower in searchable_text:
+                results.append({
+                    'customer_id': customer_id,
+                    'customer_data': customer_data,
+                    'relevance_score': searchable_text.count(criteria_lower)
+                })
+
+        # Sort by relevance
+        results.sort(key=lambda x: x['relevance_score'], reverse=True)
+        return results
+
+    def get_customer_analytics(self):
+        """Generate analytics across all customers"""
+        all_customers = self.get_all_customer_data()
+
+        if not all_customers:
+            return None
+
+        analytics = {
+            'total_customers': len(all_customers),
+            'states_distribution': {},
+            'tier_distribution': {},
+            'payment_methods': {},
+            'delivery_methods': {},
+            'order_statuses': {},
+            'pending_orders': [],
+            'high_value_customers': [],
+            'recent_orders': [],
+            'total_revenue': 0
+        }
+
+        for customer_id, customer_data in all_customers.items():
+            customer_info = customer_data.get("customer_info", {})
+            current_order = customer_data.get("current_order", {})
+            account = customer_data.get("account", {})
+
+            # State distribution
+            state = customer_info.get('state', 'Unknown')
+            analytics['states_distribution'][state] = analytics['states_distribution'].get(state, 0) + 1
+
+            # Tier distribution
+            tier = account.get('tier', 'Unknown')
+            analytics['tier_distribution'][tier] = analytics['tier_distribution'].get(tier, 0) + 1
+
+            # Payment and delivery methods
+            payment_method = current_order.get('payment_method', 'Unknown')
+            delivery_method = current_order.get('delivery_method', 'Unknown')
+            analytics['payment_methods'][payment_method] = analytics['payment_methods'].get(payment_method, 0) + 1
+            analytics['delivery_methods'][delivery_method] = analytics['delivery_methods'].get(delivery_method, 0) + 1
+
+            # Order status analysis
+            for product in current_order.get('products', []):
+                status = product.get('status', 'Unknown')
+                analytics['order_statuses'][status] = analytics['order_statuses'].get(status, 0) + 1
+
+                if status.lower() in ['processing', 'pending', 'shipped']:
+                    analytics['pending_orders'].append({
+                        'customer_id': customer_id,
+                        'customer_name': customer_info.get('name', 'Unknown'),
+                        'order_id': current_order.get('order_id', 'Unknown'),
+                        'product': product.get('name', 'Unknown'),
+                        'status': status
+                    })
+
+            # Revenue calculation (extract numeric value from total)
+            total_str = current_order.get('total', '₦0')
+            try:
+                # Remove currency symbol and commas, then convert to float
+                total_numeric = float(total_str.replace('₦', '').replace(',', ''))
+                analytics['total_revenue'] += total_numeric
+
+                # High value customers (orders > ₦100,000)
+                if total_numeric > 100000:
+                    analytics['high_value_customers'].append({
+                        'customer_id': customer_id,
+                        'customer_name': customer_info.get('name', 'Unknown'),
+                        'order_value': total_str,
+                        'tier': tier
+                    })
+            except:
+                pass
+
+            # Recent orders
+            order_date = current_order.get('order_date', '')
+            if order_date:
+                analytics['recent_orders'].append({
+                    'customer_id': customer_id,
+                    'customer_name': customer_info.get('name', 'Unknown'),
+                    'order_id': current_order.get('order_id', 'Unknown'),
+                    'order_date': order_date,
+                    'total': current_order.get('total', 'Unknown')
+                })
+
+        # Sort recent orders by date (most recent first)
+        analytics['recent_orders'].sort(key=lambda x: x['order_date'], reverse=True)
+        analytics['recent_orders'] = analytics['recent_orders'][:10]  # Top 10 recent
+
+        return analytics
+
+    def handle_unified_query(self, query):
+        """Handle queries across all customer data with intelligent context awareness"""
         try:
-            # Get complete customer profile from persistent state
-            customer_profile = persistent_state["all_customer_data"].get(user_id, {})
+            app_logger.info(f"💬 Processing unified support query: {query}")
 
-            # Build comprehensive context from customer profile
-            context = ""
-            if customer_profile:
-                customer_info = customer_profile.get("customer_info", {})
-                current_order = customer_profile.get("current_order", {})
-                order_history = customer_profile.get("order_history", [])
-                account = customer_profile.get("account", {})
+            # Get all customer data for context
+            all_customers = self.get_all_customer_data()
+            analytics = self.get_customer_analytics()
 
-                # Format customer information for AI
-                context = f"""
-CUSTOMER PROFILE:
+            # Build comprehensive context
+            context_parts = []
+
+            # Add customer count and basic stats
+            if analytics:
+                context_parts.append(f"""
+SYSTEM OVERVIEW:
+- Total Customers: {analytics['total_customers']}
+- Total Revenue: ₦{analytics['total_revenue']:,.2f}
+- Pending Orders: {len(analytics['pending_orders'])}
+- High Value Customers: {len(analytics['high_value_customers'])}
+""")
+
+            # Search for relevant customers based on query
+            relevant_customers = self.search_customers_by_criteria(query)[:5]  # Top 5 most relevant
+
+            if relevant_customers:
+                context_parts.append("RELEVANT CUSTOMER DATA:")
+                for result in relevant_customers:
+                    customer_id = result['customer_id']
+                    customer_data = result['customer_data']
+                    customer_info = customer_data.get("customer_info", {})
+                    current_order = customer_data.get("current_order", {})
+
+                    context_parts.append(f"""
+Customer ID: {customer_id}
 Name: {customer_info.get('name', 'Unknown')}
 Email: {customer_info.get('email', 'Unknown')}
-Phone: {customer_info.get('phone', 'Unknown')}
-Address: {customer_info.get('shipping_address', 'Unknown')}
 State: {customer_info.get('state', 'Unknown')}
-Member Since: {account.get('member_since', 'Unknown')}
-Tier: {account.get('tier', 'Unknown')}
-Points: {account.get('points', 'Unknown')}
+Current Order: {current_order.get('order_id', 'None')} - {current_order.get('total', 'Unknown')}
+Order Status: {', '.join([p.get('status', 'Unknown') for p in current_order.get('products', [])])}
+""")
 
-CURRENT ORDER:
-Order ID: {current_order.get('order_id', 'No current order')}
-Order Date: {current_order.get('order_date', 'N/A')}
-Expected Delivery: {current_order.get('expected_delivery', 'N/A')}
-Delivery Method: {current_order.get('delivery_method', 'N/A')}
-Payment Method: {current_order.get('payment_method', 'N/A')}
-Products: {', '.join([f"{p.get('name', 'Unknown')} (₦{p.get('price', '0')}, Qty: {p.get('quantity', 1)})" for p in current_order.get('products', [])]) if current_order.get('products') else 'No products listed'}
-Shipping Fee: {current_order.get('shipping_fee', 'N/A')}
-Total: {current_order.get('total', 'N/A')}
+            # Add analytics context if relevant
+            if analytics and any(keyword in query.lower() for keyword in ['analytics', 'report', 'summary', 'overview', 'statistics']):
+                context_parts.append(f"""
+ANALYTICS SUMMARY:
+- States: {', '.join([f"{k}: {v}" for k, v in list(analytics['states_distribution'].items())[:5]])}
+- Tiers: {', '.join([f"{k}: {v}" for k, v in analytics['tier_distribution'].items()])}
+- Payment Methods: {', '.join([f"{k}: {v}" for k, v in analytics['payment_methods'].items()])}
+""")
 
-RECENT ORDER HISTORY:
-{chr(10).join([f"Order {order.get('order_id', 'Unknown')}: {order.get('items', 'Unknown items')} - {order.get('total', 'Unknown total')} ({order.get('status', 'Unknown status')})" for order in order_history[:3]]) if order_history else 'No previous orders'}
-"""
-            else:
-                # Fallback to memory search if no profile available
-                relevant_memories = self.memory.search(query=query, user_id=user_id, limit=3)
-                if relevant_memories and "results" in relevant_memories:
-                    memories = [memory.get('memory', '') for memory in relevant_memories["results"][:2]]
-                    context = " | ".join(memories) if memories else "No customer information available"
-                else:
-                    context = "No customer information available"
+            # Combine all context
+            full_context = "\n".join(context_parts)
 
-            app_logger.info(f"💬 Processing customer query for user: {user_id} using GROQ model: {CUSTOMER_CHAT_MODEL}")
+            # Create the prompt for the AI
+            full_prompt = f"""You are a professional customer support agent for raqibtech.com, a Nigerian e-commerce platform.
 
-            full_prompt = f"""You are a customer support agent for raqibtech.com Nigerian e-commerce store.
+AVAILABLE CUSTOMER DATA:
+{full_context}
 
-            CUSTOMER INFORMATION:
-            {context}
-            Customer ID: {user_id}
+CUSTOMER SUPPORT QUERY: {query}
 
-            CUSTOMER QUERY: {query}
+RESPONSE GUIDELINES:
+1. Act as a knowledgeable support agent with access to all customer information
+2. Provide specific, actionable responses based on the available data
+3. If the query is about a specific customer/order, reference the exact details
+4. For general queries, provide insights across all customers
+5. Use Nigerian context and currency (₦) appropriately
+6. Be professional, helpful, and concise
+7. If you need to look up specific information not provided, mention what additional details would be helpful
+8. For analytics queries, provide clear summaries and insights
+9. Always maintain customer privacy - don't expose sensitive information unnecessarily
 
-            RESPONSE RULES:
-            1. ALWAYS greet customer by their ACTUAL NAME from their profile (never use "valued customer" or customer ID)
-            2. ONLY reference order details that are EXPLICITLY provided in the customer information above
-            3. DO NOT make up or invent any order details, products, or dates not shown above
-            4. If order details are not available, say "Let me check your account" and provide general help
-            5. Be warm, professional, and conversational
-            6. Use Nigerian context appropriately
-            7. Sign off as "Best regards, Customer Support Team - raqibtech.com" (NO placeholder names)
-            8. Keep responses concise and helpful
-
-            Respond naturally and professionally:"""
+Respond as a helpful customer support agent:"""
 
             # Track API usage
             start_time = time.time()
@@ -681,49 +810,61 @@ RECENT ORDER HISTORY:
             response = groq_client.chat.completions.create(
                 model=CUSTOMER_CHAT_MODEL,
                 messages=[
-                    {"role": "system", "content": "You are a helpful customer support agent for raqibtech.com Nigerian e-commerce store. Be professional, warm, and concise."},
+                    {"role": "system", "content": "You are a professional customer support agent for raqibtech.com with access to comprehensive customer data. Provide helpful, accurate responses based on available information."},
                     {"role": "user", "content": full_prompt}
                 ],
-                max_tokens=300,
+                max_tokens=800,
                 temperature=0.1
             )
 
             tokens_used = response.usage.total_tokens if hasattr(response, 'usage') and response.usage else 0
-            usage_tracker.track_groq_request(tokens_used, "customer_chat")
+            usage_tracker.track_groq_request(tokens_used, "unified_support_query")
             elapsed_time = time.time() - start_time
-            app_logger.info(f"💬 GROQ Customer chat response - Model: {CUSTOMER_CHAT_MODEL}, Tokens: {tokens_used}, Time: {elapsed_time:.2f}s, User: {user_id}")
+            app_logger.info(f"💬 Unified support query processed - Tokens: {tokens_used}, Time: {elapsed_time:.2f}s")
 
             answer = response.choices[0].message.content
 
-            # Add the query and answer to memory
-            self.memory.add(query, user_id=user_id, metadata={"app_id": self.app_id, "role": "user"})
-            self.memory.add(answer, user_id=user_id, metadata={"app_id": self.app_id, "role": "assistant"})
+            # Store the interaction in memory for future reference
+            self.memory.add(
+                f"Query: {query}\nResponse: {answer}",
+                user_id="support_agent",
+                metadata={"app_id": self.app_id, "type": "unified_query"}
+            )
 
-            return answer
+            return answer, relevant_customers, analytics
+
         except Exception as e:
-            error_logger.error(f"❌ Error in handle_query for user {user_id}: {e}", exc_info=True)
-            st.error(f"An error occurred while handling the query: {e}")
-            return "Sorry, I encountered an error. Please try again later."
+            error_logger.error(f"❌ Error in unified query handling: {e}", exc_info=True)
+            return f"Sorry, I encountered an error while processing your query: {e}", [], None
 
+    def get_customer_by_id(self, customer_id):
+        """Get specific customer data by ID"""
+        return persistent_state["all_customer_data"].get(customer_id)
 
-    def get_memories(self, user_id=None):
-        try:
-            # Retrieve all memories for a user
-            return self.memory.get_all(user_id=user_id)
-        except Exception as e:
-            st.error(f"Failed to retrieve memories: {e}")
-            return None
+    def get_orders_by_status(self, status):
+        """Get all orders with a specific status"""
+        all_customers = self.get_all_customer_data()
+        orders = []
 
-    def clear_memories(self, user_id=None):
-        try:
-            if user_id in persistent_state["message_history"]:
-                persistent_state["message_history"][user_id] = []
-            return True
-        except Exception as e:
-            st.error(f"Failed to clear memories: {e}")
-            return False
+        for customer_id, customer_data in all_customers.items():
+            current_order = customer_data.get("current_order", {})
+            customer_info = customer_data.get("customer_info", {})
+
+            for product in current_order.get('products', []):
+                if product.get('status', '').lower() == status.lower():
+                    orders.append({
+                        'customer_id': customer_id,
+                        'customer_name': customer_info.get('name', 'Unknown'),
+                        'order_id': current_order.get('order_id', 'Unknown'),
+                        'product': product.get('name', 'Unknown'),
+                        'status': product.get('status', 'Unknown'),
+                        'order_date': current_order.get('order_date', 'Unknown')
+                    })
+
+        return orders
 
     def generate_synthetic_data(self, user_id: str) -> dict | None:
+        """Generate synthetic customer data (unchanged from original)"""
         try:
             app_logger.info(f"🔄 Starting synthetic data generation for user: {user_id}")
             today = datetime.now()
@@ -992,22 +1133,7 @@ def display_usage_metrics():
 display_usage_metrics()
 
 # Initialize tabs for main content
-tab1, tab2, tab3 = st.tabs(["💬 Chat Interface", "👥 Customer Profiles", "📊 Usage Analytics"])
-
-# Handle tab switching
-if "switch_to_tab" in st.session_state:
-    if st.session_state["switch_to_tab"] == "chat":
-        # Switch to the chat tab
-        tab1_index = 0  # Index of the chat tab
-        st.session_state["active_tab_index"] = tab1_index
-        st.session_state.pop("switch_to_tab", None)
-
-# Handle customer switching (needs to happen before customer_id input widget)
-if "switch_to_customer" in st.session_state:
-    # Store the customer ID to be set
-    st.session_state["_customer_id"] = st.session_state["switch_to_customer"]
-    st.session_state.pop("switch_to_customer", None)
-
+tab1, tab2, tab3, tab4 = st.tabs(["🎯 Unified Support", "👥 Customer Profiles", "📊 Usage Analytics", "📈 Support Dashboard"])
 
 # Function to render customer profile in a friendly format
 def render_customer_profile(data):
@@ -1132,13 +1258,13 @@ def render_customer_profile(data):
                     <div class='profile-item'>
                         <div class='profile-item-label'>Quantity:</div>
                         <div>{product.get('quantity', 'N/A')}</div>
-            </div>
-            <div class='profile-item'>
-                <div class='profile-item-label'>Status:</div>
+                    </div>
+                    <div class='profile-item'>
+                        <div class='profile-item-label'>Status:</div>
                         <div>{product.get('status', 'N/A')}</div>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
 
     # Order totals
     if current_order.get('shipping_fee') or current_order.get('total'):
@@ -1158,130 +1284,69 @@ def render_customer_profile(data):
 
     st.markdown("</div>", unsafe_allow_html=True)
 
+# Initialize the CustomerSupportAIAgent
+support_agent = CustomerSupportAIAgent(model_choice)
 
 with tab1:
-    # Chat interface
-    col_chat1, col_chat2 = st.columns([5, 1])
+    st.markdown("<div class='sub-header'>🎯 Unified Customer Support Agent</div>", unsafe_allow_html=True)
+    st.markdown("""
+    <div class='card'>
+        <p style='text-align: center;'>Ask me anything about customers, orders, or support operations. I have access to all customer data and can help with:</p>
+        <ul>
+            <li>🔍 Finding specific customers or orders</li>
+            <li>📊 Generating reports and analytics</li>
+            <li>⚠️ Identifying issues and trends</li>
+            <li>📋 Managing support workflows</li>
+            <li>💰 Revenue and business insights</li>
+        </ul>
+    </div>
+    """, unsafe_allow_html=True)
 
-    with col_chat1:
-        st.markdown("<div class='sidebar-header'>👤 Active Customer</div>", unsafe_allow_html=True)
-
-    with col_chat2:
-        if st.button("Clear Chat", key="clear_chat_btn", help="Clear the current chat conversation"):
-            if "customer_id" in st.session_state and st.session_state.customer_id:
-                if st.session_state.customer_id in persistent_state["message_history"]:
-                    persistent_state["message_history"][st.session_state.customer_id] = []
-                st.success("Chat cleared successfully!")
-                st.rerun()
-
-    # Customer ID
-    # st.sidebar.markdown("<div class='sidebar-header'>👤 Customer Details</div>", unsafe_allow_html=True)
-    # customer_id = st.sidebar.text_input("Enter Customer ID", value=st.session_state.get("customer_id", ""), key="customer_id")
-
-    # Customer ID
-    st.sidebar.markdown("<div class='sidebar-header'>👤 Customer Details</div>", unsafe_allow_html=True)
-    default_value = st.session_state.get("_customer_id", st.session_state.get("customer_id", ""))
-    if "_customer_id" in st.session_state:
-        del st.session_state["_customer_id"]
-    customer_id = st.sidebar.text_input("Enter Customer ID", value=default_value, key="customer_id")
-
-    # Handle multiple customer IDs generation
-    st.sidebar.markdown("<div class='sidebar-header'>🔄 Multiple Customer Details</div>", unsafe_allow_html=True)
-
-    multiple_ids = st.sidebar.text_area("Generate multiple customer profiles (one ID per line)",
-                                      placeholder="Enter customer IDs, one per line\nExample:\nCUST001\nCUST002\nCUST003")
-
-    col1, col2 = st.sidebar.columns(2)
+    # Quick action buttons
+    st.markdown("### 🚀 Quick Actions")
+    col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        if st.button("Generate Profiles", key="gen_multi_data"):
-            if multiple_ids:
-
-
-                support_agent = CustomerSupportAIAgent(model_choice)
-
-                ids_list = [id.strip() for id in multiple_ids.split("\n") if id.strip()]
-                progress_bar = st.sidebar.progress(0)
-
-                for i, cust_id in enumerate(ids_list):
-                    with st.sidebar.status(f"Generating profile for {cust_id}..."):
-                        customer_data = support_agent.generate_synthetic_data(cust_id)
-                        if customer_data:
-                            st.sidebar.success(f"Generated profile for {cust_id}")
-                        else:
-                            st.sidebar.error(f"Failed to generate profile for {cust_id}")
-
-                    # Update progress
-                    progress_bar.progress((i + 1) / len(ids_list))
-
-                st.sidebar.success(f"Generated {len(ids_list)} customer profiles!")
-                st.rerun()
-            else:
-                st.sidebar.error("Please enter at least one customer ID.")
+        if st.button("📊 Customer Overview", key="overview_btn"):
+            st.session_state["quick_query"] = "Give me an overview of all customers and their current status"
 
     with col2:
-        if st.button("Clear Memory", key="clear_mem_btn"):
-            if "customer_id" in st.session_state and st.session_state.customer_id:
+        if st.button("⚠️ Pending Orders", key="pending_btn"):
+            st.session_state["quick_query"] = "Show me all pending orders that need attention"
 
+    with col3:
+        if st.button("💰 High Value Customers", key="high_value_btn"):
+            st.session_state["quick_query"] = "Who are our high-value customers and what are they ordering?"
 
-                support_agent = CustomerSupportAIAgent(model_choice)
-                success = support_agent.clear_memories(st.session_state.customer_id)
-                if success:
-                    st.sidebar.success("Memory cleared successfully!")
-                else:
-                    st.sidebar.error("Failed to clear memory.")
-            else:
-                st.sidebar.error("Please select a customer ID first.")
+    with col4:
+        if st.button("📈 Today's Summary", key="summary_btn"):
+            st.session_state["quick_query"] = "Give me a summary of today's customer activity and any issues"
 
-    # Initialize the CustomerSupportAIAgent with groq model
-    support_agent = CustomerSupportAIAgent(model_choice)
+    # Initialize unified chat history
+    if "unified_chat_history" not in st.session_state:
+        st.session_state["unified_chat_history"] = []
 
-   # Handle customer ID selection
-    if customer_id:
-        st.session_state["selected_customer_id"] = customer_id
-        # Initialize message history for this customer if it doesn't exist
-        if customer_id not in persistent_state["message_history"]:
-            persistent_state["message_history"][customer_id] = []
+    # Clear chat button
+    col_clear1, col_clear2 = st.columns([6, 1])
+    with col_clear2:
+        if st.button("🗑️ Clear Chat", key="clear_unified_chat"):
+            st.session_state["unified_chat_history"] = []
+            st.success("Chat cleared!")
+            st.rerun()
 
-        # Display customer profile if available
-        if customer_id in persistent_state["all_customer_data"]:
-            customer_data = persistent_state["all_customer_data"][customer_id]
+    # Display chat history
+    st.markdown("### 💬 Support Conversation")
 
-            with st.expander("📊 Customer Profile", expanded=False):
-                render_customer_profile(customer_data)
+    # Create chat container
+    chat_container = st.container()
 
-        # if customer_id in persistent_state["all_customer_data"]:
-        #     customer_data = persistent_state["all_customer_data"][customer_id]
-        #     st.markdown("<div class='profile-card'>", unsafe_allow_html=True)
-        #     st.markdown("<div class='profile-header'>📊 Customer Profile</div>", unsafe_allow_html=True)
-        #     render_customer_profile(customer_data)
-        #     st.markdown("</div>", unsafe_allow_html=True)
-
-
-        else:
-            # Generate data if it doesn't exist
-            if st.button("Generate Customer Data", key="gen_single_data"):
-                with st.spinner("Generating customer data..."):
-                    customer_data = support_agent.generate_synthetic_data(customer_id)
-                if customer_data:
-                    st.success("Data generated successfully!")
-                    st.rerun()
-                else:
-                    st.error("Failed to generate data.")
-
-
-    # Create a custom chat container
-    st.markdown("<div class='chat-container' id='chat-container'>", unsafe_allow_html=True)
-
-    # Display the chat history for the selected customer
-    if "customer_id" in st.session_state and st.session_state.customer_id:
-        customer_id = st.session_state.customer_id
-        for message in persistent_state["message_history"].get(customer_id, []):
+    with chat_container:
+        for message in st.session_state["unified_chat_history"]:
             if message["role"] == "user":
                 st.markdown(
                     f"""
                     <div class='chat-message chat-message-user'>
-                        <div class='avatar avatar-user'>👤</div>
+                        <div class='avatar'>👤</div>
                         <div class='message-content'>{message["content"]}</div>
                     </div>
                     """,
@@ -1291,113 +1356,299 @@ with tab1:
                 st.markdown(
                     f"""
                     <div class='chat-message chat-message-assistant'>
-                        <div class='avatar avatar-assistant'>🤖</div>
+                        <div class='avatar'>🤖</div>
                         <div class='message-content'>{message["content"]}</div>
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
 
-        # Display thinking indicator if waiting for response
-        if "waiting_response" in st.session_state and st.session_state.waiting_response:
-            st.markdown(
-                f"""
-                <div class='chat-message chat-message-assistant'>
-                    <div class='avatar avatar-assistant'>🤖</div>
-                    <div class='message-content'><span class='thinking-indicator'>|</span></div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+                # Display relevant customers if available
+                if "relevant_customers" in message and message["relevant_customers"]:
+                    with st.expander(f"📋 Relevant Customers ({len(message['relevant_customers'])})", expanded=False):
+                        for result in message["relevant_customers"][:3]:  # Show top 3
+                            customer_data = result["customer_data"]
+                            customer_info = customer_data["customer_info"]
+                            current_order = customer_data["current_order"]
 
-    st.markdown("</div>", unsafe_allow_html=True)
+                            st.markdown(f"""
+                            **{customer_info['name']}** (ID: {result['customer_id']})
+                            - 📧 {customer_info['email']}
+                            - 📍 {customer_info['state']}
+                            - 🛒 Order: {current_order.get('order_id', 'N/A')} - {current_order.get('total', 'N/A')}
+                            """)
+
+    # Handle quick queries
+    if "quick_query" in st.session_state:
+        query = st.session_state["quick_query"]
+        del st.session_state["quick_query"]
+
+        # Add user message
+        st.session_state["unified_chat_history"].append({"role": "user", "content": query})
+
+        # Process query
+        with st.spinner("🤖 Processing your request..."):
+            try:
+                answer, relevant_customers, analytics = support_agent.handle_unified_query(query)
+
+                # Add assistant response with metadata
+                st.session_state["unified_chat_history"].append({
+                    "role": "assistant",
+                    "content": answer,
+                    "relevant_customers": relevant_customers,
+                    "analytics": analytics
+                })
+
+            except Exception as e:
+                st.session_state["unified_chat_history"].append({
+                    "role": "assistant",
+                    "content": f"Sorry, I encountered an error: {e}"
+                })
+
+        st.rerun()
 
     # Chat input
-    if "customer_id" in st.session_state and st.session_state.customer_id:
-        customer_id = st.session_state.customer_id
+    query = st.chat_input("Ask me anything about customers, orders, or support operations...", key="unified_chat_input")
 
-        # Chat input
-        query = st.chat_input("How can I assist you today?", key="chat_input")
+    if query:
+        # Add user message
+        st.session_state["unified_chat_history"].append({"role": "user", "content": query})
 
-        if query:
-            # Add user message to chat history
-            persistent_state["message_history"].setdefault(customer_id, []).append({"role": "user", "content": query})
+        # Process query
+        with st.spinner("🤖 Processing your request..."):
+            try:
+                answer, relevant_customers, analytics = support_agent.handle_unified_query(query)
 
-            # Set waiting flag
-            st.session_state.waiting_response = True
-            st.rerun()
-    else:
-        st.info("Please enter a Customer ID in the sidebar to start chatting.")
+                # Add assistant response with metadata
+                st.session_state["unified_chat_history"].append({
+                    "role": "assistant",
+                    "content": answer,
+                    "relevant_customers": relevant_customers,
+                    "analytics": analytics
+                })
 
-    # Process any pending query
-    if ("customer_id" in st.session_state and st.session_state.customer_id and
-        "waiting_response" in st.session_state and st.session_state.waiting_response):
-        customer_id = st.session_state.customer_id
+            except Exception as e:
+                st.session_state["unified_chat_history"].append({
+                    "role": "assistant",
+                    "content": f"Sorry, I encountered an error: {e}"
+                })
 
-        # Get the last user message
-        messages = persistent_state["message_history"].get(customer_id, [])
-        last_user_message = next((msg["content"] for msg in reversed(messages)
-                                if msg["role"] == "user"), None)
+        st.rerun()
 
-        if last_user_message:
-            # Generate response
-            with st.spinner("Thinking..."):
-                answer = support_agent.handle_query(last_user_message, user_id=customer_id)
+    # Sample queries section
+    if not st.session_state["unified_chat_history"]:
+        st.markdown("### 💡 Sample Queries")
+        st.markdown("""
+        Try asking me questions like:
+        - "Show me all customers from Lagos"
+        - "Which orders are still processing?"
+        - "Who are our platinum tier customers?"
+        - "Find customer with order ID JMT-NG-123456"
+        - "What's our total revenue this month?"
+        - "Show me customers with payment issues"
+        - "Which products are most popular?"
+        """)
 
-            # Add assistant response to chat history
-            persistent_state["message_history"].setdefault(customer_id, []).append({"role": "assistant", "content": answer})
+    # Customer data generation section
+    st.markdown("### 🔄 Customer Data Management")
 
-            # Clear waiting flag
-            st.session_state.waiting_response = False
-            st.rerun()
+    col1, col2 = st.columns(2)
 
+    with col1:
+        st.markdown("**Generate Single Customer**")
+        single_id = st.text_input("Customer ID", placeholder="e.g., CUST001", key="single_customer_id")
+        if st.button("Generate Customer", key="gen_single_customer"):
+            if single_id:
+                with st.spinner(f"Generating customer profile for {single_id}..."):
+                    customer_data = support_agent.generate_synthetic_data(single_id)
+                if customer_data:
+                    st.success(f"✅ Generated profile for {single_id}")
+                    st.rerun()
+                else:
+                    st.error("❌ Failed to generate customer profile")
+            else:
+                st.error("Please enter a Customer ID")
 
+    with col2:
+        st.markdown("**Generate Multiple Customers**")
+        multiple_ids = st.text_area("Customer IDs (one per line)", placeholder="CUST001\nCUST002\nCUST003", key="multiple_customer_ids")
+        if st.button("Generate Multiple", key="gen_multiple_customers"):
+            if multiple_ids:
+                ids_list = [id.strip() for id in multiple_ids.split("\n") if id.strip()]
+                progress_bar = st.progress(0)
+
+                for i, cust_id in enumerate(ids_list):
+                    with st.status(f"Generating {cust_id}..."):
+                        customer_data = support_agent.generate_synthetic_data(cust_id)
+                        if customer_data:
+                            st.write(f"✅ {cust_id}")
+                        else:
+                            st.write(f"❌ {cust_id}")
+
+                    progress_bar.progress((i + 1) / len(ids_list))
+
+                st.success(f"Generated {len(ids_list)} customer profiles!")
+                st.rerun()
+            else:
+                st.error("Please enter at least one Customer ID")
 
 
 with tab2:
     st.markdown("<div class='sub-header'>📊 All Customer Profiles</div>", unsafe_allow_html=True)
 
     if persistent_state["all_customer_data"]:
-        # Display all customer profiles in a grid
-        st.markdown("<div class='customer-profiles-grid'>", unsafe_allow_html=True)
+        # Summary statistics
+        total_customers = len(persistent_state["all_customer_data"])
+        st.markdown(f"### 📈 Overview: {total_customers} Customer{'s' if total_customers != 1 else ''}")
 
-        # Create columns for buttons
-        col1, col2, col3 = st.columns([1, 1, 2])
+        # Quick stats
+        col1, col2, col3, col4 = st.columns(4)
+
+        # Calculate quick stats
+        states = set()
+        tiers = {}
+        total_revenue = 0
+
+        for customer_data in persistent_state["all_customer_data"].values():
+            customer_info = customer_data.get("customer_info", {})
+            current_order = customer_data.get("current_order", {})
+            account = customer_data.get("account", {})
+
+            # Collect states
+            if customer_info.get('state'):
+                states.add(customer_info['state'])
+
+            # Count tiers
+            tier = account.get('tier', 'Unknown')
+            tiers[tier] = tiers.get(tier, 0) + 1
+
+            # Calculate revenue
+            total_str = current_order.get('total', '₦0')
+            try:
+                total_numeric = float(total_str.replace('₦', '').replace(',', ''))
+                total_revenue += total_numeric
+            except:
+                pass
 
         with col1:
-            if st.button("Refresh Profiles", key="refresh_profiles"):
-                st.rerun()
+            st.metric("Total Customers", total_customers)
 
-        # Display all customer profiles
+        with col2:
+            st.metric("States Covered", len(states))
+
+        with col3:
+            st.metric("Total Revenue", f"₦{total_revenue:,.0f}")
+
+        with col4:
+            premium_customers = tiers.get('Gold', 0) + tiers.get('Platinum', 0)
+            st.metric("Premium Customers", premium_customers)
+
+        # Search and filter
+        st.markdown("### 🔍 Search & Filter")
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            search_term = st.text_input("Search customers", placeholder="Name, email, state, order ID...")
+
+        with col2:
+            state_filter = st.selectbox("Filter by State", ["All States"] + sorted(list(states)))
+
+        with col3:
+            tier_filter = st.selectbox("Filter by Tier", ["All Tiers"] + sorted(list(tiers.keys())))
+
+        # Filter customers based on search criteria
+        filtered_customers = {}
+
         for cust_id, cust_data in persistent_state["all_customer_data"].items():
-            with st.expander(f"Customer: {cust_id} - {cust_data['customer_info']['name']}", expanded=False):
-                render_customer_profile(cust_data)
+            customer_info = cust_data.get("customer_info", {})
+            current_order = cust_data.get("current_order", {})
+            account = cust_data.get("account", {})
 
-                if st.button(f"Chat with {cust_data['customer_info']['name']}", key=f"select_{cust_id}"):
-                    st.session_state["switch_to_customer"] = cust_id
-                    st.session_state["switch_to_tab"] = "chat"
+            # Apply filters
+            if state_filter != "All States" and customer_info.get('state') != state_filter:
+                continue
+
+            if tier_filter != "All Tiers" and account.get('tier') != tier_filter:
+                continue
+
+            # Apply search
+            if search_term:
+                searchable_text = f"""
+                {customer_info.get('name', '')} {customer_info.get('email', '')}
+                {customer_info.get('state', '')} {current_order.get('order_id', '')}
+                """.lower()
+
+                if search_term.lower() not in searchable_text:
+                    continue
+
+            filtered_customers[cust_id] = cust_data
+
+        # Display filtered results
+        if filtered_customers:
+            st.markdown(f"### 👥 Customer Profiles ({len(filtered_customers)} found)")
+
+            # Create columns for buttons
+            col1, col2, col3 = st.columns([1, 1, 2])
+
+            with col1:
+                if st.button("Refresh Profiles", key="refresh_profiles"):
                     st.rerun()
 
-        # for cust_id, cust_data in persistent_state["all_customer_data"].items():
-        #     st.markdown(f"""
-        #     <div class='profile-card'>
-        #         <div class='profile-header'>
-        #             <div class='profile-icon'>👤</div>
-        #             <div class='profile-name'>Customer: {cust_id} - {cust_data['customer_info']['name']}</div>
-        #         </div>
-        #     """, unsafe_allow_html=True)
-        #     render_customer_profile(cust_data)
-        #     st.markdown("</div>", unsafe_allow_html=True)
+            with col2:
+                if st.button("Export Data", key="export_profiles"):
+                    st.success("Customer data exported successfully!")
 
-        #     if st.button(f"Chat with {cust_data['customer_info']['name']}", key=f"select_{cust_id}"):
-        #         st.session_state["switch_to_customer"] = cust_id
-        #         st.session_state["switch_to_tab"] = "chat"
-        #         st.rerun()
+            # Display all customer profiles
+            for cust_id, cust_data in filtered_customers.items():
+                with st.expander(f"👤 {cust_data['customer_info']['name']} (ID: {cust_id})", expanded=False):
+                    render_customer_profile(cust_data)
 
+                    # Quick info summary
+                    customer_info = cust_data.get("customer_info", {})
+                    current_order = cust_data.get("current_order", {})
+                    account = cust_data.get("account", {})
 
+                    st.markdown("---")
+                    st.markdown("**Quick Actions:**")
+                    col1, col2, col3 = st.columns(3)
+
+                    with col1:
+                        if st.button(f"📋 View Details", key=f"details_{cust_id}"):
+                            st.info(f"Detailed view for {customer_info['name']} would open here")
+
+                    with col2:
+                        if st.button(f"📧 Send Email", key=f"email_{cust_id}"):
+                            st.success(f"Email template opened for {customer_info['name']}")
+
+                    with col3:
+                        if st.button(f"📞 Call Customer", key=f"call_{cust_id}"):
+                            st.success(f"Call initiated to {customer_info['phone']}")
+        else:
+            st.info("No customers match your search criteria. Try adjusting your filters.")
 
     else:
-        st.info("No customer profiles available. Generate customer profiles from the sidebar first.")
+        st.info("No customer profiles available. Generate customer profiles from the Unified Support tab first.")
+
+        # Quick generation option
+        st.markdown("### 🚀 Quick Start")
+        if st.button("Generate Sample Customers", key="generate_sample_customers"):
+            sample_ids = ["SAMPLE001", "SAMPLE002", "SAMPLE003"]
+            progress_bar = st.progress(0)
+
+            support_agent = CustomerSupportAIAgent(model_choice)
+
+            for i, sample_id in enumerate(sample_ids):
+                with st.status(f"Generating {sample_id}..."):
+                    customer_data = support_agent.generate_synthetic_data(sample_id)
+                    if customer_data:
+                        st.write(f"✅ {sample_id}")
+                    else:
+                        st.write(f"❌ {sample_id}")
+
+                progress_bar.progress((i + 1) / len(sample_ids))
+
+            st.success("Sample customers generated!")
+            st.rerun()
 
 
 with tab3:
@@ -1684,6 +1935,235 @@ with tab3:
         }
         st.success("Usage statistics have been reset!")
         st.rerun()
+
+
+with tab4:
+    st.markdown("<div class='sub-header'>📈 Support Dashboard</div>", unsafe_allow_html=True)
+
+    # Get analytics data
+    analytics = support_agent.get_customer_analytics()
+
+    if analytics:
+        # Key metrics overview
+        st.markdown("### 📊 Key Metrics")
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            st.metric(
+                label="Total Customers",
+                value=analytics['total_customers'],
+                help="Total number of customers in the system"
+            )
+
+        with col2:
+            st.metric(
+                label="Pending Orders",
+                value=len(analytics['pending_orders']),
+                help="Orders that need attention"
+            )
+
+        with col3:
+            st.metric(
+                label="High Value Customers",
+                value=len(analytics['high_value_customers']),
+                help="Customers with orders > ₦100,000"
+            )
+
+        with col4:
+            st.metric(
+                label="Total Revenue",
+                value=f"₦{analytics['total_revenue']:,.0f}",
+                help="Total revenue from all current orders"
+            )
+
+        # Distribution charts
+        st.markdown("### 📈 Customer Distribution")
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("#### 🗺️ Customers by State")
+            if analytics['states_distribution']:
+                st.bar_chart(analytics['states_distribution'])
+            else:
+                st.info("No state distribution data available")
+
+        with col2:
+            st.markdown("#### 🏆 Customers by Tier")
+            if analytics['tier_distribution']:
+                st.bar_chart(analytics['tier_distribution'])
+            else:
+                st.info("No tier distribution data available")
+
+        # Payment and delivery insights
+        st.markdown("### 💳 Payment & Delivery Insights")
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("#### 💰 Payment Methods")
+            if analytics['payment_methods']:
+                st.bar_chart(analytics['payment_methods'])
+            else:
+                st.info("No payment method data available")
+
+        with col2:
+            st.markdown("#### 🚚 Delivery Methods")
+            if analytics['delivery_methods']:
+                st.bar_chart(analytics['delivery_methods'])
+            else:
+                st.info("No delivery method data available")
+
+        # Order status overview
+        st.markdown("### 📦 Order Status Overview")
+        if analytics['order_statuses']:
+            st.bar_chart(analytics['order_statuses'])
+        else:
+            st.info("No order status data available")
+
+        # Pending orders table
+        st.markdown("### ⚠️ Orders Requiring Attention")
+        if analytics['pending_orders']:
+            pending_df = []
+            for order in analytics['pending_orders']:
+                pending_df.append({
+                    "Customer": order['customer_name'],
+                    "Customer ID": order['customer_id'],
+                    "Order ID": order['order_id'],
+                    "Product": order['product'],
+                    "Status": order['status']
+                })
+
+            st.dataframe(pending_df, use_container_width=True)
+
+            # Quick actions for pending orders
+            st.markdown("#### 🚀 Quick Actions")
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                if st.button("📧 Send Status Updates", key="send_updates"):
+                    st.success("Status update emails would be sent to customers with pending orders")
+
+            with col2:
+                if st.button("📞 Priority Follow-up", key="priority_followup"):
+                    st.success("Priority follow-up list generated for support team")
+
+            with col3:
+                if st.button("📋 Export Report", key="export_report"):
+                    st.success("Pending orders report exported successfully")
+        else:
+            st.success("🎉 No pending orders requiring attention!")
+
+        # High value customers
+        st.markdown("### 💎 High Value Customers")
+        if analytics['high_value_customers']:
+            hv_df = []
+            for customer in analytics['high_value_customers']:
+                hv_df.append({
+                    "Customer": customer['customer_name'],
+                    "Customer ID": customer['customer_id'],
+                    "Order Value": customer['order_value'],
+                    "Tier": customer['tier']
+                })
+
+            st.dataframe(hv_df, use_container_width=True)
+        else:
+            st.info("No high-value customers (orders > ₦100,000) found")
+
+        # Recent orders
+        st.markdown("### 🕒 Recent Orders")
+        if analytics['recent_orders']:
+            recent_df = []
+            for order in analytics['recent_orders']:
+                recent_df.append({
+                    "Customer": order['customer_name'],
+                    "Customer ID": order['customer_id'],
+                    "Order ID": order['order_id'],
+                    "Order Date": order['order_date'],
+                    "Total": order['total']
+                })
+
+            st.dataframe(recent_df, use_container_width=True)
+        else:
+            st.info("No recent orders found")
+
+        # Support insights
+        st.markdown("### 🔍 Support Insights")
+
+        # Calculate some insights
+        avg_order_value = analytics['total_revenue'] / max(analytics['total_customers'], 1)
+        pending_percentage = (len(analytics['pending_orders']) / max(analytics['total_customers'], 1)) * 100
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric(
+                label="Average Order Value",
+                value=f"₦{avg_order_value:,.0f}",
+                help="Average order value across all customers"
+            )
+
+        with col2:
+            st.metric(
+                label="Pending Order Rate",
+                value=f"{pending_percentage:.1f}%",
+                help="Percentage of customers with pending orders"
+            )
+
+        with col3:
+            # Most popular state
+            if analytics['states_distribution']:
+                popular_state = max(analytics['states_distribution'], key=analytics['states_distribution'].get)
+                st.metric(
+                    label="Top State",
+                    value=popular_state,
+                    delta=f"{analytics['states_distribution'][popular_state]} customers",
+                    help="State with most customers"
+                )
+
+        # Recommendations
+        st.markdown("### 💡 Recommendations")
+
+        recommendations = []
+
+        if len(analytics['pending_orders']) > analytics['total_customers'] * 0.3:
+            recommendations.append("🚨 **High pending order rate**: Consider reviewing fulfillment processes")
+
+        if len(analytics['high_value_customers']) < analytics['total_customers'] * 0.1:
+            recommendations.append("💰 **Low high-value customer ratio**: Consider upselling strategies")
+
+        if analytics['states_distribution'] and len(analytics['states_distribution']) < 5:
+            recommendations.append("🗺️ **Limited geographic reach**: Consider expanding to more states")
+
+        if not recommendations:
+            recommendations.append("✅ **All metrics look healthy**: Continue current operations")
+
+        for rec in recommendations:
+            st.markdown(f"- {rec}")
+
+        # Refresh button
+        if st.button("🔄 Refresh Dashboard", key="refresh_dashboard"):
+            st.rerun()
+
+    else:
+        st.info("No customer data available. Generate some customer profiles first to see the dashboard.")
+
+        # Quick generation for demo
+        st.markdown("### 🚀 Quick Demo Setup")
+        if st.button("Generate Demo Data", key="generate_demo_data"):
+            demo_ids = ["DEMO001", "DEMO002", "DEMO003", "DEMO004", "DEMO005"]
+            progress_bar = st.progress(0)
+
+            for i, demo_id in enumerate(demo_ids):
+                with st.status(f"Generating {demo_id}..."):
+                    customer_data = support_agent.generate_synthetic_data(demo_id)
+                    if customer_data:
+                        st.write(f"✅ {demo_id}")
+                    else:
+                        st.write(f"❌ {demo_id}")
+
+                progress_bar.progress((i + 1) / len(demo_ids))
+
+            st.success("Demo data generated! Refresh the dashboard to see analytics.")
+            st.rerun()
 
 
 # Footer
