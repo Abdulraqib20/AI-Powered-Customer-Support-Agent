@@ -1,0 +1,878 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Nigerian Customer Support Agent{% endblock %}
+
+{% block content %}
+<!-- Quick Stats Overview -->
+<div class="row mb-4">
+    <div class="col-lg-3 col-md-6">
+        <div class="stats-card">
+            <div class="stats-number">{{ stats.total_customers or 0 }}</div>
+            <div class="stats-label">
+                <i class="bi bi-people-fill me-1"></i>Total Customers
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="stats-card bg-success">
+            <div class="stats-number">{{ stats.total_orders or 0 }}</div>
+            <div class="stats-label">
+                <i class="bi bi-cart-fill me-1"></i>Total Orders
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="stats-card bg-warning">
+            <div class="stats-number">{{ stats.usage_stats.groq_api.requests_today or 0 }}</div>
+            <div class="stats-label">
+                <i class="bi bi-cpu-fill me-1"></i>AI Requests Today
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6">
+        <div class="stats-card bg-info">
+            <div class="stats-number">99.9%</div>
+            <div class="stats-label">
+                <i class="bi bi-check-circle-fill me-1"></i>System Uptime
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Dashboard Tabs -->
+<div class="row">
+    <div class="col-12">
+        <!-- Tab Navigation -->
+        <ul class="nav nav-tabs" id="dashboardTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="support-tab" data-bs-toggle="tab" data-bs-target="#support" type="button" role="tab">
+                    <i class="bi bi-chat-dots-fill me-2"></i>Unified Support
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="customers-tab" data-bs-toggle="tab" data-bs-target="#customers" type="button" role="tab">
+                    <i class="bi bi-people-fill me-2"></i>Customer Profiles
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="usage-tab" data-bs-toggle="tab" data-bs-target="#usage" type="button" role="tab">
+                    <i class="bi bi-graph-up me-2"></i>Usage Analytics
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="analytics-tab" data-bs-toggle="tab" data-bs-target="#analytics" type="button" role="tab">
+                    <i class="bi bi-bar-chart-fill me-2"></i>Support Dashboard
+                </button>
+            </li>
+        </ul>
+
+        <!-- Tab Content -->
+        <div class="tab-content" id="dashboardTabContent">
+
+            <!-- Unified Support Tab -->
+            <div class="tab-pane fade show active" id="support" role="tabpanel">
+                <h4 class="mb-4">
+                    <i class="bi bi-chat-dots-fill text-primary me-2"></i>
+                    AI-Powered Customer Support Chat
+                </h4>
+
+                <div class="row">
+                    <!-- Chat Interface -->
+                    <div class="col-lg-8">
+                        <div class="chat-container">
+                            <div class="chat-messages" id="chatMessages">
+                                <div class="message ai">
+                                    <strong>🤖 AI Support Agent</strong><br>
+                                    Hello! I'm your AI-powered customer support assistant for Nigerian e-commerce.
+                                    I can help you with customer queries, order tracking, payment issues, and analytics.
+                                    How can I assist you today?
+                                    <div class="quick-actions">
+                                        <button class="quick-action-btn" onclick="sendQuickMessage('Show customers from Lagos')">
+                                            Lagos Customers
+                                        </button>
+                                        <button class="quick-action-btn" onclick="sendQuickMessage('Show pending orders')">
+                                            Pending Orders
+                                        </button>
+                                        <button class="quick-action-btn" onclick="sendQuickMessage('Show revenue analytics')">
+                                            Revenue Analytics
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="chat-input-area p-3 border-top">
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="chatInput"
+                                           placeholder="Type your query here... (e.g., 'Show customers from Lagos with pending orders')"
+                                           onkeypress="handleChatKeyPress(event)">
+                                    <button class="btn btn-primary" type="button" onclick="sendChatMessage()">
+                                        <i class="bi bi-send-fill"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Actions Panel -->
+                    <div class="col-lg-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-lightning-fill text-warning me-1"></i>
+                                    Quick Actions
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-outline-primary btn-sm" onclick="sendQuickMessage('Show customers with payment issues')">
+                                        <i class="bi bi-credit-card me-1"></i>Payment Issues
+                                    </button>
+                                    <button class="btn btn-outline-success btn-sm" onclick="sendQuickMessage('Show delivery status updates')">
+                                        <i class="bi bi-truck me-1"></i>Delivery Status
+                                    </button>
+                                    <button class="btn btn-outline-info btn-sm" onclick="sendQuickMessage('Show top customers by state')">
+                                        <i class="bi bi-star me-1"></i>Top Customers
+                                    </button>
+                                    <button class="btn btn-outline-warning btn-sm" onclick="sendQuickMessage('Show order trends this month')">
+                                        <i class="bi bi-graph-up me-1"></i>Order Trends
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Context Information -->
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-info-circle text-info me-1"></i>
+                                    System Status
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <small>AI Services</small>
+                                    <span class="badge bg-success">Online</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <small>Database</small>
+                                    <span class="badge bg-success">Connected</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <small>Groq API</small>
+                                    <span class="badge bg-success">Available</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <small>Memory Store</small>
+                                    <span class="badge bg-success">Active</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Customer Profiles Tab -->
+            <div class="tab-pane fade" id="customers" role="tabpanel">
+                <h4 class="mb-4">
+                    <i class="bi bi-people-fill text-primary me-2"></i>
+                    Customer Management
+                </h4>
+
+                <!-- Search and Filters -->
+                <div class="row mb-4">
+                    <div class="col-lg-4">
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-search"></i></span>
+                            <input type="text" class="form-control" id="customerSearch"
+                                   placeholder="Search customers...">
+                        </div>
+                    </div>
+                    <div class="col-lg-3">
+                        <select class="form-select" id="stateFilter">
+                            <option value="all">All States</option>
+                            {% for state in states %}
+                            <option value="{{ state }}">{{ state }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-lg-3">
+                        <select class="form-select" id="tierFilter">
+                            <option value="all">All Tiers</option>
+                            {% for tier in account_tiers %}
+                            <option value="{{ tier }}">{{ tier }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-lg-2">
+                        <button class="btn btn-primary w-100" onclick="loadCustomers()">
+                            <i class="bi bi-funnel-fill me-1"></i>Filter
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Customers Table -->
+                <div class="loading" id="customersLoading">
+                    <div class="spinner-border" role="status"></div>
+                    <div class="mt-2">Loading customers...</div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-hover" id="customersTable">
+                        <thead>
+                            <tr>
+                                <th>Customer ID</th>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>State</th>
+                                <th>LGA</th>
+                                <th>Account Tier</th>
+                                <th>Phone</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="customersTableBody">
+                            <!-- Customers will be loaded here dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Usage Analytics Tab -->
+            <div class="tab-pane fade" id="usage" role="tabpanel">
+                <h4 class="mb-4">
+                    <i class="bi bi-graph-up text-primary me-2"></i>
+                    API Usage & Performance Analytics
+                </h4>
+
+                <div class="row">
+                    <!-- API Usage Charts -->
+                    <div class="col-lg-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Groq API Usage (Today)</h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="groqUsageChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Response Time Analytics</h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="responseTimeChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mt-4">
+                    <!-- Usage Statistics -->
+                    <div class="col-lg-8">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-speedometer2 me-1"></i>
+                                    Real-time Usage Metrics
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-3">
+                                        <div class="text-center border-end">
+                                            <h5 class="text-primary mb-1" id="requestsToday">0</h5>
+                                            <small class="text-muted">Requests Today</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="text-center border-end">
+                                            <h5 class="text-success mb-1" id="tokensToday">0</h5>
+                                            <small class="text-muted">Tokens Used</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="text-center border-end">
+                                            <h5 class="text-warning mb-1" id="averageResponse">0ms</h5>
+                                            <small class="text-muted">Avg Response</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="text-center">
+                                            <h5 class="text-info mb-1" id="cacheHitRate">0%</h5>
+                                            <small class="text-muted">Cache Hit Rate</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quota Information -->
+                    <div class="col-lg-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-gauge me-1"></i>
+                                    API Quotas
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between">
+                                        <small>Groq Requests/Min</small>
+                                        <small><span id="groqRpm">0</span>/30</small>
+                                    </div>
+                                    <div class="progress">
+                                        <div class="progress-bar" id="groqRpmProgress" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between">
+                                        <small>Groq Tokens/Min</small>
+                                        <small><span id="groqTpm">0</span>/100K</small>
+                                    </div>
+                                    <div class="progress">
+                                        <div class="progress-bar bg-success" id="groqTpmProgress" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                                <div class="alert alert-info py-2">
+                                    <small>
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        Quotas reset every minute
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Support Dashboard Tab -->
+            <div class="tab-pane fade" id="analytics" role="tabpanel">
+                <h4 class="mb-4">
+                    <i class="bi bi-bar-chart-fill text-primary me-2"></i>
+                    Business Intelligence Dashboard
+                </h4>
+
+                <div class="row">
+                    <!-- Customer Distribution Chart -->
+                    <div class="col-lg-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-geo-alt-fill text-success me-1"></i>
+                                    Customer Distribution by State
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="customerDistributionChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Revenue by State Chart -->
+                    <div class="col-lg-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-currency-exchange text-warning me-1"></i>
+                                    Revenue by State (₦)
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="revenueChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row mt-4">
+                    <!-- Order Status Distribution -->
+                    <div class="col-lg-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Order Status Distribution</h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="orderStatusChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Payment Methods -->
+                    <div class="col-lg-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Payment Methods</h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="paymentMethodsChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Key Metrics -->
+                    <div class="col-lg-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-trophy-fill text-warning me-1"></i>
+                                    Key Performance Indicators
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between">
+                                        <span>Total Revenue</span>
+                                        <strong class="text-success" id="totalRevenue">₦0</strong>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between">
+                                        <span>Avg Order Value</span>
+                                        <strong class="text-primary" id="avgOrderValue">₦0</strong>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between">
+                                        <span>Top State</span>
+                                        <strong class="text-info" id="topState">Lagos</strong>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between">
+                                        <span>Delivery Success</span>
+                                        <strong class="text-success" id="deliverySuccess">95%</strong>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between">
+                                        <span>Customer Satisfaction</span>
+                                        <strong class="text-warning" id="customerSat">4.8/5</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Initialize dashboard when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Load initial data
+    loadCustomers();
+    loadUsageAnalytics();
+    loadBusinessAnalytics();
+
+    // Set up auto-refresh for real-time data
+    setInterval(updateRealTimeMetrics, 30000); // Update every 30 seconds
+});
+
+// Chat functionality
+function sendChatMessage() {
+    const input = document.getElementById('chatInput');
+    const message = input.value.trim();
+
+    if (!message) return;
+
+    // Add user message to chat
+    addMessageToChat(message, 'user');
+    input.value = '';
+
+    // Show typing indicator
+    showTypingIndicator();
+
+    // Send to API
+    fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            message: message
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideTypingIndicator();
+        if (data.success) {
+            addMessageToChat(data.response, 'ai', data.quick_actions);
+        } else {
+            addMessageToChat('Sorry, I encountered an error. Please try again.', 'ai');
+        }
+    })
+    .catch(error => {
+        hideTypingIndicator();
+        addMessageToChat('Connection error. Please check your internet connection.', 'ai');
+    });
+}
+
+function sendQuickMessage(message) {
+    document.getElementById('chatInput').value = message;
+    sendChatMessage();
+}
+
+function handleChatKeyPress(event) {
+    if (event.key === 'Enter') {
+        sendChatMessage();
+    }
+}
+
+function addMessageToChat(message, type, quickActions = []) {
+    const messagesContainer = document.getElementById('chatMessages');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${type}`;
+
+    let messageContent = '';
+    if (type === 'ai') {
+        messageContent = `<strong>🤖 AI Support Agent</strong><br>`;
+    } else {
+        messageContent = `<strong>👤 You</strong><br>`;
+    }
+
+    messageContent += message;
+
+    if (quickActions && quickActions.length > 0) {
+        messageContent += '<div class="quick-actions">';
+        quickActions.forEach(action => {
+            messageContent += `<button class="quick-action-btn" onclick="handleQuickAction('${action.action}', '${action.text}')">${action.text}</button>`;
+        });
+        messageContent += '</div>';
+    }
+
+    messageDiv.innerHTML = messageContent;
+    messagesContainer.appendChild(messageDiv);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+function showTypingIndicator() {
+    const indicator = document.createElement('div');
+    indicator.className = 'message ai typing-indicator';
+    indicator.innerHTML = '<strong>🤖 AI Support Agent</strong><br>Typing...';
+    indicator.id = 'typingIndicator';
+    document.getElementById('chatMessages').appendChild(indicator);
+    document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+}
+
+function hideTypingIndicator() {
+    const indicator = document.getElementById('typingIndicator');
+    if (indicator) {
+        indicator.remove();
+    }
+}
+
+function handleQuickAction(action, text) {
+    fetch('/api/quick-action', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            action: action,
+            context: { text: text }
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            addMessageToChat(data.response, 'ai');
+        }
+    });
+}
+
+// Customer management functions
+function loadCustomers() {
+    const loading = document.getElementById('customersLoading');
+    const search = document.getElementById('customerSearch').value;
+    const state = document.getElementById('stateFilter').value;
+    const tier = document.getElementById('tierFilter').value;
+
+    loading.style.display = 'block';
+
+    const params = new URLSearchParams();
+    if (search) params.append('search', search);
+    if (state !== 'all') params.append('state', state);
+    if (tier !== 'all') params.append('tier', tier);
+
+    fetch(`/api/customers?${params}`)
+    .then(response => response.json())
+    .then(data => {
+        loading.style.display = 'none';
+        if (data.success) {
+            displayCustomers(data.data);
+        }
+    })
+    .catch(error => {
+        loading.style.display = 'none';
+        console.error('Error loading customers:', error);
+    });
+}
+
+function displayCustomers(customers) {
+    const tbody = document.getElementById('customersTableBody');
+    tbody.innerHTML = '';
+
+    customers.forEach(customer => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${customer.customer_id}</td>
+            <td>${customer.name}</td>
+            <td>${customer.email}</td>
+            <td>${customer.state}</td>
+            <td>${customer.lga}</td>
+            <td><span class="badge bg-${getTierColor(customer.account_tier)}">${customer.account_tier}</span></td>
+            <td>${customer.phone}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary" onclick="viewCustomerDetails(${customer.customer_id})">
+                    <i class="bi bi-eye"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-success" onclick="editCustomer(${customer.customer_id})">
+                    <i class="bi bi-pencil"></i>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function getTierColor(tier) {
+    const colors = {
+        'Bronze': 'secondary',
+        'Silver': 'info',
+        'Gold': 'warning',
+        'Platinum': 'success'
+    };
+    return colors[tier] || 'secondary';
+}
+
+function viewCustomerDetails(customerId) {
+    // Implementation for viewing customer details
+    alert(`View customer details for ID: ${customerId}`);
+}
+
+function editCustomer(customerId) {
+    // Implementation for editing customer
+    alert(`Edit customer for ID: ${customerId}`);
+}
+
+// Analytics functions
+function loadUsageAnalytics() {
+    fetch('/api/analytics?type=usage')
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            updateUsageMetrics(data.data);
+            createUsageCharts(data.data);
+        }
+    });
+}
+
+function loadBusinessAnalytics() {
+    fetch('/api/analytics?type=summary')
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            createBusinessCharts(data.data);
+            updateBusinessMetrics(data.data);
+        }
+    });
+}
+
+function updateUsageMetrics(data) {
+    const groqData = data.groq_api || {};
+    document.getElementById('requestsToday').textContent = groqData.requests_today || 0;
+    document.getElementById('tokensToday').textContent = (groqData.tokens_today || 0).toLocaleString();
+    document.getElementById('groqRpm').textContent = groqData.requests_this_minute || 0;
+    document.getElementById('groqTpm').textContent = (groqData.tokens_this_minute || 0).toLocaleString();
+
+    // Update progress bars
+    const rpmPercent = ((groqData.requests_this_minute || 0) / 30) * 100;
+    const tpmPercent = ((groqData.tokens_this_minute || 0) / 100000) * 100;
+
+    document.getElementById('groqRpmProgress').style.width = `${Math.min(rpmPercent, 100)}%`;
+    document.getElementById('groqTpmProgress').style.width = `${Math.min(tpmPercent, 100)}%`;
+}
+
+function createUsageCharts(data) {
+    // Groq Usage Chart
+    const groqCtx = document.getElementById('groqUsageChart').getContext('2d');
+    new Chart(groqCtx, {
+        type: 'line',
+        data: {
+            labels: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '24:00'],
+            datasets: [{
+                label: 'Requests',
+                data: [5, 12, 8, 15, 22, 18, 10],
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+
+    // Response Time Chart
+    const responseCtx = document.getElementById('responseTimeChart').getContext('2d');
+    new Chart(responseCtx, {
+        type: 'bar',
+        data: {
+            labels: ['< 100ms', '100-200ms', '200-500ms', '500ms+'],
+            datasets: [{
+                label: 'Response Count',
+                data: [45, 32, 18, 5],
+                backgroundColor: ['#198754', '#ffc107', '#fd7e14', '#dc3545']
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
+function createBusinessCharts(data) {
+    // Customer Distribution Chart
+    if (data.customer_distribution) {
+        const customerCtx = document.getElementById('customerDistributionChart').getContext('2d');
+        const stateLabels = data.customer_distribution.map(item => item.state);
+        const customerCounts = data.customer_distribution.map(item => item.customer_count);
+
+        new Chart(customerCtx, {
+            type: 'doughnut',
+            data: {
+                labels: stateLabels.slice(0, 10), // Top 10 states
+                datasets: [{
+                    data: customerCounts.slice(0, 10),
+                    backgroundColor: [
+                        '#ff6384', '#36a2eb', '#cc65fe', '#ffce56', '#4bc0c0',
+                        '#9966ff', '#ff9f40', '#ff6384', '#c9cbcf', '#4bc0c0'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+    }
+
+    // Revenue Chart
+    if (data.revenue_by_state) {
+        const revenueCtx = document.getElementById('revenueChart').getContext('2d');
+        const revenueLabels = data.revenue_by_state.map(item => item.state);
+        const revenueAmounts = data.revenue_by_state.map(item => parseFloat(item.total_revenue));
+
+        new Chart(revenueCtx, {
+            type: 'bar',
+            data: {
+                labels: revenueLabels.slice(0, 10),
+                datasets: [{
+                    label: 'Revenue (₦)',
+                    data: revenueAmounts.slice(0, 10),
+                    backgroundColor: '#198754'
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return '₦' + value.toLocaleString();
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Order Status Chart
+    const orderStatusCtx = document.getElementById('orderStatusChart').getContext('2d');
+    new Chart(orderStatusCtx, {
+        type: 'pie',
+        data: {
+            labels: ['Delivered', 'Processing', 'Pending', 'Returned'],
+            datasets: [{
+                data: [65, 20, 10, 5],
+                backgroundColor: ['#198754', '#ffc107', '#0dcaf0', '#dc3545']
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+
+    // Payment Methods Chart
+    const paymentCtx = document.getElementById('paymentMethodsChart').getContext('2d');
+    new Chart(paymentCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Pay on Delivery', 'Bank Transfer', 'Card', 'RaqibTechPay'],
+            datasets: [{
+                data: [45, 25, 20, 10],
+                backgroundColor: ['#0dcaf0', '#198754', '#ffc107', '#6f42c1']
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+}
+
+function updateBusinessMetrics(data) {
+    // Update KPI values
+    if (data.revenue_by_state && data.revenue_by_state.length > 0) {
+        const totalRevenue = data.revenue_by_state.reduce((sum, item) =>
+            sum + parseFloat(item.total_revenue), 0);
+        document.getElementById('totalRevenue').textContent = '₦' + totalRevenue.toLocaleString();
+
+        const topState = data.revenue_by_state[0];
+        if (topState) {
+            document.getElementById('topState').textContent = topState.state;
+        }
+    }
+}
+
+function updateRealTimeMetrics() {
+    // Update usage analytics
+    loadUsageAnalytics();
+
+    // Update chat indicators if needed
+    // This function runs every 30 seconds to keep data fresh
+}
+</script>
+{% endblock %}
