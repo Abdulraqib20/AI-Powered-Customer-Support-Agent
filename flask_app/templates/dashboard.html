@@ -46,22 +46,22 @@
         <ul class="nav nav-tabs" id="dashboardTabs" role="tablist">
             <li class="nav-item" role="presentation">
                 <button class="nav-link active" id="support-tab" data-bs-toggle="tab" data-bs-target="#support" type="button" role="tab">
-                    <i class="bi bi-chat-dots-fill me-2"></i>🇳🇬 AI Customer Support
+                    <i class="bi bi-chat-dots-fill me-2"></i>🛒 Customer Support
                 </button>
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="customers-tab" data-bs-toggle="tab" data-bs-target="#customers" type="button" role="tab">
-                    <i class="bi bi-people-fill me-2"></i>Customer Profiles
+                    <i class="bi bi-people-fill me-2"></i>My Account
                 </button>
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="usage-tab" data-bs-toggle="tab" data-bs-target="#usage" type="button" role="tab">
-                    <i class="bi bi-graph-up me-2"></i>Usage Analytics
+                    <i class="bi bi-graph-up me-2"></i>Order History
                 </button>
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="analytics-tab" data-bs-toggle="tab" data-bs-target="#analytics" type="button" role="tab">
-                    <i class="bi bi-bar-chart-fill me-2"></i>Support Dashboard
+                    <i class="bi bi-bar-chart-fill me-2"></i>Help Center
                 </button>
             </li>
         </ul>
@@ -73,7 +73,7 @@
             <div class="tab-pane fade show active" id="support" role="tabpanel">
                 <h4 class="mb-4">
                     <i class="bi bi-chat-dots-fill text-primary me-2"></i>
-                    🇳🇬 AI-Powered Nigerian E-commerce Customer Support Agent
+                    🛒 raqibtech.com Customer Support - How can we help you?
                 </h4>
 
                 <div class="row">
@@ -82,22 +82,25 @@
                         <div class="chat-container">
                             <div class="chat-messages" id="chatMessages">
                                 <div class="message ai">
-                                    <strong>🤖 Nigerian E-commerce AI Support Agent</strong><br>
-                                    Sannu! Welcome to your AI-powered customer support assistant for Nigerian e-commerce.
-                                    I can help you with customer queries, order tracking, payment issues, analytics, and database insights.
-                                    Ask me anything about your business data!
+                                    <strong>🤖 raqibtech.com Customer Support</strong><br>
+                                    Hello! Welcome to raqibtech.com customer support. I'm here to help you with:
+                                    <br>• Order tracking and delivery updates
+                                    <br>• Account questions and profile management
+                                    <br>• Payment and billing assistance
+                                    <br>• Product recommendations and shopping help
+                                    <br><br>How can I assist you today?
                                     <div class="quick-actions">
-                                        <button class="quick-action-btn" onclick="sendQuickMessage('Show customers from Lagos state')">
-                                            Lagos Customers
+                                        <button class="quick-action-btn" onclick="sendQuickMessage('Track my recent order')">
+                                            Track My Order
                                         </button>
-                                        <button class="quick-action-btn" onclick="sendQuickMessage('Show orders with status Pending')">
-                                            Pending Orders
+                                        <button class="quick-action-btn" onclick="sendQuickMessage('Check my account details')">
+                                            Account Info
                                         </button>
-                                        <button class="quick-action-btn" onclick="sendQuickMessage('What is our total revenue this month?')">
-                                            Revenue Analytics
+                                        <button class="quick-action-btn" onclick="sendQuickMessage('Help with payment issue')">
+                                            Payment Help
                                         </button>
-                                        <button class="quick-action-btn" onclick="sendQuickMessage('Which Nigerian state has the most customers?')">
-                                            Geographic Analysis
+                                        <button class="quick-action-btn" onclick="sendQuickMessage('Where is my delivery?')">
+                                            Delivery Status
                                         </button>
                                     </div>
                                 </div>
@@ -105,17 +108,17 @@
                             <div class="chat-input-area p-3 border-top">
                                 <div class="input-group">
                                     <input type="text" class="form-control" id="chatInput"
-                                           placeholder="Ask me anything... (e.g., 'Show customers from Rivers state with Card payments')"
+                                           placeholder="Ask me about your orders, account, payments, or anything else..."
                                            onkeypress="handleChatKeyPress(event)">
                                     <button class="btn btn-primary" type="button" onclick="sendChatMessage()">
                                         <i class="bi bi-send-fill"></i>
                                     </button>
                                 </div>
                                 <div class="form-check mt-2">
-                                    <input class="form-check-input" type="checkbox" id="showSqlQueries" checked>
+                                    <input class="form-check-input" type="checkbox" id="showSqlQueries">
                                     <label class="form-check-label" for="showSqlQueries">
                                         <small class="text-muted">
-                                            <i class="bi bi-database me-1"></i>Show SQL queries for validation
+                                            <i class="bi bi-database me-1"></i>Show technical details (for debugging)
                                         </small>
                                     </label>
                                 </div>
@@ -702,24 +705,29 @@ class IntegratedCustomerSupportAgent {
     getQuickActionsForQueryType(queryType) {
         const actions = {
             'customer_analysis': [
-                'Show customer distribution by account tier',
-                'Find customers from other states'
+                'Update my account information',
+                'Check my account tier status'
             ],
             'order_analytics': [
-                'Show order trends this month',
-                'Check payment method distribution'
+                'Track my recent orders',
+                'Check my order history'
             ],
             'revenue_insights': [
-                'Compare revenue by states',
-                'Show monthly revenue trends'
+                'Show my spending summary',
+                'Check my payment methods'
             ],
             'geographic_analysis': [
-                'Show top performing regions',
-                'Compare Northern vs Southern Nigeria'
+                'Update my delivery address',
+                'Check delivery options in my area'
             ]
         };
 
-        return actions[queryType] || [];
+        return actions[queryType] || [
+            'Help me track an order',
+            'Update my account details',
+            'Check payment status',
+            'Contact customer service'
+        ];
     }
 
     showTypingIndicator() {

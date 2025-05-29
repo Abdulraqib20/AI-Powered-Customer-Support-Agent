@@ -514,41 +514,33 @@ Generate ONLY the SQL query, no explanations or markdown formatting.
             conversation_context = f"Recent conversation history: {safe_json_dumps(conversation_history[-2:])}"
 
         response_prompt = f"""
-You are a professional Nigerian e-commerce customer support agent AI assistant. Generate a natural, helpful response based on the database query results.
+You are a live chat customer support agent for raqibtech.com. You are having a real-time conversation with a customer.
 
-NIGERIAN BUSINESS CONTEXT:
-- Use Nigerian English expressions and terminology
-- Reference Nigerian states, LGAs, and business practices
-- Format currency in Nigerian Naira (₦)
-- Be professional but warm and helpful
-- Consider West Africa Time (WAT) context
+PLATFORM: raqibtech.com (Nigerian e-commerce platform)
+CONVERSATION TYPE: Live customer support chat
 
-{time_context}
+CONVERSATION HISTORY: {safe_json_dumps(conversation_history[-3:]) if conversation_history else "This is the start of the conversation"}
 
-USER QUERY: "{query_context.user_query}"
-QUERY TYPE: {query_context.query_type.value}
-INTENT: {query_context.intent}
+CUSTOMER'S CURRENT MESSAGE: "{query_context.user_query}"
+AVAILABLE DATABASE INFO: {safe_json_dumps(query_context.execution_result, max_items=3) if query_context.execution_result else "No data found"}
 
-EXECUTION RESULTS: {safe_json_dumps(query_context.execution_result, max_items=5) if query_context.execution_result else "No results"}
-RESULTS SUMMARY: {results_summary}
+CRITICAL INSTRUCTIONS:
+1. NEVER put your response in quotes - respond naturally
+2. USE conversation history to maintain context
+3. If customer already provided verification info (email, order ID, customer ID), USE IT to help them
+4. Don't keep asking for information they already provided
+5. Give direct answers when you have the information
+6. Be conversational and helpful
+7. Keep responses under 80 words
+8. Format currency as ₦ for Nigerian Naira
 
-{conversation_context}
+CUSTOMER SERVICE LOGIC:
+- If customer provided order ID/customer ID/email in previous messages: Look up their information and help
+- If asking about delivery and you have order data: Provide delivery status
+- If asking general questions: Answer directly
+- Only ask for verification if you don't have it yet
 
-ERROR (if any): {query_context.error_message or "None"}
-
-RESPONSE GUIDELINES:
-1. Start with a friendly Nigerian greeting if appropriate
-2. Summarize the findings clearly
-3. Use proper Nigerian business terminology
-4. Format numbers and currency appropriately (₦)
-5. Provide actionable insights
-6. Offer to help with follow-up questions
-7. If there's an error, explain it simply and offer alternatives
-8. Keep response under 200 words but comprehensive
-9. Use emojis sparingly but appropriately
-10. End with a professional closing
-
-Generate a natural, conversational response:
+Respond naturally as a helpful customer support agent (no quotes, no signatures):
 """
 
         try:
@@ -574,40 +566,26 @@ Generate a natural, conversational response:
         """Generate fallback response for error scenarios"""
 
         if query_context.error_message:
-            return f"""
-I encountered an issue while processing your request: {query_context.error_message}
+            return """Sorry, I'm having a technical issue right now. Can you try asking your question again?
 
-However, I'm here to help! Please try rephrasing your question or ask about:
-- Customer information by state or LGA
-- Order status and delivery tracking
-- Revenue and sales analytics
-- Product performance insights
-
-What specific information can I help you find about our Nigerian e-commerce platform?
-"""
+If you need immediate help, you can also visit raqibtech.com directly or contact our support team."""
 
         elif query_context.execution_result:
             results_count = len(query_context.execution_result)
-            return f"""
-I found {results_count} records related to your query about "{query_context.user_query}".
+            return f"""I found some information that might help! To give you the right details, could you share your order number or email address with me?
 
-The data shows valuable insights about our Nigerian e-commerce operations. Would you like me to provide more specific analysis or help you explore a particular aspect of these results?
-
-Feel free to ask follow-up questions about customers, orders, revenue, or any other business metrics you're interested in!
-"""
+This helps me make sure I'm giving you the correct information about your raqibtech.com account."""
 
         else:
-            return """
-I understand you're looking for information about our Nigerian e-commerce platform. While I couldn't retrieve specific data for your query, I'm ready to help you with:
+            return """I'd be happy to help! What specifically are you looking for?
 
-📊 Customer analytics and demographics
-🛒 Order tracking and sales data
-💰 Revenue insights and financial metrics
-🗺️ Geographic analysis by Nigerian states
-📈 Business performance trends
+I can help with:
+• Order tracking and delivery status
+• Account questions
+• Payment issues
+• Product information
 
-Please let me know what specific information you'd like to explore, and I'll provide detailed insights!
-"""
+Just let me know what you need assistance with."""
 
     def process_query(self, user_query: str, user_id: str = "anonymous") -> Dict[str, Any]:
         """

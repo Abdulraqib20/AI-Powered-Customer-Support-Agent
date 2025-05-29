@@ -304,18 +304,25 @@ def get_ai_response(query: str, context: str = "", user_id: str = "anonymous") -
         if groq_client is None:
             return "I'm currently operating in limited mode. AI chat functionality requires API configuration. However, I can still help you with basic customer support tasks and database queries."
 
-        # Nigerian e-commerce context
-        system_prompt = """You are an AI customer support agent for a Nigerian e-commerce platform.
-        You help with customer inquiries, order tracking, payment issues, and business analytics.
+        # raqibtech.com customer support context
+        system_prompt = """You are a friendly customer support AI assistant for raqibtech.com, a Nigerian e-commerce platform.
+        You help customers with their orders, account questions, payment issues, delivery tracking, and shopping assistance.
 
-        Key context:
-        - You serve customers across all 36 Nigerian states + FCT
+        Platform context:
+        - raqibtech.com: Nigerian e-commerce platform
+        - User: Customer who shops on the platform (not internal staff)
+        - Serving customers across all 36 Nigerian states + FCT
         - Payment methods: Pay on Delivery, Bank Transfer, Card, RaqibTechPay
         - Currency: Nigerian Naira (₦)
         - Business hours: 8 AM - 8 PM WAT (West Africa Time)
-        - You understand Nigerian English, pidgin, and cultural context
 
-        Be helpful, professional, and culturally aware. Use Nigerian context in your responses.
+        Customer service style:
+        - Warm, friendly, and professional tone
+        - Help customers with their specific needs
+        - Address customers directly ("your order", "your account")
+        - Provide clear, actionable guidance
+        - Show that raqibtech.com cares about their experience
+        - Use conversational Nigerian English
         """
 
         # Prepare the conversation
@@ -834,39 +841,39 @@ def api_query_suggestions():
 
         suggestions = {
             'customer_analysis': [
-                "Show me customers from Lagos state",
-                "How many customers do we have in each Nigerian state?",
-                "Which customers have Gold or Platinum account tiers?",
-                "Show customer distribution by account tier",
-                "Find customers who joined this month"
+                "Update my account information",
+                "Check my account tier and benefits",
+                "What are the benefits of upgrading my account?",
+                "How do I change my account details?",
+                "Show me my account summary"
             ],
             'order_analytics': [
-                "What's our total number of orders this month?",
-                "Show orders with 'Pay on Delivery' payment method",
-                "Which orders are still pending delivery?",
-                "Compare order volumes by payment method",
-                "Show recent orders from Rivers state"
+                "Track my recent order",
+                "Where is my delivery?",
+                "Check status of order #12345",
+                "Show my order history",
+                "Cancel or modify my order"
             ],
             'revenue_insights': [
-                "What's our total revenue this month?",
-                "Show revenue breakdown by Nigerian states",
-                "Compare revenue between Bank Transfer and Card payments",
-                "Which state generates the most revenue?",
-                "Show monthly revenue trends for this year"
+                "Show my spending history",
+                "What payment methods can I use?",
+                "Check my payment status",
+                "How much have I spent this month?",
+                "Update my payment information"
             ],
             'geographic_analysis': [
-                "Which Nigerian state has the most customers?",
-                "Show order distribution across Nigerian states",
-                "Compare customer growth in Northern vs Southern Nigeria",
-                "Which LGAs have the highest order values?",
-                "Show delivery performance by state"
+                "Update my delivery address",
+                "What delivery options are available in my area?",
+                "Check delivery charges to my location",
+                "Change my shipping address",
+                "Find nearest pickup location"
             ],
             'general': [
-                "Show me a summary of our business performance",
-                "What are our top-performing regions?",
-                "How is our customer base distributed?",
-                "Show recent business trends",
-                "Give me insights about our Nigerian market"
+                "Help me track my order",
+                "Update my account details",
+                "Check my payment status",
+                "What products do you recommend?",
+                "How do I contact customer service?"
             ]
         }
 
