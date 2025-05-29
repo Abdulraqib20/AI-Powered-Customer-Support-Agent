@@ -205,7 +205,8 @@ class EnhancedDatabaseQuerying:
             'payment_methods': [],
             'time_period': None,
             'amount_range': None,
-            'product_categories': []
+            'product_categories': [],
+            'order_id': None
         }
 
         # Extract Nigerian states
@@ -234,6 +235,12 @@ class EnhancedDatabaseQuerying:
             if indicator in query_lower:
                 entities['time_period'] = period
                 break
+
+        # Extract order_id if present (simple regex for "order id is XXXXX" or "order #XXXXX")
+        order_id_match = re.search(r'(?:order id is|order #|order number|order no\.|order id)\s*([0-9]+)', query_lower)
+        if order_id_match:
+            entities['order_id'] = order_id_match.group(1)
+            logger.info(f"Extracted order_id: {entities['order_id']}")
 
         # Classify query type based on keywords
         if any(keyword in query_lower for keyword in ['customer', 'customers', 'profile', 'account']):
@@ -299,13 +306,13 @@ NIGERIAN BUSINESS CONTEXT:
 
 QUERY GENERATION RULES:
 1. Always use proper PostgreSQL syntax
-2. Include appropriate WHERE clauses for Nigerian context
+2. Include appropriate WHERE clauses for Nigerian context. If 'order_id' is present in EXTRACTED ENTITIES, prioritize filtering by `orders.order_id`.
 3. Use date functions for time-based queries (e.g., CURRENT_DATE, DATE_TRUNC)
 4. Format monetary values appropriately
 5. Consider Nigerian geographic divisions (states, LGAs)
-6. Handle partitioned tables correctly (orders table is partitioned by created_at)
+6. Handle partitioned tables correctly (orders table is partitioned by created_at). If querying by a specific 'order_id', a broad or no filter on `created_at` might be appropriate, as `order_id` should be unique.
 7. Use proper JOINs when needed
-8. Limit results appropriately (usually 10-50 rows)
+8. Limit results appropriately (usually 10-50 rows unless a specific ID is queried)
 9. Order results logically
 10. Handle NULL values gracefully
 
@@ -499,6 +506,9 @@ Generate ONLY the SQL query, no explanations or markdown formatting.
             results_count = len(query_context.execution_result)
             results_summary = f"Found {results_count} records. "
 
+            # DEBUG: Log the actual database result being passed to AI
+            logger.info(f"🔍 DEBUG: Database result passed to AI: {safe_json_dumps(query_context.execution_result, max_items=3)}")
+
             # Format monetary values in Naira
             for result in query_context.execution_result[:3]:  # Show first 3 results
                 for key, value in result.items():
@@ -526,19 +536,25 @@ AVAILABLE DATABASE INFO: {safe_json_dumps(query_context.execution_result, max_it
 
 CRITICAL INSTRUCTIONS:
 1. NEVER put your response in quotes - respond naturally
-2. USE conversation history to maintain context
-3. If customer already provided verification info (email, order ID, customer ID), USE IT to help them
-4. Don't keep asking for information they already provided
-5. Give direct answers when you have the information
+2. USE the database information directly to answer customer questions
+3. If database shows order_status for an order, provide that exact status to the customer
+4. If customer provided order ID and you found database results, use that information
+5. Don't ask for additional verification if you already have the data they need
 6. Be conversational and helpful
 7. Keep responses under 80 words
 8. Format currency as ₦ for Nigerian Naira
 
 CUSTOMER SERVICE LOGIC:
-- If customer provided order ID/customer ID/email in previous messages: Look up their information and help
+- If database returned order status information: Share that status directly with the customer
+- If customer asked about order ID and database has results: Answer using those results
 - If asking about delivery and you have order data: Provide delivery status
-- If asking general questions: Answer directly
-- Only ask for verification if you don't have it yet
+- Only ask for verification if you truly don't have the information they need
+
+ORDER STATUS MEANINGS:
+- "Pending": Order received and being prepared
+- "Processing": Order is being processed and prepared for delivery
+- "Delivered": Order has been delivered to customer
+- "Returned": Order was returned
 
 Respond naturally as a helpful customer support agent (no quotes, no signatures):
 """
