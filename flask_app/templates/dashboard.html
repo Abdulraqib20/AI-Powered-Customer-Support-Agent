@@ -3,38 +3,6 @@
 {% block title %}raqibtech.com Customer Support - How can we help you?{% endblock %}
 
 {% block content %}
-<!-- Customer Welcome Banner -->
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="card bg-primary text-white">
-            <div class="card-body">
-                <div class="row align-items-center">
-                    <div class="col-md-8">
-                        <h3 class="card-title mb-2">
-                            <i class="bi bi-person-circle me-2"></i>
-                            Welcome to raqibtech.com Support!
-                        </h3>
-                        <p class="card-text fs-5 mb-0">
-                            🛍️ Need help with your order, account, or have questions? Our AI assistant is here 24/7 to help you!
-                        </p>
-                    </div>
-                    <div class="col-md-4 text-md-end">
-                        <div class="support-metrics">
-                            <div class="metric-item d-inline-block me-3">
-                                <strong class="d-block">{{ stats.total_orders or 0 }}</strong>
-                                <small>Orders Today</small>
-                            </div>
-                            <div class="metric-item d-inline-block">
-                                <strong class="d-block">99.9%</strong>
-                                <small>Support Satisfaction</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 
 <!-- Customer Support Navigation -->
 <div class="row">
@@ -87,15 +55,15 @@
                     <div class="col-lg-8">
                         <div class="card">
                             <div class="chat-messages" id="chatMessages">
-                                <div class="message ai card bg-light">
-                                    <div class="card-body">
-                                        <div class="d-flex align-items-center mb-2">
-                                            <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px;">
-                                                <i class="bi bi-robot"></i>
-                                            </div>
-                                            <strong>raqibtech.com AI Assistant</strong>
-                                            <span class="badge bg-success ms-2">Online</span>
+                                <div class="message ai welcome">
+                                    <div class="message-header">
+                                        <div class="ai-avatar">
+                                            <i class="bi bi-robot"></i>
                                         </div>
+                                        <strong>raqibtech.com AI Assistant</strong>
+                                        <span class="badge bg-success ms-2">Online</span>
+                                    </div>
+                                    <div class="message-bubble">
                                         <div class="welcome-content">
                                             <h6 class="mb-2">👋 Hello! Welcome to raqibtech.com support!</h6>
                                             <p class="mb-3">I'm here to help you with:</p>
@@ -108,29 +76,32 @@
                                             </ul>
                                             <div class="quick-start-actions">
                                                 <p class="mb-2"><strong>Quick Start:</strong></p>
-                                                <div class="d-flex flex-wrap gap-2">
-                                                    <button class="btn btn-outline-primary btn-sm" onclick="sendQuickMessage('Track my recent order')">
+                                                <div class="quick-actions">
+                                                    <button class="quick-action-btn" onclick="sendQuickMessage('Track my recent order')">
                                                         🔍 Track My Order
                                                     </button>
-                                                    <button class="btn btn-outline-success btn-sm" onclick="sendQuickMessage('Help with payment issue')">
+                                                    <button class="quick-action-btn" onclick="sendQuickMessage('Help with payment issue')">
                                                         💳 Payment Help
                                                     </button>
-                                                    <button class="btn btn-outline-warning btn-sm" onclick="sendQuickMessage('Where is my delivery?')">
+                                                    <button class="quick-action-btn" onclick="sendQuickMessage('Where is my delivery?')">
                                                         🚚 Delivery Status
                                                     </button>
-                                                    <button class="btn btn-outline-info btn-sm" onclick="sendQuickMessage('Update my account information')">
+                                                    <button class="quick-action-btn" onclick="sendQuickMessage('Update my account information')">
                                                         👤 Account Help
                                                     </button>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
+                                    <div class="message-timestamp">
+                                        <i class="bi bi-clock me-1"></i>Support available 24/7
+                                    </div>
                                 </div>
                             </div>
                             <div class="card-footer bg-light">
                                 <div class="input-group">
                                     <input type="text" class="form-control" id="chatInput"
-                                           placeholder="Type your question here... (e.g., 'Track order #12345' or 'Payment help')"
+                                           placeholder="Ask me anything..."
                                            onkeypress="handleChatKeyPress(event)">
                                     <button class="btn btn-primary" type="button" onclick="sendChatMessage()">
                                         <i class="bi bi-send-fill me-1"></i>Send
@@ -531,13 +502,30 @@ class CustomerSupportPortal {
         const timestamp = new Date().toLocaleTimeString();
         const senderName = sender === 'customer' ? 'You' : 'raqibtech.com Assistant';
 
-        messageDiv.innerHTML = `
-            <div class="message-header d-flex justify-content-between align-items-center mb-1">
-                <strong>${senderName}</strong>
-                <small class="text-muted">${timestamp}</small>
-            </div>
-            <div class="message-content">${message}</div>
-        `;
+        if (sender === 'customer') {
+            messageDiv.innerHTML = `
+                <div class="message-header">
+                    <strong>${senderName}</strong>
+                </div>
+                <div class="message-bubble">
+                    ${message}
+                </div>
+                <div class="message-timestamp">${timestamp}</div>
+            `;
+        } else {
+            messageDiv.innerHTML = `
+                <div class="message-header">
+                    <div class="ai-avatar">
+                        <i class="bi bi-robot"></i>
+                    </div>
+                    <strong>${senderName}</strong>
+                </div>
+                <div class="message-bubble">
+                    ${message}
+                </div>
+                <div class="message-timestamp">${timestamp}</div>
+            `;
+        }
 
         chatMessages.appendChild(messageDiv);
         chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -553,16 +541,14 @@ class CustomerSupportPortal {
         const timestamp = new Date().toLocaleTimeString();
 
         let messageContent = `
-            <div class="message-header d-flex justify-content-between align-items-center mb-2">
-                <div class="d-flex align-items-center">
-                    <div class="ai-avatar me-2">
-                        <i class="bi bi-robot"></i>
-                    </div>
-                    <strong>raqibtech.com Assistant</strong>
+            <div class="message-header">
+                <div class="ai-avatar">
+                    <i class="bi bi-robot"></i>
                 </div>
-                <small class="text-muted">${timestamp}</small>
+                <strong>raqibtech.com Assistant</strong>
             </div>
-            <div class="message-content mb-2">${data.response}</div>
+            <div class="message-bubble">
+                <div class="message-content mb-2">${data.response}</div>
         `;
 
         // Add helpful follow-up actions for customers
@@ -571,10 +557,10 @@ class CustomerSupportPortal {
             if (followUpActions.length > 0) {
                 messageContent += `
                     <div class="follow-up-actions mt-2">
-                        <small class="text-muted d-block mb-1">What else can I help you with?</small>
+                        <small class="text-muted d-block mb-2">What else can I help you with?</small>
                         <div class="quick-actions">
                             ${followUpActions.map(action =>
-                                `<button class="quick-action-btn customer" onclick="customerPortal.sendCustomerMessage('${action}')">${action}</button>`
+                                `<button class="quick-action-btn" onclick="customerPortal.sendCustomerMessage('${action}')">${action}</button>`
                             ).join('')}
                         </div>
                     </div>
@@ -587,7 +573,7 @@ class CustomerSupportPortal {
             messageContent += `
                 <details class="mt-2">
                     <summary class="small text-muted">Technical Details</summary>
-                    <div class="technical-info small mt-1 p-2 bg-light rounded">
+                    <div class="technical-info small mt-1 p-2 rounded">
                         <strong>Query Type:</strong> ${data.query_type || 'N/A'}<br>
                         <strong>Results:</strong> ${data.results_count || 0} records<br>
                         <strong>Processing Time:</strong> ${data.execution_time || 'N/A'}
@@ -595,6 +581,13 @@ class CustomerSupportPortal {
                 </details>
             `;
         }
+
+        messageContent += `
+            </div>
+            <div class="message-timestamp">
+                <i class="bi bi-clock me-1"></i>${timestamp}
+            </div>
+        `;
 
         messageDiv.innerHTML = messageContent;
         chatMessages.appendChild(messageDiv);
@@ -684,14 +677,16 @@ class CustomerSupportPortal {
         typingDiv.className = 'message ai typing';
         typingDiv.id = 'typingIndicator';
         typingDiv.innerHTML = `
-            <div class="message-header d-flex align-items-center mb-1">
-                <div class="ai-avatar me-2">
+            <div class="message-header">
+                <div class="ai-avatar">
                     <i class="bi bi-robot"></i>
                 </div>
                 <strong>raqibtech.com Assistant</strong>
             </div>
-            <div class="typing-animation">
-                <span></span><span></span><span></span>
+            <div class="message-bubble">
+                <div class="typing-animation">
+                    <span></span><span></span><span></span>
+                </div>
             </div>
         `;
 
