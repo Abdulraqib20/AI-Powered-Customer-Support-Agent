@@ -1,497 +1,438 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - Nigerian Customer Support Agent{% endblock %}
+{% block title %}raqibtech.com Customer Support - How can we help you?{% endblock %}
 
 {% block content %}
-<!-- Quick Stats Overview -->
+<!-- Customer Welcome Banner -->
 <div class="row mb-4">
-    <div class="col-lg-3 col-md-6">
-        <div class="stats-card">
-            <div class="stats-number">{{ stats.total_customers or 0 }}</div>
-            <div class="stats-label">
-                <i class="bi bi-people-fill me-1"></i>Total Customers
-            </div>
-        </div>
-    </div>
-    <div class="col-lg-3 col-md-6">
-        <div class="stats-card bg-success">
-            <div class="stats-number">{{ stats.total_orders or 0 }}</div>
-            <div class="stats-label">
-                <i class="bi bi-cart-fill me-1"></i>Total Orders
-            </div>
-        </div>
-    </div>
-    <div class="col-lg-3 col-md-6">
-        <div class="stats-card bg-warning">
-            <div class="stats-number">{{ stats.usage_stats.groq_api.requests_today or 0 }}</div>
-            <div class="stats-label">
-                <i class="bi bi-cpu-fill me-1"></i>AI Requests Today
-            </div>
-        </div>
-    </div>
-    <div class="col-lg-3 col-md-6">
-        <div class="stats-card bg-info">
-            <div class="stats-number">99.9%</div>
-            <div class="stats-label">
-                <i class="bi bi-check-circle-fill me-1"></i>System Uptime
+    <div class="col-12">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <h3 class="card-title mb-2">
+                            <i class="bi bi-person-circle me-2"></i>
+                            Welcome to raqibtech.com Support!
+                        </h3>
+                        <p class="card-text fs-5 mb-0">
+                            🛍️ Need help with your order, account, or have questions? Our AI assistant is here 24/7 to help you!
+                        </p>
+                    </div>
+                    <div class="col-md-4 text-md-end">
+                        <div class="support-metrics">
+                            <div class="metric-item d-inline-block me-3">
+                                <strong class="d-block">{{ stats.total_orders or 0 }}</strong>
+                                <small>Orders Today</small>
+                            </div>
+                            <div class="metric-item d-inline-block">
+                                <strong class="d-block">99.9%</strong>
+                                <small>Support Satisfaction</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Main Dashboard Tabs -->
+<!-- Customer Support Navigation -->
 <div class="row">
     <div class="col-12">
-        <!-- Tab Navigation -->
-        <ul class="nav nav-tabs" id="dashboardTabs" role="tablist">
+        <!-- Support Navigation Tabs -->
+        <ul class="nav nav-tabs nav-fill" id="supportTabs" role="tablist">
             <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="support-tab" data-bs-toggle="tab" data-bs-target="#support" type="button" role="tab">
-                    <i class="bi bi-chat-dots-fill me-2"></i>🛒 Customer Support
+                <button class="nav-link active" id="chat-tab" data-bs-toggle="tab" data-bs-target="#chat" type="button" role="tab">
+                    <i class="bi bi-chat-heart-fill me-2"></i>
+                    💬 Get Help Now
                 </button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="customers-tab" data-bs-toggle="tab" data-bs-target="#customers" type="button" role="tab">
-                    <i class="bi bi-people-fill me-2"></i>My Account
+                <button class="nav-link" id="orders-tab" data-bs-toggle="tab" data-bs-target="#orders" type="button" role="tab">
+                    <i class="bi bi-box-seam me-2"></i>
+                    📦 Track My Orders
                 </button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="usage-tab" data-bs-toggle="tab" data-bs-target="#usage" type="button" role="tab">
-                    <i class="bi bi-graph-up me-2"></i>Order History
+                <button class="nav-link" id="account-tab" data-bs-toggle="tab" data-bs-target="#account" type="button" role="tab">
+                    <i class="bi bi-person-gear me-2"></i>
+                    👤 My Account
                 </button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="analytics-tab" data-bs-toggle="tab" data-bs-target="#analytics" type="button" role="tab">
-                    <i class="bi bi-bar-chart-fill me-2"></i>Help Center
+                <button class="nav-link" id="contact-tab" data-bs-toggle="tab" data-bs-target="#contact" type="button" role="tab">
+                    <i class="bi bi-telephone-fill me-2"></i>
+                    📞 Contact Support
                 </button>
             </li>
         </ul>
 
         <!-- Tab Content -->
-        <div class="tab-content" id="dashboardTabContent">
+        <div class="tab-content border border-top-0 p-4" id="supportTabContent">
 
-            <!-- Unified Support Tab -->
-            <div class="tab-pane fade show active" id="support" role="tabpanel">
-                <h4 class="mb-4">
-                    <i class="bi bi-chat-dots-fill text-primary me-2"></i>
-                    🛒 raqibtech.com Customer Support - How can we help you?
-                </h4>
+            <!-- Get Help Now Tab (Primary Chat Interface) -->
+            <div class="tab-pane fade show active" id="chat" role="tabpanel">
+                <div class="mb-4">
+                    <h4 class="mb-3">
+                        <i class="bi bi-robot text-primary me-2"></i>
+                        Chat with our AI Support Assistant
+                    </h4>
+                    <p class="text-muted mb-4">
+                        Ask me anything about your orders, payments, delivery, account, or shopping on raqibtech.com!
+                    </p>
+                </div>
 
                 <div class="row">
-                    <!-- Chat Interface -->
+                    <!-- Main Chat Interface -->
                     <div class="col-lg-8">
-                        <div class="chat-container">
+                        <div class="card">
                             <div class="chat-messages" id="chatMessages">
-                                <div class="message ai">
-                                    <strong>🤖 raqibtech.com Customer Support</strong><br>
-                                    Hello! Welcome to raqibtech.com customer support. I'm here to help you with:
-                                    <br>• Order tracking and delivery updates
-                                    <br>• Account questions and profile management
-                                    <br>• Payment and billing assistance
-                                    <br>• Product recommendations and shopping help
-                                    <br><br>How can I assist you today?
-                                    <div class="quick-actions">
-                                        <button class="quick-action-btn" onclick="sendQuickMessage('Track my recent order')">
-                                            Track My Order
-                                        </button>
-                                        <button class="quick-action-btn" onclick="sendQuickMessage('Check my account details')">
-                                            Account Info
-                                        </button>
-                                        <button class="quick-action-btn" onclick="sendQuickMessage('Help with payment issue')">
-                                            Payment Help
-                                        </button>
-                                        <button class="quick-action-btn" onclick="sendQuickMessage('Where is my delivery?')">
-                                            Delivery Status
-                                        </button>
+                                <div class="message ai card bg-light">
+                                    <div class="card-body">
+                                        <div class="d-flex align-items-center mb-2">
+                                            <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px;">
+                                                <i class="bi bi-robot"></i>
+                                            </div>
+                                            <strong>raqibtech.com AI Assistant</strong>
+                                            <span class="badge bg-success ms-2">Online</span>
+                                        </div>
+                                        <div class="welcome-content">
+                                            <h6 class="mb-2">👋 Hello! Welcome to raqibtech.com support!</h6>
+                                            <p class="mb-3">I'm here to help you with:</p>
+                                            <ul class="list-unstyled mb-3">
+                                                <li class="mb-1">🔍 <strong>Order tracking</strong> - "Where is my order?"</li>
+                                                <li class="mb-1">💳 <strong>Payment help</strong> - "Payment issue with my order"</li>
+                                                <li class="mb-1">🚚 <strong>Delivery updates</strong> - "When will my order arrive?"</li>
+                                                <li class="mb-1">👤 <strong>Account questions</strong> - "Update my profile"</li>
+                                                <li class="mb-1">🛍️ <strong>Shopping help</strong> - "Product recommendations"</li>
+                                            </ul>
+                                            <div class="quick-start-actions">
+                                                <p class="mb-2"><strong>Quick Start:</strong></p>
+                                                <div class="d-flex flex-wrap gap-2">
+                                                    <button class="btn btn-outline-primary btn-sm" onclick="sendQuickMessage('Track my recent order')">
+                                                        🔍 Track My Order
+                                                    </button>
+                                                    <button class="btn btn-outline-success btn-sm" onclick="sendQuickMessage('Help with payment issue')">
+                                                        💳 Payment Help
+                                                    </button>
+                                                    <button class="btn btn-outline-warning btn-sm" onclick="sendQuickMessage('Where is my delivery?')">
+                                                        🚚 Delivery Status
+                                                    </button>
+                                                    <button class="btn btn-outline-info btn-sm" onclick="sendQuickMessage('Update my account information')">
+                                                        👤 Account Help
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                            <div class="chat-input-area p-3 border-top">
+                            <div class="card-footer bg-light">
                                 <div class="input-group">
                                     <input type="text" class="form-control" id="chatInput"
-                                           placeholder="Ask me about your orders, account, payments, or anything else..."
+                                           placeholder="Type your question here... (e.g., 'Track order #12345' or 'Payment help')"
                                            onkeypress="handleChatKeyPress(event)">
                                     <button class="btn btn-primary" type="button" onclick="sendChatMessage()">
-                                        <i class="bi bi-send-fill"></i>
+                                        <i class="bi bi-send-fill me-1"></i>Send
                                     </button>
                                 </div>
-                                <div class="form-check mt-2">
-                                    <input class="form-check-input" type="checkbox" id="showSqlQueries">
-                                    <label class="form-check-label" for="showSqlQueries">
-                                        <small class="text-muted">
-                                            <i class="bi bi-database me-1"></i>Show technical details (for debugging)
-                                        </small>
-                                    </label>
+                                <div class="d-flex justify-content-between align-items-center mt-2">
+                                    <small class="text-muted">
+                                        <i class="bi bi-shield-check me-1"></i>Your conversations are secure and private
+                                    </small>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="showTechnicalDetails">
+                                        <label class="form-check-label" for="showTechnicalDetails">
+                                            <small class="text-muted">Show technical details</small>
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Enhanced Right Panel -->
+                    <!-- Customer Help Sidebar -->
                     <div class="col-lg-4">
-                        <!-- Quick Query Categories -->
-                        <div class="card border-primary mb-3">
-                            <div class="card-header bg-gradient-primary text-white">
+                        <!-- Quick Help Categories -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-primary text-white">
                                 <h6 class="mb-0">
                                     <i class="bi bi-lightning-fill me-1"></i>
-                                    Query Categories
+                                    Common Questions
                                 </h6>
                             </div>
                             <div class="card-body">
                                 <div class="d-grid gap-2">
-                                    <button type="button" class="btn btn-outline-primary btn-sm query-category" data-category="customer_analysis">
-                                        <i class="bi bi-people me-1"></i> Customer Analytics
+                                    <button class="btn btn-outline-primary btn-sm category-btn" data-category="order_tracking">
+                                        <i class="bi bi-box-seam me-1"></i> Order & Delivery Questions
                                     </button>
-                                    <button type="button" class="btn btn-outline-success btn-sm query-category" data-category="order_analytics">
-                                        <i class="bi bi-cart me-1"></i> Order Analysis
+                                    <button class="btn btn-outline-success btn-sm category-btn" data-category="payments">
+                                        <i class="bi bi-credit-card me-1"></i> Payment & Billing Help
                                     </button>
-                                    <button type="button" class="btn btn-outline-warning btn-sm query-category" data-category="revenue_insights">
-                                        <i class="bi bi-currency-dollar me-1"></i> Revenue Insights
+                                    <button class="btn btn-outline-warning btn-sm category-btn" data-category="account">
+                                        <i class="bi bi-person-gear me-1"></i> Account & Profile
                                     </button>
-                                    <button type="button" class="btn btn-outline-info btn-sm query-category" data-category="geographic_analysis">
-                                        <i class="bi bi-geo-alt me-1"></i> Geographic Analysis
+                                    <button class="btn btn-outline-info btn-sm category-btn" data-category="shopping">
+                                        <i class="bi bi-bag-heart me-1"></i> Shopping & Products
                                     </button>
                                 </div>
 
-                                <!-- Query Suggestions -->
-                                <div id="querySuggestions" class="mt-3" style="display: none;">
-                                    <small class="text-muted"><strong>Suggested queries:</strong></small>
-                                    <div id="suggestionsContainer" class="mt-1"></div>
+                                <!-- Suggested Questions -->
+                                <div id="suggestedQuestions" class="mt-3" style="display: none;">
+                                    <small class="text-muted"><strong>Try asking:</strong></small>
+                                    <div id="questionsContainer" class="mt-2"></div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- System Status & Chat History -->
-                        <div class="card border-info">
-                            <div class="card-header bg-gradient-info text-white">
+                        <!-- Support Status -->
+                        <div class="card">
+                            <div class="card-header bg-info text-white">
                                 <h6 class="mb-0">
-                                    <i class="bi bi-info-circle me-1"></i>
-                                    System Status & History
+                                    <i class="bi bi-headset me-1"></i>
+                                    Support Status
                                 </h6>
                             </div>
                             <div class="card-body">
-                                <!-- System Status -->
-                                <div class="mb-3">
-                                    <small class="text-muted"><strong>System Status:</strong></small>
-                                    <div class="d-flex justify-content-between align-items-center mb-1">
-                                        <small>AI Services</small>
-                                        <span class="badge bg-success">Online</span>
+                                <div class="support-status-info">
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>AI Assistant</span>
+                                        <span class="badge bg-success">Online 24/7</span>
                                     </div>
-                                    <div class="d-flex justify-content-between align-items-center mb-1">
-                                        <small>Database</small>
-                                        <span class="badge bg-success">Connected</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between align-items-center mb-1">
-                                        <small>Enhanced Pipeline</small>
-                                        <span class="badge bg-success">Active</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <small>Memory Store</small>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Live Chat</span>
                                         <span class="badge bg-success">Available</span>
                                     </div>
-                                </div>
+                                    <div class="d-flex justify-content-between mb-3">
+                                        <span>Phone Support</span>
+                                        <span class="badge bg-primary">8AM-8PM WAT</span>
+                                    </div>
 
-                                <!-- Recent Queries -->
-                                <div id="conversationHistory" style="max-height: 200px; overflow-y: auto;">
-                                    <small class="text-muted"><strong>Recent Queries:</strong></small>
-                                    <div class="text-center text-muted mt-2">
-                                        <i class="bi bi-chat-text fa-2x mb-2"></i>
-                                        <p>No queries yet.<br>Start asking questions!</p>
+                                    <div class="current-time">
+                                        <small class="text-muted">
+                                            <i class="bi bi-clock me-1"></i>
+                                            Nigeria Time: <span class="nigerian-time">--:-- WAT</span>
+                                        </small>
                                     </div>
                                 </div>
-                                <div class="mt-2 d-grid gap-1">
-                                    <button class="btn btn-sm btn-outline-info" id="loadHistoryBtn">
-                                        <i class="bi bi-arrow-clockwise me-1"></i>Refresh History
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Track My Orders Tab -->
+            <div class="tab-pane fade" id="orders" role="tabpanel">
+                <div class="mb-4">
+                    <h4 class="mb-3">
+                        <i class="bi bi-box-seam text-primary me-2"></i>
+                        Track Your Orders
+                    </h4>
+                    <p class="text-muted">
+                        Enter your order ID or email to track your recent orders and delivery status.
+                    </p>
+                </div>
+
+                <!-- Order Tracking Form -->
+                <div class="row mb-4">
+                    <div class="col-lg-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Quick Order Lookup</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label class="form-label">Order ID</label>
+                                    <input type="text" class="form-control" id="orderIdInput"
+                                           placeholder="Enter your order ID (e.g., 12345)">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Email (Optional)</label>
+                                    <input type="email" class="form-control" id="emailInput"
+                                           placeholder="Your email address">
+                                </div>
+                                <button class="btn btn-primary w-100" onclick="trackCustomerOrder()">
+                                    <i class="bi bi-search me-1"></i>Track My Order
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-6">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="mb-3">
+                                    <i class="bi bi-info-circle text-info me-1"></i>
+                                    Order Status Guide
+                                </h6>
+                                <ul class="list-unstyled small">
+                                    <li class="mb-1">
+                                        <span class="badge bg-warning me-2">Pending</span>
+                                        Order received, being prepared
+                                    </li>
+                                    <li class="mb-1">
+                                        <span class="badge bg-info me-2">Processing</span>
+                                        Order being processed for delivery
+                                    </li>
+                                    <li class="mb-1">
+                                        <span class="badge bg-success me-2">Delivered</span>
+                                        Order delivered successfully
+                                    </li>
+                                    <li class="mb-1">
+                                        <span class="badge bg-secondary me-2">Returned</span>
+                                        Order was returned
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Orders Display -->
+                <div id="customerOrdersDisplay">
+                    <div class="text-center text-muted py-5">
+                        <i class="bi bi-box display-1 mb-3"></i>
+                        <p>Enter your order details above to track your orders</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- My Account Tab -->
+            <div class="tab-pane fade" id="account" role="tabpanel">
+                <div class="mb-4">
+                    <h4 class="mb-3">
+                        <i class="bi bi-person-gear text-warning me-2"></i>
+                        My Account & Profile
+                    </h4>
+                    <p class="text-muted">
+                        Manage your account information, delivery addresses, and preferences.
+                    </p>
+                </div>
+
+                <div class="row">
+                    <!-- Account Actions -->
+                    <div class="col-lg-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Account Services</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-outline-primary" onclick="sendQuickMessage('Update my profile information')">
+                                        <i class="bi bi-person-fill-gear me-2"></i>Update Profile Information
+                                    </button>
+                                    <button class="btn btn-outline-success" onclick="sendQuickMessage('Change my delivery address')">
+                                        <i class="bi bi-geo-alt-fill me-2"></i>Update Delivery Address
+                                    </button>
+                                    <button class="btn btn-outline-warning" onclick="sendQuickMessage('Check my account tier and benefits')">
+                                        <i class="bi bi-star-fill me-2"></i>View Account Tier & Benefits
+                                    </button>
+                                    <button class="btn btn-outline-info" onclick="sendQuickMessage('Update my payment methods')">
+                                        <i class="bi bi-credit-card-fill me-2"></i>Manage Payment Methods
                                     </button>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
 
-            <!-- Customer Profiles Tab -->
-            <div class="tab-pane fade" id="customers" role="tabpanel">
-                <h4 class="mb-4">
-                    <i class="bi bi-people-fill text-primary me-2"></i>
-                    Customer Management
-                </h4>
-
-                <!-- Search and Filters -->
-                <div class="row mb-4">
-                    <div class="col-lg-4">
-                        <div class="input-group">
-                            <span class="input-group-text"><i class="bi bi-search"></i></span>
-                            <input type="text" class="form-control" id="customerSearch"
-                                   placeholder="Search customers...">
+                    <!-- Account Benefits -->
+                    <div class="col-lg-6">
+                        <div class="card">
+                            <div class="card-header bg-success text-white">
+                                <h6 class="mb-0">Account Tiers & Benefits</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="tier-info">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="badge bg-secondary">Bronze</span>
+                                        <small>Standard benefits</small>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="badge bg-primary">Silver</span>
+                                        <small>5% discount + priority support</small>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="badge bg-warning">Gold</span>
+                                        <small>10% discount + free delivery</small>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="badge bg-info">Platinum</span>
+                                        <small>15% discount + premium perks</small>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <div class="col-lg-3">
-                        <select class="form-select" id="stateFilter">
-                            <option value="all">All States</option>
-                            {% for state in states %}
-                            <option value="{{ state }}">{{ state }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-lg-3">
-                        <select class="form-select" id="tierFilter">
-                            <option value="all">All Tiers</option>
-                            {% for tier in account_tiers %}
-                            <option value="{{ tier }}">{{ tier }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-lg-2">
-                        <button class="btn btn-primary w-100" onclick="loadCustomers()">
-                            <i class="bi bi-funnel-fill me-1"></i>Filter
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Customers Table -->
-                <div class="loading" id="customersLoading">
-                    <div class="spinner-border" role="status"></div>
-                    <div class="mt-2">Loading customers...</div>
-                </div>
-
-                <div class="table-responsive">
-                    <table class="table table-hover" id="customersTable">
-                        <thead>
-                            <tr>
-                                <th>Customer ID</th>
-                                <th>Name</th>
-                                <th>Email</th>
-                                <th>State</th>
-                                <th>LGA</th>
-                                <th>Account Tier</th>
-                                <th>Phone</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="customersTableBody">
-                            <!-- Customers will be loaded here dynamically -->
-                        </tbody>
-                    </table>
                 </div>
             </div>
 
-            <!-- Usage Analytics Tab -->
-            <div class="tab-pane fade" id="usage" role="tabpanel">
-                <h4 class="mb-4">
-                    <i class="bi bi-graph-up text-primary me-2"></i>
-                    API Usage & Performance Analytics
-                </h4>
+            <!-- Contact Support Tab -->
+            <div class="tab-pane fade" id="contact" role="tabpanel">
+                <div class="mb-4">
+                    <h4 class="mb-3">
+                        <i class="bi bi-telephone-fill text-danger me-2"></i>
+                        Contact raqibtech.com Support
+                    </h4>
+                    <p class="text-muted">
+                        Multiple ways to reach our support team across Nigeria.
+                    </p>
+                </div>
 
                 <div class="row">
-                    <!-- API Usage Charts -->
-                    <div class="col-lg-6">
-                        <div class="card">
-                            <div class="card-header">
-                                <h6 class="mb-0">Groq API Usage (Today)</h6>
-                            </div>
+                    <!-- Contact Methods -->
+                    <div class="col-lg-4 mb-3">
+                        <div class="card h-100 text-center">
                             <div class="card-body">
-                                <canvas id="groqUsageChart"></canvas>
+                                <i class="bi bi-telephone-fill text-success display-4 mb-3"></i>
+                                <h6>Phone Support</h6>
+                                <p class="text-muted small">Speak with our support team</p>
+                                <strong class="text-success">+234 800 RAQIB (72242)</strong>
+                                <p class="small mt-2">Daily 8AM - 8PM (WAT)</p>
                             </div>
                         </div>
                     </div>
 
-                    <div class="col-lg-6">
-                        <div class="card">
-                            <div class="card-header">
-                                <h6 class="mb-0">Response Time Analytics</h6>
-                            </div>
+                    <div class="col-lg-4 mb-3">
+                        <div class="card h-100 text-center">
                             <div class="card-body">
-                                <canvas id="responseTimeChart"></canvas>
+                                <i class="bi bi-envelope-fill text-primary display-4 mb-3"></i>
+                                <h6>Email Support</h6>
+                                <p class="text-muted small">Send us your questions</p>
+                                <strong class="text-primary">support@raqibtech.com</strong>
+                                <p class="small mt-2">Response within 24 hours</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-4 mb-3">
+                        <div class="card h-100 text-center">
+                            <div class="card-body">
+                                <i class="bi bi-chat-heart-fill text-danger display-4 mb-3"></i>
+                                <h6>Live AI Chat</h6>
+                                <p class="text-muted small">Instant help available</p>
+                                <strong class="text-danger">Available 24/7</strong>
+                                <p class="small mt-2">
+                                    <button class="btn btn-sm btn-outline-danger" onclick="document.getElementById('chat-tab').click()">
+                                        Start Chat Now
+                                    </button>
+                                </p>
                             </div>
                         </div>
                     </div>
                 </div>
 
+                <!-- Nigerian Coverage -->
                 <div class="row mt-4">
-                    <!-- Usage Statistics -->
-                    <div class="col-lg-8">
-                        <div class="card">
-                            <div class="card-header">
-                                <h6 class="mb-0">
-                                    <i class="bi bi-speedometer2 me-1"></i>
-                                    Real-time Usage Metrics
+                    <div class="col-12">
+                        <div class="card bg-success text-white">
+                            <div class="card-body">
+                                <h6 class="mb-3">
+                                    <i class="bi bi-geo-alt-fill me-2"></i>
+                                    🇳🇬 Nationwide Coverage in Nigeria
                                 </h6>
-                            </div>
-                            <div class="card-body">
-                                <div class="row">
-                                    <div class="col-md-3">
-                                        <div class="text-center border-end">
-                                            <h5 class="text-primary mb-1" id="requestsToday">0</h5>
-                                            <small class="text-muted">Requests Today</small>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <div class="text-center border-end">
-                                            <h5 class="text-success mb-1" id="tokensToday">0</h5>
-                                            <small class="text-muted">Tokens Used</small>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <div class="text-center border-end">
-                                            <h5 class="text-warning mb-1" id="averageResponse">0ms</h5>
-                                            <small class="text-muted">Avg Response</small>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <div class="text-center">
-                                            <h5 class="text-info mb-1" id="cacheHitRate">0%</h5>
-                                            <small class="text-muted">Cache Hit Rate</small>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Quota Information -->
-                    <div class="col-lg-4">
-                        <div class="card">
-                            <div class="card-header">
-                                <h6 class="mb-0">
-                                    <i class="bi bi-gauge me-1"></i>
-                                    API Quotas
-                                </h6>
-                            </div>
-                            <div class="card-body">
-                                <div class="mb-3">
-                                    <div class="d-flex justify-content-between">
-                                        <small>Groq Requests/Min</small>
-                                        <small><span id="groqRpm">0</span>/30</small>
-                                    </div>
-                                    <div class="progress">
-                                        <div class="progress-bar" id="groqRpmProgress" style="width: 0%"></div>
-                                    </div>
-                                </div>
-                                <div class="mb-3">
-                                    <div class="d-flex justify-content-between">
-                                        <small>Groq Tokens/Min</small>
-                                        <small><span id="groqTpm">0</span>/100K</small>
-                                    </div>
-                                    <div class="progress">
-                                        <div class="progress-bar bg-success" id="groqTpmProgress" style="width: 0%"></div>
-                                    </div>
-                                </div>
-                                <div class="alert alert-info py-2">
-                                    <small>
-                                        <i class="bi bi-info-circle me-1"></i>
-                                        Quotas reset every minute
-                                    </small>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Support Dashboard Tab -->
-            <div class="tab-pane fade" id="analytics" role="tabpanel">
-                <h4 class="mb-4">
-                    <i class="bi bi-bar-chart-fill text-primary me-2"></i>
-                    Business Intelligence Dashboard
-                </h4>
-
-                <div class="row">
-                    <!-- Customer Distribution Chart -->
-                    <div class="col-lg-6">
-                        <div class="card">
-                            <div class="card-header">
-                                <h6 class="mb-0">
-                                    <i class="bi bi-geo-alt-fill text-success me-1"></i>
-                                    Customer Distribution by State
-                                </h6>
-                            </div>
-                            <div class="card-body">
-                                <canvas id="customerDistributionChart"></canvas>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Revenue by State Chart -->
-                    <div class="col-lg-6">
-                        <div class="card">
-                            <div class="card-header">
-                                <h6 class="mb-0">
-                                    <i class="bi bi-currency-exchange text-warning me-1"></i>
-                                    Revenue by State (₦)
-                                </h6>
-                            </div>
-                            <div class="card-body">
-                                <canvas id="revenueChart"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="row mt-4">
-                    <!-- Order Status Distribution -->
-                    <div class="col-lg-4">
-                        <div class="card">
-                            <div class="card-header">
-                                <h6 class="mb-0">Order Status Distribution</h6>
-                            </div>
-                            <div class="card-body">
-                                <canvas id="orderStatusChart"></canvas>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Payment Methods -->
-                    <div class="col-lg-4">
-                        <div class="card">
-                            <div class="card-header">
-                                <h6 class="mb-0">Payment Methods</h6>
-                            </div>
-                            <div class="card-body">
-                                <canvas id="paymentMethodsChart"></canvas>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Key Metrics -->
-                    <div class="col-lg-4">
-                        <div class="card">
-                            <div class="card-header">
-                                <h6 class="mb-0">
-                                    <i class="bi bi-trophy-fill text-warning me-1"></i>
-                                    Key Performance Indicators
-                                </h6>
-                            </div>
-                            <div class="card-body">
-                                <div class="mb-3">
-                                    <div class="d-flex justify-content-between">
-                                        <span>Total Revenue</span>
-                                        <strong class="text-success" id="totalRevenue">₦0</strong>
-                                    </div>
-                                </div>
-                                <div class="mb-3">
-                                    <div class="d-flex justify-content-between">
-                                        <span>Avg Order Value</span>
-                                        <strong class="text-primary" id="avgOrderValue">₦0</strong>
-                                    </div>
-                                </div>
-                                <div class="mb-3">
-                                    <div class="d-flex justify-content-between">
-                                        <span>Top State</span>
-                                        <strong class="text-info" id="topState">Lagos</strong>
-                                    </div>
-                                </div>
-                                <div class="mb-3">
-                                    <div class="d-flex justify-content-between">
-                                        <span>Delivery Success</span>
-                                        <strong class="text-success" id="deliverySuccess">95%</strong>
-                                    </div>
-                                </div>
-                                <div class="mb-3">
-                                    <div class="d-flex justify-content-between">
-                                        <span>Customer Satisfaction</span>
-                                        <strong class="text-warning" id="customerSat">4.8/5</strong>
-                                    </div>
-                                </div>
+                                <p class="mb-0">
+                                    We deliver to all 36 Nigerian states + FCT with dedicated support for your region.
+                                    Payment options include Pay on Delivery, Bank Transfer, Card, and RaqibTechPay.
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -501,35 +442,33 @@
     </div>
 </div>
 
-<!-- Enhanced JavaScript for Integrated Customer Support Agent -->
+<!-- Customer Support JavaScript -->
 <script>
-// Integrated Nigerian E-commerce Customer Support Agent
-class IntegratedCustomerSupportAgent {
+// Customer-focused support system
+class CustomerSupportPortal {
     constructor() {
-        console.log('🇳🇬 Initializing Integrated Nigerian E-commerce Customer Support Agent...');
-        this.initializeEventListeners();
-        this.loadQuerySuggestions();
-        this.loadConversationHistory();
+        console.log('🛍️ Initializing raqibtech.com Customer Support Portal...');
+        this.initializeCustomerFeatures();
     }
 
-    initializeEventListeners() {
-        // Query category buttons
-        document.querySelectorAll('.query-category').forEach(btn => {
+    initializeCustomerFeatures() {
+        // Category help buttons
+        document.querySelectorAll('.category-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                this.showSuggestions(e.target.dataset.category);
+                this.showCategoryQuestions(e.target.dataset.category);
             });
         });
 
-        // History management
-        const loadHistoryBtn = document.getElementById('loadHistoryBtn');
-        if (loadHistoryBtn) {
-            loadHistoryBtn.addEventListener('click', () => {
-                this.loadConversationHistory();
-            });
-        }
+        // Focus chat input when page loads
+        setTimeout(() => {
+            const chatInput = document.getElementById('chatInput');
+            if (chatInput) {
+                chatInput.focus();
+            }
+        }, 1000);
     }
 
-    async sendChatMessage(message = null) {
+    async sendCustomerMessage(message = null) {
         const chatInput = document.getElementById('chatInput');
         if (!chatInput) return;
 
@@ -540,7 +479,7 @@ class IntegratedCustomerSupportAgent {
         if (!message) chatInput.value = '';
 
         // Add user message to chat
-        this.addMessageToChat(userMessage, 'user');
+        this.addMessageToChat(userMessage, 'customer');
 
         // Show typing indicator
         this.showTypingIndicator();
@@ -554,7 +493,7 @@ class IntegratedCustomerSupportAgent {
                 },
                 body: JSON.stringify({
                     query: userMessage,
-                    include_sql: true
+                    include_sql: document.getElementById('showTechnicalDetails')?.checked || false
                 })
             });
 
@@ -566,19 +505,15 @@ class IntegratedCustomerSupportAgent {
             this.removeTypingIndicator();
 
             if (data.success) {
-                this.addEnhancedResponseToChat(data);
-                // Refresh conversation history
-                setTimeout(() => {
-                    this.loadConversationHistory();
-                }, 1000);
+                this.addCustomerResponseToChat(data);
             } else {
-                this.addMessageToChat(data.message || 'Query failed', 'ai', true);
+                this.addMessageToChat(data.message || 'Sorry, I encountered an issue. Please try again.', 'ai', true);
             }
 
         } catch (error) {
             this.removeTypingIndicator();
-            console.error('❌ Chat error:', error);
-            this.addMessageToChat('I apologize, but I encountered a technical issue. Please try again.', 'ai', true);
+            console.error('❌ Customer chat error:', error);
+            this.addMessageToChat('I apologize, but I\'m experiencing technical difficulties. Please try again or contact our phone support at +234 800 RAQIB.', 'ai', true);
         }
     }
 
@@ -587,97 +522,59 @@ class IntegratedCustomerSupportAgent {
         if (!chatMessages) return;
 
         const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${sender}`;
+        messageDiv.className = `message ${sender === 'customer' ? 'customer' : 'ai'}`;
 
         if (isError) {
             messageDiv.classList.add('error');
         }
 
         const timestamp = new Date().toLocaleTimeString();
-        const senderName = sender === 'user' ? 'You' : '🤖 AI Support Agent';
+        const senderName = sender === 'customer' ? 'You' : 'raqibtech.com Assistant';
 
         messageDiv.innerHTML = `
-            <div class="d-flex justify-content-between">
+            <div class="message-header d-flex justify-content-between align-items-center mb-1">
                 <strong>${senderName}</strong>
                 <small class="text-muted">${timestamp}</small>
             </div>
-            <div class="mt-1">${message}</div>
+            <div class="message-content">${message}</div>
         `;
 
         chatMessages.appendChild(messageDiv);
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
-    addEnhancedResponseToChat(data) {
+    addCustomerResponseToChat(data) {
         const chatMessages = document.getElementById('chatMessages');
         if (!chatMessages) return;
 
         const messageDiv = document.createElement('div');
-        messageDiv.className = 'message ai enhanced';
+        messageDiv.className = 'message ai customer-response';
 
         const timestamp = new Date().toLocaleTimeString();
-        const showSql = document.getElementById('showSqlQueries')?.checked || false;
 
-        // Create message content
         let messageContent = `
-            <div class="d-flex justify-content-between align-items-center">
-                <strong>🤖 Nigerian E-commerce AI Agent</strong>
-                <div>
-                    <span class="badge bg-info me-1">${data.query_type || 'Analysis'}</span>
-                    <small class="text-muted">${timestamp}</small>
+            <div class="message-header d-flex justify-content-between align-items-center mb-2">
+                <div class="d-flex align-items-center">
+                    <div class="ai-avatar me-2">
+                        <i class="bi bi-robot"></i>
+                    </div>
+                    <strong>raqibtech.com Assistant</strong>
                 </div>
+                <small class="text-muted">${timestamp}</small>
             </div>
-            <div class="mt-2">${data.response}</div>
+            <div class="message-content mb-2">${data.response}</div>
         `;
 
-        // Add execution metrics
-        if (data.results_count !== undefined || data.execution_time) {
-            messageContent += `
-                <div class="mt-2">
-                    <small class="text-muted">
-                        <i class="bi bi-info-circle me-1"></i>
-                        Found ${data.results_count || 0} records • Processed in ${data.execution_time || 'N/A'}
-                    </small>
-                </div>
-            `;
-        }
-
-        // Add SQL query section if enabled
-        if (showSql && data.sql_query) {
-            messageContent += `
-                <div class="mt-3">
-                    <button class="btn btn-sm btn-outline-secondary" type="button"
-                            data-bs-toggle="collapse" data-bs-target="#sqlQuery_${Date.now()}"
-                            aria-expanded="false">
-                        <i class="bi bi-database me-1"></i>View SQL Query
-                    </button>
-                    <div class="collapse mt-2" id="sqlQuery_${Date.now()}">
-                        <div class="card bg-dark text-light">
-                            <div class="card-header d-flex justify-content-between">
-                                <small>Generated SQL Query</small>
-                                <button class="btn btn-sm btn-outline-light" onclick="copyToClipboard('${data.sql_query.replace(/'/g, "\\'")}')">
-                                    <i class="bi bi-clipboard"></i>
-                                </button>
-                            </div>
-                            <div class="card-body">
-                                <pre class="mb-0"><code>${this.formatSqlQuery(data.sql_query)}</code></pre>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        // Add quick actions if available
+        // Add helpful follow-up actions for customers
         if (data.query_type) {
-            const quickActions = this.getQuickActionsForQueryType(data.query_type);
-            if (quickActions.length > 0) {
+            const followUpActions = this.getCustomerFollowUpActions(data.query_type);
+            if (followUpActions.length > 0) {
                 messageContent += `
-                    <div class="mt-2">
-                        <small class="text-muted d-block mb-1">Quick follow-up actions:</small>
+                    <div class="follow-up-actions mt-2">
+                        <small class="text-muted d-block mb-1">What else can I help you with?</small>
                         <div class="quick-actions">
-                            ${quickActions.map(action =>
-                                `<button class="quick-action-btn" onclick="sendQuickMessage('${action}')">${action}</button>`
+                            ${followUpActions.map(action =>
+                                `<button class="quick-action-btn customer" onclick="customerPortal.sendCustomerMessage('${action}')">${action}</button>`
                             ).join('')}
                         </div>
                     </div>
@@ -685,49 +582,98 @@ class IntegratedCustomerSupportAgent {
             }
         }
 
+        // Show technical details if requested
+        if (document.getElementById('showTechnicalDetails')?.checked && data.sql_query) {
+            messageContent += `
+                <details class="mt-2">
+                    <summary class="small text-muted">Technical Details</summary>
+                    <div class="technical-info small mt-1 p-2 bg-light rounded">
+                        <strong>Query Type:</strong> ${data.query_type || 'N/A'}<br>
+                        <strong>Results:</strong> ${data.results_count || 0} records<br>
+                        <strong>Processing Time:</strong> ${data.execution_time || 'N/A'}
+                    </div>
+                </details>
+            `;
+        }
+
         messageDiv.innerHTML = messageContent;
         chatMessages.appendChild(messageDiv);
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
-    formatSqlQuery(sql) {
-        // Basic SQL formatting for better readability
-        return sql
-            .replace(/SELECT/gi, '\nSELECT')
-            .replace(/FROM/gi, '\nFROM')
-            .replace(/WHERE/gi, '\nWHERE')
-            .replace(/GROUP BY/gi, '\nGROUP BY')
-            .replace(/ORDER BY/gi, '\nORDER BY')
-            .replace(/LIMIT/gi, '\nLIMIT')
-            .trim();
-    }
-
-    getQuickActionsForQueryType(queryType) {
+    getCustomerFollowUpActions(queryType) {
         const actions = {
-            'customer_analysis': [
-                'Update my account information',
-                'Check my account tier status'
-            ],
             'order_analytics': [
-                'Track my recent orders',
-                'Check my order history'
+                'Update my delivery address',
+                'Check payment status',
+                'Cancel an order'
+            ],
+            'customer_analysis': [
+                'Update my profile',
+                'Change password',
+                'View account benefits'
             ],
             'revenue_insights': [
-                'Show my spending summary',
-                'Check my payment methods'
-            ],
-            'geographic_analysis': [
-                'Update my delivery address',
-                'Check delivery options in my area'
+                'Check my spending',
+                'View payment history',
+                'Update payment method'
             ]
         };
 
         return actions[queryType] || [
-            'Help me track an order',
-            'Update my account details',
-            'Check payment status',
-            'Contact customer service'
+            'Track another order',
+            'Update my account',
+            'Contact phone support'
         ];
+    }
+
+    showCategoryQuestions(category) {
+        const questions = {
+            'order_tracking': [
+                'Track my order #12345',
+                'Where is my delivery?',
+                'Change delivery address',
+                'Cancel my order'
+            ],
+            'payments': [
+                'Payment issue with my order',
+                'Update my payment method',
+                'Refund request',
+                'Payment options available'
+            ],
+            'account': [
+                'Update my profile information',
+                'Change my password',
+                'Check my account tier',
+                'Update delivery address'
+            ],
+            'shopping': [
+                'Product recommendations',
+                'Return policy',
+                'Delivery charges',
+                'Product availability'
+            ]
+        };
+
+        const container = document.getElementById('questionsContainer');
+        const questionsDiv = document.getElementById('suggestedQuestions');
+
+        if (container && questionsDiv) {
+            container.innerHTML = '';
+
+            questions[category].forEach(question => {
+                const btn = document.createElement('button');
+                btn.className = 'btn btn-sm btn-outline-secondary me-1 mb-1';
+                btn.textContent = question;
+                btn.onclick = () => {
+                    this.sendCustomerMessage(question);
+                    questionsDiv.style.display = 'none';
+                };
+                container.appendChild(btn);
+            });
+
+            questionsDiv.style.display = 'block';
+        }
     }
 
     showTypingIndicator() {
@@ -738,8 +684,13 @@ class IntegratedCustomerSupportAgent {
         typingDiv.className = 'message ai typing';
         typingDiv.id = 'typingIndicator';
         typingDiv.innerHTML = `
-            <strong>🤖 AI Support Agent</strong><br>
-            <div class="typing-dots">
+            <div class="message-header d-flex align-items-center mb-1">
+                <div class="ai-avatar me-2">
+                    <i class="bi bi-robot"></i>
+                </div>
+                <strong>raqibtech.com Assistant</strong>
+            </div>
+            <div class="typing-animation">
                 <span></span><span></span><span></span>
             </div>
         `;
@@ -755,198 +706,42 @@ class IntegratedCustomerSupportAgent {
         }
     }
 
-    async showSuggestions(category) {
-        try {
-            const response = await fetch(`/api/query-suggestions?category=${category}`);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
+    async trackCustomerOrder() {
+        const orderIdInput = document.getElementById('orderIdInput');
+        const emailInput = document.getElementById('emailInput');
 
-            const data = await response.json();
+        const orderId = orderIdInput?.value.trim();
 
-            if (data.success) {
-                const container = document.getElementById('suggestionsContainer');
-                if (container) {
-                    container.innerHTML = '';
-
-                    data.suggestions.forEach(suggestion => {
-                        const btn = document.createElement('button');
-                        btn.className = 'btn btn-sm btn-outline-secondary me-1 mb-1';
-                        btn.textContent = suggestion;
-                        btn.onclick = () => {
-                            this.sendChatMessage(suggestion);
-                            this.hideSuggestions();
-                        };
-                        container.appendChild(btn);
-                    });
-
-                    const suggestionsEl = document.getElementById('querySuggestions');
-                    if (suggestionsEl) {
-                        suggestionsEl.style.display = 'block';
-                    }
-                }
-            }
-        } catch (error) {
-            console.error('❌ Suggestions error:', error);
+        if (!orderId) {
+            alert('Please enter your order ID');
+            return;
         }
-    }
 
-    hideSuggestions() {
-        const suggestionsEl = document.getElementById('querySuggestions');
-        if (suggestionsEl) {
-            suggestionsEl.style.display = 'none';
-        }
-    }
+        // Use the chat system to track the order
+        const query = `Track my order ${orderId}`;
+        this.sendCustomerMessage(query);
 
-    async loadConversationHistory() {
-        try {
-            const response = await fetch('/api/conversation-history?limit=5');
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.json();
-
-            if (data.success && data.history.length > 0) {
-                this.displayConversationHistory(data.history);
-            } else {
-                this.displayEmptyHistory();
-            }
-        } catch (error) {
-            console.error('❌ History loading error:', error);
-            this.displayEmptyHistory();
-        }
-    }
-
-    displayConversationHistory(history) {
-        const container = document.getElementById('conversationHistory');
-        if (!container) return;
-
-        container.innerHTML = '<small class="text-muted"><strong>Recent Queries:</strong></small>';
-
-        history.forEach((entry) => {
-            const historyItem = document.createElement('div');
-            historyItem.className = 'border-bottom pb-1 mb-1';
-
-            const timestamp = new Date(entry.timestamp).toLocaleTimeString();
-
-            historyItem.innerHTML = `
-                <div class="d-flex justify-content-between">
-                    <small class="text-primary">${entry.query_type || 'Query'}</small>
-                    <small class="text-muted">${timestamp}</small>
-                </div>
-                <div class="small">${entry.user_query.substring(0, 50)}...</div>
-                <button class="btn btn-xs btn-outline-primary mt-1" onclick="supportAgent.sendChatMessage('${entry.user_query.replace(/'/g, "\\'")}')">
-                    <i class="bi bi-arrow-clockwise me-1"></i>Replay
-                </button>
-            `;
-
-            container.appendChild(historyItem);
-        });
-    }
-
-    displayEmptyHistory() {
-        const container = document.getElementById('conversationHistory');
-        if (container) {
-            container.innerHTML = `
-                <small class="text-muted"><strong>Recent Queries:</strong></small>
-                <div class="text-center text-muted mt-2">
-                    <i class="bi bi-chat-text fa-2x mb-2"></i>
-                    <p>No queries yet.<br>Start asking questions!</p>
-                </div>
-            `;
-        }
-    }
-
-    copyToClipboard(text) {
-        navigator.clipboard.writeText(text).then(() => {
-            // Show temporary success message
-            const toast = document.createElement('div');
-            toast.className = 'alert alert-success position-fixed';
-            toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; opacity: 0.9;';
-            toast.innerHTML = '<i class="bi bi-check-circle me-1"></i>SQL query copied to clipboard!';
-            document.body.appendChild(toast);
-
-            setTimeout(() => {
-                document.body.removeChild(toast);
-            }, 3000);
-        }).catch(err => {
-            console.error('Failed to copy text: ', err);
-            alert('Failed to copy to clipboard. Please copy manually.');
-        });
-    }
-
-    loadQuerySuggestions() {
-        console.log('✅ Integrated Nigerian E-commerce Customer Support Agent initialized');
+        // Switch to chat tab to show results
+        document.getElementById('chat-tab').click();
     }
 }
 
 // Global functions for compatibility
 function sendChatMessage() {
-    console.log('📤 sendChatMessage called');
-    if (window.supportAgent) {
-        window.supportAgent.sendChatMessage();
-    } else {
-        console.error('❌ supportAgent not initialized yet');
-        // Try to initialize if not ready
-        if (typeof IntegratedCustomerSupportAgent !== 'undefined') {
-            window.supportAgent = new IntegratedCustomerSupportAgent();
-            window.supportAgent.sendChatMessage();
-        }
+    if (window.customerPortal) {
+        window.customerPortal.sendCustomerMessage();
     }
 }
 
 function sendQuickMessage(message) {
-    console.log('🚀 sendQuickMessage called with:', message);
+    if (window.customerPortal) {
+        window.customerPortal.sendCustomerMessage(message);
+    }
+}
 
-    // Add visual feedback - find and highlight the clicked button
-    const buttons = document.querySelectorAll('.quick-action-btn');
-    buttons.forEach(btn => {
-        if (btn.onclick?.toString().includes(message)) {
-            btn.style.transform = 'scale(0.95)';
-            btn.style.opacity = '0.7';
-            btn.style.backgroundColor = '#007bff';
-            btn.style.color = 'white';
-            setTimeout(() => {
-                btn.style.transform = '';
-                btn.style.opacity = '';
-                btn.style.backgroundColor = '';
-                btn.style.color = '';
-            }, 300);
-        }
-    });
-
-    if (window.supportAgent) {
-        window.supportAgent.sendChatMessage(message);
-    } else {
-        console.error('❌ supportAgent not initialized for quick message');
-
-        // Show user-friendly message
-        const chatMessages = document.getElementById('chatMessages');
-        if (chatMessages) {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'message ai';
-            messageDiv.innerHTML = `
-                <strong>🤖 AI Support Agent</strong><br>
-                <div class="mt-1">I'm still initializing... Please wait a moment and try again, or type your message in the input box below.</div>
-            `;
-            chatMessages.appendChild(messageDiv);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
-
-        // Try to initialize if not ready
-        if (typeof IntegratedCustomerSupportAgent !== 'undefined') {
-            console.log('🔄 Initializing supportAgent...');
-            window.supportAgent = new IntegratedCustomerSupportAgent();
-            // Wait a moment then send the message
-            setTimeout(() => {
-                if (window.supportAgent) {
-                    window.supportAgent.sendChatMessage(message);
-                }
-            }, 100);
-        } else {
-            console.error('❌ IntegratedCustomerSupportAgent class not available');
-        }
+function trackCustomerOrder() {
+    if (window.customerPortal) {
+        window.customerPortal.trackCustomerOrder();
     }
 }
 
@@ -956,428 +751,11 @@ function handleChatKeyPress(event) {
     }
 }
 
-function copyToClipboard(text) {
-    navigator.clipboard.writeText(text).then(() => {
-        // Show temporary success message
-        const toast = document.createElement('div');
-        toast.className = 'alert alert-success position-fixed';
-        toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; opacity: 0.9;';
-        toast.innerHTML = '<i class="bi bi-check-circle me-1"></i>SQL query copied to clipboard!';
-        document.body.appendChild(toast);
-
-        setTimeout(() => {
-            document.body.removeChild(toast);
-        }, 3000);
-    }).catch(err => {
-        console.error('Failed to copy text: ', err);
-        alert('Failed to copy to clipboard. Please copy manually.');
-    });
-}
-
-// Initialize when DOM is ready
+// Initialize customer portal when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 DOM Content Loaded - Initializing Customer Support Agent');
-
-    // Function to initialize the support agent
-    function initializeSupportAgent() {
-        try {
-            if (typeof IntegratedCustomerSupportAgent !== 'undefined') {
-                window.supportAgent = new IntegratedCustomerSupportAgent();
-                console.log('✅ Integrated customer support system initialized successfully');
-                return true;
-            } else {
-                console.warn('⚠️ IntegratedCustomerSupportAgent class not yet available');
-                return false;
-            }
-        } catch (error) {
-            console.error('❌ Error initializing support system:', error);
-            return false;
-        }
-    }
-
-    // Try immediate initialization
-    if (!initializeSupportAgent()) {
-        // If failed, try again after a short delay
-        setTimeout(() => {
-            if (!initializeSupportAgent()) {
-                // If still failed, try one more time with longer delay
-                setTimeout(() => {
-                    initializeSupportAgent();
-                }, 1000);
-            }
-        }, 500);
-    }
-
-    // Also try when the page is fully loaded
-    window.addEventListener('load', function() {
-        if (!window.supportAgent) {
-            console.log('🔄 Page fully loaded, trying to initialize support agent again...');
-            initializeSupportAgent();
-        }
-    });
+    console.log('🚀 Initializing raqibtech.com Customer Support Portal');
+    window.customerPortal = new CustomerSupportPortal();
+    console.log('✅ Customer support portal ready!');
 });
-
-// Enhanced CSS Styles for the integrated interface
-const enhancedStyles = `
-<style>
-/* Chat Messages Styling */
-.chat-container {
-    background: #f8f9fa;
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-}
-
-.chat-messages {
-    max-height: 500px;
-    overflow-y: auto;
-    padding: 20px;
-    background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%);
-}
-
-.message {
-    margin-bottom: 15px;
-    padding: 15px;
-    border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-}
-
-.message.user {
-    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
-    color: white;
-    margin-left: 50px;
-    border-bottom-right-radius: 4px;
-}
-
-.message.ai {
-    background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
-    color: white;
-    margin-right: 50px;
-    border-bottom-left-radius: 4px;
-}
-
-.message.enhanced {
-    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
-    color: white;
-    margin-right: 30px;
-    border-left: 5px solid #ffc107;
-    box-shadow: 0 4px 15px rgba(23, 162, 184, 0.3);
-}
-
-.message.error {
-    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
-    color: white;
-    border-left: 5px solid #ffc107;
-}
-
-.message.typing {
-    background: linear-gradient(135deg, #6c757d 0%, #545b62 100%);
-    color: white;
-    margin-right: 50px;
-}
-
-/* SQL Query Card Styling */
-.card.bg-dark {
-    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%) !important;
-    border: 2px solid #3498db;
-    box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
-}
-
-.card.bg-dark .card-header {
-    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%) !important;
-    color: white !important;
-    border-bottom: 1px solid #5dade2;
-}
-
-.card.bg-dark .card-body {
-    background: #2c3e50 !important;
-}
-
-.card.bg-dark pre {
-    background: #1a252f !important;
-    color: #00ff88 !important;
-    padding: 15px;
-    border-radius: 8px;
-    border: 1px solid #3498db;
-    font-family: 'Courier New', monospace;
-    font-size: 14px;
-    line-height: 1.5;
-    overflow-x: auto;
-}
-
-.card.bg-dark code {
-    color: #00ff88 !important;
-    text-shadow: 0 0 5px rgba(0, 255, 136, 0.3);
-}
-
-/* Button Styling */
-.btn-outline-light {
-    border-color: #ffc107 !important;
-    color: #ffc107 !important;
-}
-
-.btn-outline-light:hover {
-    background-color: #ffc107 !important;
-    color: #000 !important;
-}
-
-/* Badge Styling */
-.badge.bg-info {
-    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%) !important;
-    color: white !important;
-    border: 1px solid rgba(255,255,255,0.3);
-}
-
-/* Typing Animation */
-.typing-dots {
-    display: inline-flex;
-    gap: 5px;
-    align-items: center;
-}
-
-.typing-dots span {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background-color: #ffc107;
-    animation: typing 1.4s infinite ease-in-out both;
-    box-shadow: 0 0 5px rgba(255, 193, 7, 0.5);
-}
-
-.typing-dots span:nth-child(1) { animation-delay: -0.32s; }
-.typing-dots span:nth-child(2) { animation-delay: -0.16s; }
-
-@keyframes typing {
-    0%, 80%, 100% {
-        transform: scale(0.8);
-        opacity: 0.5;
-    }
-    40% {
-        transform: scale(1.2);
-        opacity: 1;
-    }
-}
-
-/* Quick Actions Styling */
-.quick-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 12px;
-}
-
-.quick-action-btn {
-    padding: 6px 12px;
-    background: linear-gradient(135deg, #ffffff 0%, #e3f2fd 100%);
-    border: 2px solid #2196f3;
-    border-radius: 20px;
-    font-size: 0.8rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    color: #1976d2;
-    box-shadow: 0 2px 5px rgba(33, 150, 243, 0.2);
-}
-
-.quick-action-btn:hover {
-    background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
-    color: white;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 10px rgba(33, 150, 243, 0.4);
-}
-
-/* Query Category Buttons */
-.query-category {
-    transition: all 0.3s ease;
-    border-width: 2px;
-    font-weight: 500;
-}
-
-.query-category:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 6px 15px rgba(0,0,0,0.15);
-}
-
-.btn-outline-primary:hover {
-    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
-    border-color: #007bff;
-}
-
-.btn-outline-success:hover {
-    background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
-    border-color: #28a745;
-}
-
-.btn-outline-warning:hover {
-    background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%);
-    border-color: #ffc107;
-    color: #000;
-}
-
-.btn-outline-info:hover {
-    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
-    border-color: #17a2b8;
-}
-
-/* Card Styling */
-.card.border-primary {
-    border-color: #007bff !important;
-    border-width: 2px;
-    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15);
-}
-
-.card.border-info {
-    border-color: #17a2b8 !important;
-    border-width: 2px;
-    box-shadow: 0 4px 12px rgba(23, 162, 184, 0.15);
-}
-
-.bg-gradient-primary {
-    background: linear-gradient(135deg, #007bff 0%, #6610f2 100%) !important;
-}
-
-.bg-gradient-info {
-    background: linear-gradient(135deg, #17a2b8 0%, #6f42c1 100%) !important;
-}
-
-/* Input Styling */
-.chat-input-area {
-    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-    border-top: 2px solid #dee2e6;
-}
-
-.form-control:focus {
-    border-color: #007bff;
-    box-shadow: 0 0 10px rgba(0, 123, 255, 0.25);
-}
-
-/* System Status Badges */
-.badge.bg-success {
-    background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%) !important;
-    color: white !important;
-    box-shadow: 0 2px 5px rgba(40, 167, 69, 0.3);
-}
-
-/* Conversation History */
-.border-bottom {
-    border-bottom: 2px solid #e9ecef !important;
-    margin-bottom: 8px !important;
-    padding-bottom: 8px !important;
-}
-
-.text-primary {
-    color: #007bff !important;
-    font-weight: 600;
-}
-
-/* Button Extra Small */
-.btn-xs {
-    padding: 0.2rem 0.5rem;
-    font-size: 0.75rem;
-    border-radius: 15px;
-    font-weight: 500;
-}
-
-/* Scrollbar Styling */
-.chat-messages::-webkit-scrollbar,
-#conversationHistory::-webkit-scrollbar {
-    width: 8px;
-}
-
-.chat-messages::-webkit-scrollbar-track,
-#conversationHistory::-webkit-scrollbar-track {
-    background: linear-gradient(135deg, #f1f1f1 0%, #e9ecef 100%);
-    border-radius: 10px;
-}
-
-.chat-messages::-webkit-scrollbar-thumb,
-#conversationHistory::-webkit-scrollbar-thumb {
-    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
-    border-radius: 10px;
-    border: 2px solid #f1f1f1;
-}
-
-.chat-messages::-webkit-scrollbar-thumb:hover,
-#conversationHistory::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
-}
-
-/* Toast Notification */
-.alert.alert-success.position-fixed {
-    background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%) !important;
-    color: white !important;
-    border: none !important;
-    border-radius: 10px !important;
-    box-shadow: 0 4px 15px rgba(40, 167, 69, 0.4) !important;
-    font-weight: 500;
-}
-
-/* Stats Cards */
-.stats-card {
-    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-    border-radius: 12px;
-    padding: 20px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-    border-left: 5px solid #007bff;
-    transition: all 0.3s ease;
-}
-
-.stats-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-}
-
-.stats-card.bg-success {
-    border-left-color: #28a745;
-}
-
-.stats-card.bg-warning {
-    border-left-color: #ffc107;
-}
-
-.stats-card.bg-info {
-    border-left-color: #17a2b8;
-}
-
-/* Responsive Design */
-@media (max-width: 768px) {
-    .message.user {
-        margin-left: 20px;
-    }
-
-    .message.ai,
-    .message.enhanced {
-        margin-right: 20px;
-    }
-
-    .quick-actions {
-        flex-direction: column;
-    }
-
-    .quick-action-btn {
-        width: 100%;
-        margin-bottom: 5px;
-    }
-}
-
-/* Nigerian Flag Colors Accent */
-.nigeria-accent {
-    border-left: 5px solid #008751;
-    border-right: 2px solid #ffffff;
-    border-bottom: 2px solid #008751;
-}
-
-/* Enhanced Collapse Animation */
-.collapse {
-    transition: all 0.4s ease;
-}
-
-.collapsing {
-    transition: height 0.4s ease;
-}
-</style>
-`;
-
-// Add styles to head
-document.head.insertAdjacentHTML('beforeend', enhancedStyles);
 </script>
 {% endblock %}
