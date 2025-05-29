@@ -29,7 +29,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def clean_database():
-    """Clean existing data while preserving schema"""
+    """Clean existing data while preserving schema and products"""
     logger.info("🧹 Cleaning existing database data...")
 
     try:
@@ -38,6 +38,7 @@ def clean_database():
 
         with conn.cursor() as cursor:
             # Clear data in proper order (respecting foreign keys)
+            # NOTE: We preserve the products table data
             cursor.execute("TRUNCATE TABLE analytics CASCADE")
             cursor.execute("TRUNCATE TABLE orders CASCADE")
             cursor.execute("TRUNCATE TABLE customers CASCADE")
@@ -47,7 +48,7 @@ def clean_database():
             cursor.execute("ALTER SEQUENCE orders_order_id_seq RESTART WITH 1")
             cursor.execute("ALTER SEQUENCE analytics_analytics_id_seq RESTART WITH 1")
 
-            logger.info("✅ Database cleaned successfully")
+            logger.info("✅ Database cleaned successfully (products preserved)")
 
         conn.close()
         return True
@@ -268,6 +269,9 @@ def generate_realistic_orders_with_timestamps(customer):
 
     payment_methods = ['Pay on Delivery', 'Bank Transfer', 'Card', 'RaqibTechPay']
 
+    # Load products for smart assignment
+    products_by_category = get_products_by_category()
+
     # Generate order timestamps with realistic distribution
     order_dates = []
     current_date = datetime.now()
@@ -356,6 +360,10 @@ def generate_realistic_orders_with_timestamps(customer):
 
         remaining_budget -= amount
 
+        # Select category and smart product assignment
+        category = random.choice(preferred_categories)
+        product_id = select_smart_product(category, amount, products_by_category)
+
         # Select payment method
         payment_method = random.choices(payment_methods, weights=payment_weights)[0]
 
@@ -365,12 +373,65 @@ def generate_realistic_orders_with_timestamps(customer):
             'payment_method': payment_method,
             'total_amount': round(amount, 2),
             'delivery_date': delivery_date,
-            'product_category': random.choice(preferred_categories),
+            'product_category': category,
+            'product_id': product_id,
             'created_at': order_date
         }
         orders.append(order)
 
     return orders
+
+def get_products_by_category():
+    """Load products grouped by category for smart assignment"""
+    try:
+        conn = psycopg2.connect(**DATABASE_CONFIG)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT product_id, category, price
+            FROM products
+            ORDER BY category, product_id
+        """)
+
+        products_by_category = {}
+        for product_id, category, price in cursor.fetchall():
+            if category not in products_by_category:
+                products_by_category[category] = []
+            products_by_category[category].append({
+                'id': product_id,
+                'price': float(price)
+            })
+
+        conn.close()
+        return products_by_category
+
+    except Exception as e:
+        logger.warning(f"⚠️ Could not load products: {e}. Using fallback.")
+        return {}
+
+def select_smart_product(category, order_amount, products_by_category):
+    """Select product based on category and price matching"""
+    if category not in products_by_category or not products_by_category[category]:
+        return None
+
+    available_products = products_by_category[category]
+
+    # Filter products by price range (50% below to 200% above order amount)
+    min_price = order_amount * 0.5
+    max_price = order_amount * 2.0
+
+    suitable_products = [
+        p for p in available_products
+        if min_price <= p['price'] <= max_price
+    ]
+
+    # If no suitable products by price, use all products in category
+    if not suitable_products:
+        suitable_products = available_products
+
+    # Select random product from suitable ones
+    selected_product = random.choice(suitable_products)
+    return selected_product['id']
 
 def generate_analytics_data():
     """Generate realistic analytics data"""
@@ -470,8 +531,8 @@ def insert_clean_authentic_data(customers_df, orders_df, analytics_data):
 
                 try:
                     cursor.execute("""
-                        INSERT INTO orders (customer_id, order_status, payment_method, total_amount, delivery_date, product_category, created_at)
-                        VALUES (%s, %s::order_status_enum, %s::payment_method_enum, %s, %s, %s, %s)
+                        INSERT INTO orders (customer_id, order_status, payment_method, total_amount, delivery_date, product_category, product_id, created_at)
+                        VALUES (%s, %s::order_status_enum, %s::payment_method_enum, %s, %s, %s, %s, %s)
                     """, (
                         customer_id,
                         order['order_status'],
@@ -479,6 +540,7 @@ def insert_clean_authentic_data(customers_df, orders_df, analytics_data):
                         order['total_amount'],
                         order['delivery_date'],
                         order['product_category'],
+                        order['product_id'],
                         order['created_at']
                     ))
 

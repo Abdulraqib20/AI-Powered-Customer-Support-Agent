@@ -79,6 +79,18 @@ NIGERIAN_PAYMENT_METHODS = [
     'Pay on Delivery', 'Bank Transfer', 'Card', 'RaqibTechPay'
 ]
 
+# 🆕 PRODUCT CATEGORIES for Nigerian E-commerce
+NIGERIAN_PRODUCT_CATEGORIES = [
+    'Electronics', 'Fashion', 'Beauty', 'Computing', 'Automotive', 'Books'
+]
+
+# 🆕 POPULAR BRANDS in Nigerian Market
+NIGERIAN_POPULAR_BRANDS = [
+    'Samsung', 'Apple', 'Tecno', 'Infinix', 'LG', 'Sony', 'Haier Thermocool', 'Scanfrost',
+    'Nike', 'Adidas', 'Zara', 'MAC Cosmetics', 'Maybelline', 'L\'Oreal', 'HP', 'Dell',
+    'Canon', 'Logitech', 'Mobil 1', 'Exide', 'Dunlop', 'Bosch', 'Philips'
+]
+
 class QueryType(Enum):
     """Query classification types"""
     CUSTOMER_ANALYSIS = "customer_analysis"
@@ -213,7 +225,11 @@ class EnhancedDatabaseQuerying:
             'amount_range': None,
             'product_categories': [],
             'order_id': None,
-            'customer_id': None  # Added customer_id for context inheritance
+            'customer_id': None,  # Added customer_id for context inheritance
+            'brands': [],
+            'product_keywords': [],
+            'price_query': False,
+            'inventory_query': False
         }
 
         # Extract Nigerian states
@@ -225,6 +241,32 @@ class EnhancedDatabaseQuerying:
         for payment in NIGERIAN_PAYMENT_METHODS:
             if payment.lower() in query_lower:
                 entities['payment_methods'].append(payment)
+
+        # 🆕 Extract product categories
+        for category in NIGERIAN_PRODUCT_CATEGORIES:
+            if category.lower() in query_lower:
+                entities['product_categories'].append(category)
+
+        # 🆕 Extract brands
+        for brand in NIGERIAN_POPULAR_BRANDS:
+            if brand.lower() in query_lower:
+                entities['brands'] = entities.get('brands', [])
+                entities['brands'].append(brand)
+
+        # 🆕 Extract product-related terms
+        product_keywords = ['product', 'item', 'goods', 'phone', 'laptop', 'dress', 'shoe', 'book', 'car', 'electronics']
+        for keyword in product_keywords:
+            if keyword in query_lower:
+                entities['product_keywords'] = entities.get('product_keywords', [])
+                entities.get('product_keywords').append(keyword)
+
+        # 🆕 Extract price-related terms
+        if any(term in query_lower for term in ['price', 'cost', 'naira', '₦', 'cheap', 'expensive', 'budget']):
+            entities['price_query'] = True
+
+        # 🆕 Extract stock/inventory terms
+        if any(term in query_lower for term in ['stock', 'available', 'inventory', 'out of stock', 'in stock']):
+            entities['inventory_query'] = True
 
         # Extract time periods
         time_indicators = {
@@ -293,11 +335,38 @@ class EnhancedDatabaseQuerying:
         elif any(keyword in query_lower for keyword in ['revenue', 'sales', 'money', 'naira', '₦', 'income']):
             return QueryType.REVENUE_INSIGHTS, entities
 
-        elif any(keyword in query_lower for keyword in ['product', 'category', 'item', 'goods']):
-            return QueryType.PRODUCT_PERFORMANCE, entities
+        elif any(keyword in query_lower for keyword in ['product', 'category', 'item', 'goods']) or entities.get('product_categories') or entities.get('brands') or entities.get('product_keywords'):
+            # 🆕 Enhanced product query detection
+            if entities.get('price_query'):
+                return QueryType.PRODUCT_PERFORMANCE, entities  # Price-related product queries
+            elif entities.get('inventory_query'):
+                return QueryType.PRODUCT_PERFORMANCE, entities  # Stock/inventory queries
+            else:
+                return QueryType.PRODUCT_PERFORMANCE, entities  # General product queries
 
         elif any(keyword in query_lower for keyword in ['time', 'date', 'period', 'trend', 'monthly', 'weekly']):
             return QueryType.TEMPORAL_ANALYSIS, entities
+
+        # 🆕 Additional product-specific classifications
+        elif any(keyword in query_lower for keyword in ['phone', 'laptop', 'computer', 'tv', 'electronics']):
+            entities['product_categories'].append('Electronics')
+            return QueryType.PRODUCT_PERFORMANCE, entities
+
+        elif any(keyword in query_lower for keyword in ['dress', 'clothes', 'fashion', 'shoe', 'bag']):
+            entities['product_categories'].append('Fashion')
+            return QueryType.PRODUCT_PERFORMANCE, entities
+
+        elif any(keyword in query_lower for keyword in ['beauty', 'cosmetics', 'makeup', 'cream', 'soap']):
+            entities['product_categories'].append('Beauty')
+            return QueryType.PRODUCT_PERFORMANCE, entities
+
+        elif any(keyword in query_lower for keyword in ['book', 'novel', 'textbook', 'reading']):
+            entities['product_categories'].append('Books')
+            return QueryType.PRODUCT_PERFORMANCE, entities
+
+        elif any(keyword in query_lower for keyword in ['car', 'auto', 'battery', 'tire', 'engine']):
+            entities['product_categories'].append('Automotive')
+            return QueryType.PRODUCT_PERFORMANCE, entities
 
         else:
             return QueryType.GENERAL_CONVERSATION, entities
@@ -319,14 +388,28 @@ DATABASE SCHEMA FOR NIGERIAN E-COMMERCE PLATFORM:
 
 Tables:
 1. customers: customer_id, name, email, phone, state, lga, address, account_tier, preferences, created_at, updated_at
-2. orders: order_id, customer_id, order_status, payment_method, total_amount, delivery_date, product_category, created_at, updated_at
+2. orders: order_id, customer_id, order_status, payment_method, total_amount, delivery_date, product_category, product_id, created_at, updated_at
 3. analytics: analytics_id, metric_type, metric_value, time_period, created_at
+4. products: product_id, product_name, category, brand, description, price, currency, in_stock, stock_quantity, weight_kg, dimensions_cm, created_at, updated_at
+
+🔗 RELATIONSHIPS:
+- orders.customer_id → customers.customer_id (Foreign Key)
+- orders.product_id → products.product_id (Foreign Key)
+- orders.product_category matches products.category
+
+🏪 PRODUCT CATALOG:
+Categories: Electronics, Fashion, Beauty, Computing, Automotive, Books
+Popular Brands: Samsung, Apple, Tecno, Infinix, LG, Sony, Haier Thermocool, Scanfrost, Nike, Adidas, Zara, MAC Cosmetics, Maybelline, L'Oreal, HP, Dell, Canon, Logitech, Mobil 1, Exide, Dunlop, Bosch, Philips
+Currency: All prices in Nigerian Naira (NGN)
 
 Nigerian States: Lagos, Kano, Rivers, Oyo, Kaduna, Abia, Adamawa, Akwa Ibom, Anambra, Bauchi, Bayelsa, Benue, Borno, Cross River, Delta, Ebonyi, Edo, Ekiti, Enugu, Gombe, Imo, Jigawa, Kebbi, Kogi, Kwara, Nasarawa, Niger, Ondo, Osun, Ogun, Plateau, Sokoto, Taraba, Yobe, Zamfara, Abuja
 
 Payment Methods: 'Pay on Delivery', 'Bank Transfer', 'Card', 'RaqibTechPay'
 Order Status: 'Pending', 'Processing', 'Delivered', 'Returned'
 Account Tiers: 'Bronze', 'Silver', 'Gold', 'Platinum'
+
+PRODUCT CATEGORIES: Electronics, Fashion, Beauty, Computing, Automotive, Books
+POPULAR BRANDS: Samsung, Apple, Tecno, Infinix, LG, Sony, Haier Thermocool, Scanfrost, Nike, Adidas, Zara, MAC Cosmetics, Maybelline, L'Oreal, HP, Dell, Canon, Logitech, Mobil 1, Exide, Dunlop, Bosch, Philips
 """
 
         system_prompt = f"""
@@ -358,6 +441,41 @@ QUERY GENERATION RULES:
 13. Handle NULL values gracefully
 14. NEVER use CURRENT_USER - use actual customer_id values from context when available
 15. For delivery/tracking queries: Use order_status IN ('Processing', 'Delivered') and join with customer data
+16. 🆕 PRODUCT QUERIES: When users ask about products, prices, categories, brands, or inventory:
+    - Use products table for product information queries
+    - JOIN with orders table for purchase history and popularity analysis
+    - Include product details like brand, price, description, stock status
+    - For product searches: Use ILIKE for partial matches on product_name, brand, or category
+    - For price queries: Format prices in Naira and include currency symbol ₦
+    - For inventory queries: Check stock_quantity and in_stock status
+17. 🆕 PRODUCT-ORDER RELATIONSHIPS: For queries involving both products and orders:
+    - JOIN orders and products on product_id for detailed order information
+    - Include customer information when showing order details with products
+    - For popular products: COUNT orders by product_id and ORDER BY count DESC
+18. 🆕 CATEGORY AND BRAND QUERIES: When filtering by categories or brands:
+    - Use exact matches for categories: Electronics, Fashion, Beauty, Computing, Automotive, Books
+    - Use ILIKE for brand searches to handle case variations
+    - Group by category for category-level analytics
+19. 🆕 STOCK AND AVAILABILITY: For inventory and stock queries:
+    - Check both in_stock boolean and stock_quantity integer
+    - Show stock status: 'Out of Stock', 'Low Stock' (<=10), 'Medium Stock' (<=50), 'High Stock' (>50)
+    - Include stock_quantity in results for inventory management
+20. 🆕 PRICE AND REVENUE QUERIES: For pricing and financial analysis:
+    - Use products.price for individual product pricing
+    - Use orders.total_amount for actual transaction amounts
+    - Calculate revenue by product: SUM(orders.total_amount) grouped by product_id
+    - Format all monetary values with ₦ symbol
+
+🆕 PRODUCT INFORMATION HANDLING:
+- For product queries: Use database results to provide detailed product information with prices in ₦
+- Include product names, brands, categories, prices, and stock status when available
+- For inventory queries: Show stock levels and availability status with appropriate urgency
+- For category browsing: List products by category with brief descriptions and prices
+- For brand searches: Highlight brand-specific products with competitive pricing
+- For price comparisons: Show products in price ranges (Budget ₦0-50K, Mid-range ₦50K-200K, Premium ₦200K+)
+- Always mention Nigeria-wide delivery and multiple payment options
+- Use product database results to make personalized recommendations
+- If no specific products found: Guide to browse categories or suggest popular items
 
 USER QUERY: "{user_query}"
 QUERY TYPE: {query_type.value}
@@ -479,6 +597,83 @@ Generate ONLY the SQL query, no explanations or markdown formatting.
             ORDER BY total_revenue DESC
             LIMIT 20;
             """
+
+        elif query_type == QueryType.PRODUCT_PERFORMANCE:
+            # 🆕 PRODUCT-RELATED FALLBACK QUERIES
+            if entities.get('product_categories'):
+                category = entities['product_categories'][0]
+                return f"""
+                SELECT p.product_id, p.product_name, p.brand, p.price, p.stock_quantity,
+                       CASE
+                           WHEN p.stock_quantity = 0 THEN 'Out of Stock'
+                           WHEN p.stock_quantity <= 10 THEN 'Low Stock'
+                           WHEN p.stock_quantity <= 50 THEN 'Medium Stock'
+                           ELSE 'High Stock'
+                       END as stock_status,
+                       COUNT(o.order_id) as order_count
+                FROM products p
+                LEFT JOIN orders o ON p.product_id = o.product_id
+                WHERE p.category = '{category}' AND p.in_stock = true
+                GROUP BY p.product_id, p.product_name, p.brand, p.price, p.stock_quantity
+                ORDER BY order_count DESC, p.price ASC
+                LIMIT 20;
+                """
+            elif entities.get('brands'):
+                brand = entities['brands'][0]
+                return f"""
+                SELECT p.product_id, p.product_name, p.category, p.price, p.stock_quantity,
+                       CASE
+                           WHEN p.stock_quantity = 0 THEN 'Out of Stock'
+                           WHEN p.stock_quantity <= 10 THEN 'Low Stock'
+                           WHEN p.stock_quantity <= 50 THEN 'Medium Stock'
+                           ELSE 'High Stock'
+                       END as stock_status
+                FROM products p
+                WHERE p.brand ILIKE '%{brand}%' AND p.in_stock = true
+                ORDER BY p.price ASC
+                LIMIT 20;
+                """
+            elif entities.get('price_query'):
+                return """
+                SELECT p.category, p.brand, p.product_name, p.price,
+                       CASE
+                           WHEN p.price < 50000 THEN 'Budget-Friendly'
+                           WHEN p.price < 200000 THEN 'Mid-Range'
+                           WHEN p.price < 500000 THEN 'Premium'
+                           ELSE 'Luxury'
+                       END as price_category,
+                       p.stock_quantity
+                FROM products p
+                WHERE p.in_stock = true
+                ORDER BY p.price ASC
+                LIMIT 25;
+                """
+            elif entities.get('inventory_query'):
+                return """
+                SELECT p.category, p.product_name, p.brand, p.stock_quantity,
+                       CASE
+                           WHEN p.stock_quantity = 0 THEN 'Out of Stock'
+                           WHEN p.stock_quantity <= 10 THEN 'Low Stock'
+                           WHEN p.stock_quantity <= 50 THEN 'Medium Stock'
+                           ELSE 'High Stock'
+                       END as stock_status,
+                       p.price, p.in_stock
+                FROM products p
+                ORDER BY p.stock_quantity ASC, p.category
+                LIMIT 25;
+                """
+            else:
+                # General product query
+                return """
+                SELECT p.category, COUNT(*) as product_count,
+                       AVG(p.price) as avg_price,
+                       SUM(p.stock_quantity) as total_stock,
+                       COUNT(CASE WHEN p.stock_quantity = 0 THEN 1 END) as out_of_stock_count
+                FROM products p
+                WHERE p.in_stock = true
+                GROUP BY p.category
+                ORDER BY product_count DESC;
+                """
 
         else:
             return "SELECT 'Fallback query executed' as message;"
@@ -729,6 +924,7 @@ RESPONSE STYLE:
 
         logger.info(f"🎭 Detected emotion: {sentiment_data['emotion']} (intensity: {sentiment_data['intensity']})")
 
+        # Continue with normal processing - scope already checked in process_enhanced_query
         # Prepare execution results summary
         results_summary = ""
         if query_context.execution_result:
@@ -775,6 +971,12 @@ GUEST USER CONTEXT: This user is not authenticated and cannot access personal or
 
 CUSTOMER'S QUESTION: "{query_context.user_query}"
 
+STRICT SCOPE RESTRICTIONS:
+- ONLY respond to raqibtech.com customer support related questions
+- DO NOT provide general knowledge, news, politics, or unrelated information
+- If asked about non-platform topics, redirect to raqibtech.com services
+- Focus exclusively on e-commerce, orders, payments, account, and platform help
+
 🌟 GUEST USER RESPONSE GUIDELINES:
 1. 🎭 Respond according to their emotional state with appropriate emojis
 2. 🔒 Explain that personal order tracking requires logging in or providing order ID
@@ -790,6 +992,18 @@ CUSTOMER'S QUESTION: "{query_context.user_query}"
 5. 😊 Be warm, helpful, and encouraging about signing up
 6. 🎯 Focus on platform capabilities rather than personal data
 7. ✨ End with encouragement to join the platform for better service
+
+🆕 PRODUCT CATALOG GUIDANCE:
+8. 🏪 For product questions, showcase our amazing catalog:
+   - Electronics: Samsung, Apple, Tecno, Infinix phones, laptops, TVs
+   - Fashion: Ankara dresses, traditional wear, Nike, Adidas
+   - Beauty: Nigerian shea butter, MAC cosmetics, skincare
+   - Computing: HP, Dell laptops, monitors, accessories
+   - Automotive: Car parts, batteries, tires, accessories
+   - Books: Nigerian literature, textbooks, children's books
+9. 💰 Mention competitive prices in Nigerian Naira (₦)
+10. 📦 Highlight our extensive inventory and fast delivery
+11. 🎁 Encourage browsing our product categories
 
 Keep responses under 100 words but pack them with helpful information and appropriate emotion.
 
@@ -809,6 +1023,13 @@ Emotional Keywords Detected: {sentiment_data['keywords']}
 
 PLATFORM: raqibtech.com (Nigerian e-commerce platform)
 CONVERSATION TYPE: Live customer support chat
+
+STRICT SCOPE RESTRICTIONS:
+- ONLY respond to raqibtech.com customer support related questions
+- DO NOT provide general knowledge, news, politics, entertainment, or unrelated information
+- If asked about non-platform topics, politely redirect to raqibtech.com services
+- Focus exclusively on e-commerce, orders, payments, account, platform help, and Nigerian business context
+- Never answer questions about presidents, celebrities, general facts, homework, etc.
 
 CUSTOMER AUTHENTICATION STATUS:
 - Authenticated: {customer_verified}
@@ -832,6 +1053,8 @@ AVAILABLE DATABASE INFO: {safe_json_dumps(query_context.execution_result, max_it
 9. ⚡ If customer is impatient, acknowledge urgency and provide quick, actionable solutions
 10. 🇳🇬 Maintain Nigerian business context while being emotionally intelligent
 
+CRITICAL: Do not give me any information about topics not related to raqibtech.com customer support. Do not justify your answers about non-platform topics. If the question is not about raqibtech.com services, politely redirect to platform-related assistance.
+
 TECHNICAL RESPONSE LOGIC:
 - If customer is NOT authenticated and asking about orders: Guide them warmly to log in or provide order ID
 - If customer IS authenticated and database has their order data: Use that data to help them enthusiastically
@@ -843,6 +1066,17 @@ TECHNICAL RESPONSE LOGIC:
 - Don't show random orders to guests - guide them to proper authentication with empathy
 - Keep responses under 100 words but pack them with emotion and helpfulness
 - Format currency as ₦ for Nigerian Naira
+
+🆕 PRODUCT INFORMATION HANDLING:
+- For product queries: Use database results to provide detailed product information with prices in ₦
+- Include product names, brands, categories, prices, and stock status when available
+- For inventory queries: Show stock levels and availability status with appropriate urgency
+- For category browsing: List products by category with brief descriptions and prices
+- For brand searches: Highlight brand-specific products with competitive pricing
+- For price comparisons: Show products in price ranges (Budget ₦0-50K, Mid-range ₦50K-200K, Premium ₦200K+)
+- Always mention Nigeria-wide delivery and multiple payment options
+- Use product database results to make personalized recommendations
+- If no specific products found: Guide to browse categories or suggest popular items
 
 EMOJI USAGE BY EMOTION:
 - Frustrated: 😔, 💙, 🤗, ✨ (calming, supportive)
@@ -924,224 +1158,250 @@ could you please share your order number or email address with me? I'm here to h
                 return """No worries at all! 😊 I'm here to help clarify anything you need about raqibtech.com. 💡
 
 I can help with:
-• Order tracking and delivery status 📦
-• Account questions 👤
-• Payment assistance 💳
-• Product information 🛍️
+• 📦 Order tracking and delivery status
+• 💳 Payment assistance and account issues
+• 🛍️ Product information and shopping help
+• 👤 Account settings and tier benefits
+• 🏪 Browse our amazing product catalog:
+  - Electronics (Samsung, Apple, Tecno, Infinix)
+  - Fashion (Ankara, Nike, Adidas)
+  - Beauty (Shea butter, MAC, skincare)
+  - Computing (HP, Dell laptops)
+  - Automotive (car parts, batteries)
+  - Books (Nigerian literature, textbooks)
 
-What would you like to know? I'm happy to guide you step by step! ✨"""
+What can I help you with regarding your raqibtech.com experience? 😊✨"""
 
             elif emotion == 'frustrated':
                 return """I'm truly sorry for any frustration! 😔 Let me help make this better right away. 💙
 
 I can assist with:
-• Order tracking and delivery updates 📦⚡
-• Payment and account issues 💳🔧
-• Quick product help 🛍️💨
-• Immediate support 🤗
+• 📦 Order tracking and delivery updates
+• 💳 Payment methods and account questions
+• 🛍️ Product recommendations and shopping
+• 👤 Account management and support
+• 🏪 Our extensive product catalog with competitive ₦ prices
 
-What do you need help with? I'm here to fix this for you! ✨"""
+How can I assist you with raqibtech.com today? 🌟✨"""
 
             else:
-                return """I'd love to help you! 😊 I'm your friendly raqibtech.com support assistant. 🌟
+                return """Thanks for your question! I'm your dedicated raqibtech.com customer support assistant, so I focus on helping with our platform and services. 😊
 
-I can help with:
-• Order tracking and delivery status 📦
-• Account and payment questions 💳
-• Product recommendations 🛍️
-• General shopping support 🤗
+I'd love to assist you with:
+• 📦 Order tracking and delivery status
+• 💳 Payment and account questions
+• 🛍️ Shopping and product recommendations
+• 👤 Account management and support
+• 🏪 Our amazing product catalog:
+  - Electronics, Fashion, Beauty, Computing, Automotive, Books
+  - Nigerian brands and international favorites
+  - Competitive prices in Naira (₦)
+  - Fast delivery across all 36 states + FCT
 
-What can I assist you with today? ✨"""
+How can I help you with your raqibtech.com experience today? 🌟"""
 
-    def process_query(self, user_query: str, user_id: str = "anonymous") -> Dict[str, Any]:
+    def is_query_within_scope(self, user_query: str) -> bool:
         """
-        🚀 Main pipeline: Process user query through complete Nigerian e-commerce pipeline
+        🎯 Determine if the user query is within customer support scope
+        Returns True if within scope, False if out of scope
         """
+        query_lower = user_query.lower()
 
-        start_time = datetime.now()
+        # 🔥 CUSTOMER SUPPORT KEYWORDS (HIGH PRIORITY - IN SCOPE)
+        high_priority_keywords = [
+            # Order related (ALWAYS in scope)
+            'order', 'orders', 'delivery', 'track', 'tracking', 'shipped', 'shipping',
+            'when', 'where', 'status', 'expected', 'arrive', 'delivered', 'package',
+            'my order', 'order status', 'delivery status', 'order history',
 
-        try:
-            # Stage 0: Get Conversation History (moved earlier for context inheritance)
-            logger.info(f"📚 Stage 0: Retrieving conversation history for context")
-            conversation_history = self.get_conversation_history(user_id)
+            # Account related (ALWAYS in scope)
+            'account', 'profile', 'login', 'password', 'settings', 'tier',
+            'my account', 'account settings',
 
-            # Stage 1: Intent Classification (now with conversation history)
-            logger.info(f"🎯 Stage 1: Classifying query intent")
-            query_type, entities = self.classify_query_intent(user_query, conversation_history)
+            # Payment related (ALWAYS in scope)
+            'payment', 'pay', 'billing', 'card', 'bank transfer', 'refund',
+            'payment method', 'checkout',
 
-            # Stage 2: SQL Generation
-            logger.info(f"🔍 Stage 2: Generating SQL query")
-            sql_query = self.generate_sql_query(user_query, query_type, entities)
+            # Platform specific (ALWAYS in scope)
+            'raqibtech', 'raqibtechpay', 'customer service', 'customer support',
+            'help', 'support', 'contact', 'assistance',
 
-            # Stage 3: Database Execution
-            logger.info(f"🗄️ Stage 3: Executing database query")
-            execution_result, error_message = self.execute_database_query(sql_query)
+            # Shopping related (ALWAYS in scope)
+            'product', 'buy', 'purchase', 'cart', 'shopping', 'recommendation',
 
-            # Create query context
-            query_context = QueryContext(
-                query_type=query_type,
-                intent=query_type.value,
-                entities=entities,
-                sql_query=sql_query,
-                execution_result=execution_result,
-                response="",  # Will be filled next
-                timestamp=start_time,
-                user_query=user_query,
-                error_message=error_message
-            )
+            # 🆕 Product catalog related (ALWAYS in scope)
+            'product', 'products', 'item', 'items', 'goods', 'catalog', 'inventory',
+            'price', 'prices', 'cost', 'naira', '₦', 'cheap', 'expensive', 'budget',
+            'stock', 'available', 'availability', 'out of stock', 'in stock',
+            'category', 'categories', 'brand', 'brands',
 
-            # Stage 4: Generate Nigerian Response
-            logger.info(f"🇳🇬 Stage 4: Generating Nigerian business response")
-            query_context.response = self.generate_nigerian_response(query_context, conversation_history, None)
+            # 🆕 Specific product types (ALWAYS in scope)
+            'phone', 'smartphone', 'laptop', 'computer', 'tv', 'electronics',
+            'dress', 'clothes', 'fashion', 'shoe', 'shoes', 'bag', 'bags',
+            'beauty', 'cosmetics', 'makeup', 'cream', 'soap', 'skincare',
+            'book', 'books', 'novel', 'textbook', 'reading',
+            'car', 'auto', 'automotive', 'battery', 'tire', 'tires', 'engine',
 
-            # Stage 5: Store Context
-            logger.info(f"📝 Stage 5: Storing conversation context")
-            self.store_conversation_context(query_context, user_id)
+            # 🆕 Brand names (ALWAYS in scope)
+            'samsung', 'apple', 'iphone', 'tecno', 'infinix', 'lg', 'sony',
+            'nike', 'adidas', 'zara', 'mac', 'maybelline', 'hp', 'dell'
+        ]
 
-            # Calculate processing time
-            processing_time = (datetime.now() - start_time).total_seconds()
+        # Check for high priority keywords first
+        for keyword in high_priority_keywords:
+            if keyword in query_lower:
+                return True
 
-            # Return comprehensive response
-            return {
-                'success': True,
-                'response': query_context.response,
-                'query_type': query_type.value,
-                'sql_query': sql_query,
-                'results_count': len(execution_result),
-                'execution_time': f"{processing_time:.2f}s",
-                'entities': entities,
-                'timestamp': start_time.isoformat(),
-                'error_message': error_message,
-                'has_results': len(execution_result) > 0
-            }
+        # 🚫 CLEARLY OUT-OF-SCOPE PATTERNS (Only reject obvious non-platform queries)
+        obvious_out_of_scope = [
+            # Politics and current affairs
+            'president of nigeria', 'governor of', 'minister of', 'election',
+            'political party', 'government policy',
 
-        except Exception as e:
-            logger.error(f"❌ Pipeline error: {e}")
-            return {
-                'success': False,
-                'response': f"I apologize, but I encountered an error processing your request: {str(e)}. Please try again or rephrase your question.",
-                'error_message': str(e),
-                'timestamp': start_time.isoformat(),
-                'execution_time': f"{(datetime.now() - start_time).total_seconds():.2f}s"
-            }
+            # Entertainment
+            'latest movie', 'celebrity news', 'sports score', 'football match',
+            'movie recommendation', 'song lyrics',
+
+            # Academic/Educational (unless related to platform)
+            'homework help', 'solve equation', 'chemistry formula', 'physics problem',
+            'university admission', 'exam questions',
+
+            # Health and medical
+            'medical advice', 'health symptoms', 'disease', 'medication',
+            'doctor recommendation',
+
+            # Financial advice (not payment related)
+            'stock market', 'investment advice', 'cryptocurrency', 'forex trading',
+
+            # Programming (unless platform related)
+            'python tutorial', 'javascript help', 'coding problem',
+            'programming language'
+        ]
+
+        # Only reject if it clearly matches out-of-scope patterns
+        for pattern in obvious_out_of_scope:
+            if pattern in query_lower:
+                return False
+
+        # 🎯 DEFAULT: If in doubt, ALLOW IT (customer-friendly approach)
+        # Better to occasionally help with borderline questions than reject valid ones
+        return True
+
+    def generate_out_of_scope_response(self, user_query: str, sentiment_data: Dict[str, Any]) -> str:
+        """
+        🚫 Generate a polite redirect response for out-of-scope queries
+        """
+        emotion = sentiment_data['emotion']
+
+        if emotion == 'frustrated':
+            return """I understand you might be looking for information, but I'm specifically designed to help with raqibtech.com customer support! 😊
+
+I'd love to assist you with:
+• 📦 Order tracking and delivery status
+• 💳 Payment and account questions
+• 🛍️ Shopping and product recommendations
+• 👤 Account management and support
+
+How can I help you with your raqibtech.com experience today? 🌟"""
+
+        elif emotion == 'confused':
+            return """I'm here to help, but I'm specifically designed to assist with raqibtech.com customer support! 💡
+
+I can help you with:
+• 📦 Tracking your orders and deliveries
+• 💳 Payment assistance and account issues
+• 🛍️ Product information and shopping help
+• 👤 Account settings and tier benefits
+
+What can I help you with regarding your raqibtech.com experience? 😊✨"""
+
+        else:
+            return """Thanks for your question! I'm your dedicated raqibtech.com customer support assistant, so I focus on helping with our platform and services. 😊
+
+I'd love to assist you with:
+• 📦 Order tracking and delivery status
+• 💳 Payment and account questions
+• 🛍️ Shopping and product recommendations
+• 👤 Account management and support
+
+How can I help you with your raqibtech.com experience today? 🌟"""
 
     def process_enhanced_query(self, user_query: str, session_context: Dict[str, Any] = None) -> Dict[str, Any]:
         """
-        🚀 Enhanced query processing with session context integration
-        Wrapper around process_query that integrates Flask session authentication
+        🚀 Main pipeline method that orchestrates the entire enhanced query process
+        Returns a comprehensive result dictionary for the Flask API
         """
-
-        start_time = datetime.now()
+        start_time = time.time()
 
         try:
-            # Extract user_id from session context
-            user_id = session_context.get('session_id', 'anonymous') if session_context else 'anonymous'
+            # 🎯 STEP 1: Check if query is within customer support scope FIRST
+            if not self.is_query_within_scope(user_query):
+                logger.info(f"🚫 Out-of-scope query detected: {user_query[:50]}...")
+                sentiment_data = self.detect_user_sentiment(user_query)
+                return {
+                    'success': True,
+                    'response': self.generate_out_of_scope_response(user_query, sentiment_data),
+                    'query_type': 'out_of_scope',
+                    'execution_time': f"{time.time() - start_time:.3f}s",
+                    'sql_query': None,
+                    'results_count': 0
+                }
 
-            # 🔧 ENHANCED: Check if user is authenticated and extract customer info
-            customer_id = None
-            customer_verified = False
+            # Step 2: Get conversation history for context
+            user_id = session_context.get('user_id', 'anonymous') if session_context else 'anonymous'
+            conversation_history = self.get_conversation_history(user_id, limit=5)
 
-            if session_context:
-                customer_verified = session_context.get('customer_verified', False)
-                customer_id = session_context.get('customer_id')
-
-                logger.info(f"🔐 Session context - Customer ID: {customer_id}, Verified: {customer_verified}")
-
-            # Stage 0: Get Conversation History
-            logger.info(f"📚 Stage 0: Retrieving conversation history for context")
-            conversation_history = self.get_conversation_history(user_id)
-
-            # Stage 1: Intent Classification with session context
-            logger.info(f"🎯 Stage 1: Classifying query intent with session context")
+            # Step 3: Classify query intent and extract entities
             query_type, entities = self.classify_query_intent(user_query, conversation_history)
 
-            # 🆕 ENHANCED: Inject customer_id from session into entities for authenticated queries
-            if customer_verified and customer_id and not entities.get('customer_id'):
-                entities['customer_id'] = customer_id
-                entities['customer_verified'] = True
-                logger.info(f"🔐 Injected customer_id {customer_id} from session into query entities")
-
-            # Stage 2: SQL Generation with enhanced context
-            logger.info(f"🔍 Stage 2: Generating SQL query with customer context")
+            # Step 4: Generate SQL query based on classification
             sql_query = self.generate_sql_query(user_query, query_type, entities)
 
-            # Stage 3: Database Execution
-            logger.info(f"🗄️ Stage 3: Executing database query")
+            # Step 5: Execute the database query
             execution_result, error_message = self.execute_database_query(sql_query)
 
-            # Create query context
+            # Step 6: Create query context
             query_context = QueryContext(
                 query_type=query_type,
-                intent=query_type.value,
+                intent=entities.get('intent', 'general_inquiry'),
                 entities=entities,
                 sql_query=sql_query,
-                execution_result=execution_result,
-                response="",  # Will be filled next
-                timestamp=start_time,
+                execution_result=execution_result or [],
+                response="",
+                timestamp=datetime.now(),
                 user_query=user_query,
                 error_message=error_message
             )
 
-            # Stage 4: Generate Nigerian Response
-            logger.info(f"🇳🇬 Stage 4: Generating Nigerian business response")
-            query_context.response = self.generate_nigerian_response(query_context, conversation_history, session_context)
+            # Step 7: Generate natural language response
+            response = self.generate_nigerian_response(query_context, conversation_history, session_context)
+            query_context.response = response
 
-            # Stage 5: Store Context
-            logger.info(f"📝 Stage 5: Storing conversation context")
+            # Step 8: Store conversation context for future reference
             self.store_conversation_context(query_context, user_id)
 
-            # Calculate processing time
-            processing_time = (datetime.now() - start_time).total_seconds()
+            execution_time = time.time() - start_time
 
-            # Return comprehensive response
+            # Step 9: Return comprehensive result
             return {
                 'success': True,
-                'response': query_context.response,
+                'response': response,
                 'query_type': query_type.value,
                 'sql_query': sql_query,
-                'results_count': len(execution_result),
-                'execution_time': f"{processing_time:.2f}s",
+                'results_count': len(execution_result) if execution_result else 0,
+                'execution_time': f"{execution_time:.3f}s",
                 'entities': entities,
-                'timestamp': start_time.isoformat(),
-                'error_message': error_message,
-                'has_results': len(execution_result) > 0,
-                'customer_authenticated': customer_verified,
-                'customer_id': customer_id
+                'user_query': user_query
             }
 
         except Exception as e:
-            logger.error(f"❌ Enhanced pipeline error: {e}")
+            execution_time = time.time() - start_time
+            logger.error(f"❌ Enhanced query pipeline error: {e}")
+
             return {
                 'success': False,
-                'response': f"I apologize, but I encountered an error processing your request: {str(e)}. Please try again or rephrase your question.",
-                'error_message': str(e),
-                'timestamp': start_time.isoformat(),
-                'execution_time': f"{(datetime.now() - start_time).total_seconds():.2f}s"
+                'response': f"I apologize, but I'm experiencing technical difficulties. Please try again or contact our support team at +234 (702) 5965-922 for immediate assistance! 😊💙",
+                'query_type': 'error',
+                'execution_time': f"{execution_time:.3f}s",
+                'error': str(e)
             }
-
-# Usage example and testing
-if __name__ == "__main__":
-    # Initialize the enhanced querying system
-    db_querying = EnhancedDatabaseQuerying()
-
-    # Test queries
-    test_queries = [
-        "Show me customers from Lagos state",
-        "What's our total revenue this month?",
-        "How many orders were placed using Bank Transfer?",
-        "Which Nigerian state has the most customers?",
-        "Show recent orders with Card payments"
-    ]
-
-    print("🇳🇬 Testing Enhanced Nigerian E-commerce Database Querying System\n")
-
-    for i, query in enumerate(test_queries, 1):
-        print(f"📋 Test {i}: {query}")
-        result = db_querying.process_query(query, f"test_user_{i}")
-
-        print(f"✅ Success: {result['success']}")
-        print(f"🔍 Query Type: {result.get('query_type', 'N/A')}")
-        print(f"📊 Results Count: {result.get('results_count', 0)}")
-        print(f"⏱️ Execution Time: {result.get('execution_time', 'N/A')}")
-        print(f"💬 Response: {result['response'][:200]}...")
-        print("-" * 80)

@@ -777,6 +777,18 @@ def api_chat():
         if any(word in query.lower() for word in ['customer', 'profile']):
             quick_actions.append({'text': 'View Customer Profile', 'action': 'view_profile'})
 
+        # 🆕 Product-related quick actions
+        if any(word in query.lower() for word in ['product', 'products', 'item', 'catalog']):
+            quick_actions.append({'text': 'Browse Catalog', 'action': 'browse_products'})
+        if any(word in query.lower() for word in ['price', 'cost', 'cheap', 'expensive']):
+            quick_actions.append({'text': 'Check Prices', 'action': 'check_prices'})
+        if any(word in query.lower() for word in ['phone', 'laptop', 'electronics']):
+            quick_actions.append({'text': 'Electronics', 'action': 'browse_electronics'})
+        if any(word in query.lower() for word in ['fashion', 'clothes', 'dress', 'shoe']):
+            quick_actions.append({'text': 'Fashion Items', 'action': 'browse_fashion'})
+        if any(word in query.lower() for word in ['stock', 'available', 'inventory']):
+            quick_actions.append({'text': 'Check Stock', 'action': 'check_inventory'})
+
         return jsonify({
             'success': True,
             'response': ai_response,
@@ -809,6 +821,22 @@ def api_quick_action():
         elif action == 'view_profile':
             # Customer profile logic
             response = "I can help you access customer profiles. Please provide the customer ID or email address."
+
+        # 🆕 Product-related quick action handlers
+        elif action == 'browse_products':
+            response = "🏪 Browse our amazing product catalog! We have Electronics, Fashion, Beauty, Computing, Automotive, and Books. Which category interests you?"
+
+        elif action == 'check_prices':
+            response = "💰 Check our competitive prices! Products range from budget-friendly ₦3,500 to premium ₦2,850,000. What price range are you looking for?"
+
+        elif action == 'browse_electronics':
+            response = "📱 Our Electronics section features Samsung, Apple, Tecno, Infinix smartphones, laptops, TVs, and home appliances. What electronics are you interested in?"
+
+        elif action == 'browse_fashion':
+            response = "👗 Explore our Fashion collection! From beautiful Ankara dresses to Nike sneakers, traditional wear to modern styles. What fashion items can I help you find?"
+
+        elif action == 'check_inventory':
+            response = "📦 I can check stock levels for any product! Our inventory includes thousands of items across all categories. Which product would you like me to check?"
 
         else:
             response = "I'm here to help! What specific action would you like me to take?"
@@ -1041,12 +1069,46 @@ def api_query_suggestions():
                 "Change my shipping address",
                 "Find nearest pickup location"
             ],
+            # 🆕 Product-related suggestions
+            'product_performance': [
+                "Show me electronics products",
+                "What fashion items do you have?",
+                "Browse beauty products",
+                "Check Samsung phone prices",
+                "Show me laptops under ₦500,000",
+                "What books are available?",
+                "Search for Nike products",
+                "Check automotive accessories",
+                "Show products in stock",
+                "What are your cheapest products?"
+            ],
+            'product_search': [
+                "Search for iPhone",
+                "Show me Tecno phones",
+                "Find Ankara dresses",
+                "Look for HP laptops",
+                "Search MAC cosmetics",
+                "Find car batteries",
+                "Show me African novels",
+                "Search for Adidas shoes"
+            ],
+            'inventory_queries': [
+                "Check stock for product #123",
+                "What products are out of stock?",
+                "Show low stock items",
+                "Check availability of Samsung Galaxy",
+                "Is this product in stock?",
+                "Show inventory by category"
+            ],
             'general': [
                 "Help me track my order",
                 "Update my account details",
                 "Check my payment status",
                 "What products do you recommend?",
-                "How do I contact customer service?"
+                "How do I contact customer service?",
+                "Browse your product catalog",
+                "Show me popular products",
+                "Check prices for electronics"
             ]
         }
 
@@ -1177,6 +1239,17 @@ def get_conversation_messages(conversation_id):
                 'success': False,
                 'message': 'Please log in to access conversation messages'
             }), 401
+
+        # 🔧 CRITICAL FIX: Verify the conversation belongs to the current session
+        user_conversations = session_manager.get_user_conversations(session['session_id'])
+        conversation_belongs_to_user = any(conv.conversation_id == conversation_id for conv in user_conversations)
+
+        if not conversation_belongs_to_user:
+            app_logger.warning(f"🚨 Unauthorized conversation access attempt: User session {session['session_id']} tried to access conversation {conversation_id}")
+            return jsonify({
+                'success': False,
+                'message': 'Conversation not found or access denied'
+            }), 403
 
         messages = session_manager.get_conversation_messages(conversation_id)
 

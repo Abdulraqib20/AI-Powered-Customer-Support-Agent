@@ -76,18 +76,18 @@ def calculate_customer_order_profile(customer):
     registration_date = customer['created_at']
     days_as_customer = (datetime.now() - registration_date).days
 
-    # Base order patterns by tier
+    # Base order patterns by tier - updated with correct categories
     tier_profiles = {
         'Bronze': {
             'orders_per_month': random.uniform(0.5, 2.0),
             'avg_order_value': random.uniform(8000, 25000),
-            'preferred_categories': ['Food Items', 'Fashion', 'Beauty'],
+            'preferred_categories': ['Food Items', 'Beauty', 'Books'],
             'payment_method_weights': [0.6, 0.25, 0.1, 0.05]  # [POD, Bank, Card, RaqibTech]
         },
         'Silver': {
             'orders_per_month': random.uniform(1.5, 4.0),
             'avg_order_value': random.uniform(15000, 50000),
-            'preferred_categories': ['Fashion', 'Electronics', 'Phones & Tablets', 'Beauty'],
+            'preferred_categories': ['Fashion', 'Phones & Tablets', 'Beauty', 'Books'],
             'payment_method_weights': [0.4, 0.3, 0.25, 0.05]
         },
         'Gold': {
@@ -99,7 +99,7 @@ def calculate_customer_order_profile(customer):
         'Platinum': {
             'orders_per_month': random.uniform(5.0, 15.0),
             'avg_order_value': random.uniform(50000, 200000),
-            'preferred_categories': ['Electronics', 'Computing', 'Automotive', 'Home & Kitchen'],
+            'preferred_categories': ['Electronics', 'Computing', 'Automotive', 'Fashion'],
             'payment_method_weights': [0.1, 0.3, 0.5, 0.1]
         }
     }
@@ -125,6 +125,9 @@ def generate_future_orders_for_customer(customer, order_profile, num_orders):
 
     orders = []
     payment_methods = ['Pay on Delivery', 'Bank Transfer', 'Card', 'RaqibTechPay']
+
+    # Load products for smart assignment
+    products_by_category = get_products_by_category()
 
     # Start generating orders from today forward
     today = datetime.now()
@@ -158,8 +161,11 @@ def generate_future_orders_for_customer(customer, order_profile, num_orders):
         amount = random.uniform(base_amount * 0.3, base_amount * 1.8)
         amount = max(amount, 5000)  # Minimum order value
 
-        # Select category and payment method
+        # Select category and smart product assignment
         category = random.choice(order_profile['preferred_categories'])
+        product_id = select_smart_product(category, amount, products_by_category)
+
+        # Select payment method
         payment_method = random.choices(
             payment_methods,
             weights=order_profile['payment_method_weights']
@@ -178,12 +184,65 @@ def generate_future_orders_for_customer(customer, order_profile, num_orders):
             'total_amount': round(amount, 2),
             'delivery_date': delivery_date,
             'product_category': category,
+            'product_id': product_id,
             'created_at': order_date
         }
 
         orders.append(order)
 
     return orders
+
+def get_products_by_category():
+    """Load products grouped by category for smart assignment"""
+    try:
+        conn = psycopg2.connect(**DATABASE_CONFIG)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT product_id, category, price
+            FROM products
+            ORDER BY category, product_id
+        """)
+
+        products_by_category = {}
+        for product_id, category, price in cursor.fetchall():
+            if category not in products_by_category:
+                products_by_category[category] = []
+            products_by_category[category].append({
+                'id': product_id,
+                'price': float(price)
+            })
+
+        conn.close()
+        return products_by_category
+
+    except Exception as e:
+        logger.warning(f"⚠️ Could not load products: {e}. Using fallback.")
+        return {}
+
+def select_smart_product(category, order_amount, products_by_category):
+    """Select product based on category and price matching"""
+    if category not in products_by_category or not products_by_category[category]:
+        return None
+
+    available_products = products_by_category[category]
+
+    # Filter products by price range (50% below to 200% above order amount)
+    min_price = order_amount * 0.5
+    max_price = order_amount * 2.0
+
+    suitable_products = [
+        p for p in available_products
+        if min_price <= p['price'] <= max_price
+    ]
+
+    # If no suitable products by price, use all products in category
+    if not suitable_products:
+        suitable_products = available_products
+
+    # Select random product from suitable ones
+    selected_product = random.choice(suitable_products)
+    return selected_product['id']
 
 def insert_bulk_orders(orders_data):
     """Insert bulk orders efficiently"""
@@ -200,8 +259,8 @@ def insert_bulk_orders(orders_data):
             for i, order in enumerate(orders_data):
                 try:
                     cursor.execute("""
-                        INSERT INTO orders (customer_id, order_status, payment_method, total_amount, delivery_date, product_category, created_at)
-                        VALUES (%s, %s::order_status_enum, %s::payment_method_enum, %s, %s, %s, %s)
+                        INSERT INTO orders (customer_id, order_status, payment_method, total_amount, delivery_date, product_category, product_id, created_at)
+                        VALUES (%s, %s::order_status_enum, %s::payment_method_enum, %s, %s, %s, %s, %s)
                     """, (
                         order['customer_id'],
                         order['order_status'],
@@ -209,6 +268,7 @@ def insert_bulk_orders(orders_data):
                         order['total_amount'],
                         order['delivery_date'],
                         order['product_category'],
+                        order['product_id'],
                         order['created_at']
                     ))
 
@@ -283,7 +343,7 @@ def generate_enhanced_analytics():
         })
 
     # Product category performance
-    categories = ['Electronics', 'Fashion', 'Food Items', 'Computing', 'Beauty', 'Automotive']
+    categories = ['Electronics', 'Fashion', 'Food Items', 'Computing', 'Beauty', 'Automotive', 'Books', 'Phones & Tablets']
     for category in categories:
         analytics_data.append({
             'metric_type': 'category_performance',

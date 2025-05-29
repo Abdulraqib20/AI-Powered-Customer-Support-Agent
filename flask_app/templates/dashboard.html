@@ -91,37 +91,149 @@
     font-style: italic;
 }
 
-/* Welcome message special styling */
+/* Welcome message special styling - Modern vibrant design */
 .message.welcome .message-bubble {
-    background: linear-gradient(135deg, #3498db 0%, #2c3e50 100%);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
     color: white;
     border: none;
+    box-shadow: 0 15px 35px rgba(102, 126, 234, 0.4), 0 5px 15px rgba(0, 0, 0, 0.1);
+    border-radius: 20px;
+    padding: 28px 32px;
+    position: relative;
+    overflow: hidden;
+    backdrop-filter: blur(20px);
+}
+
+.message.welcome .message-bubble::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%);
+    pointer-events: none;
+    animation: shimmer 4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+    0%, 100% { opacity: 0.6; transform: rotate(0deg) scale(1); }
+    50% { opacity: 1; transform: rotate(180deg) scale(1.1); }
+}
+
+.welcome-content {
+    position: relative;
+    z-index: 1;
+}
+
+.welcome-content h6 {
+    font-size: 20px;
+    font-weight: 800;
+    color: #2C3E50;
+    margin-bottom: 16px;
+    letter-spacing: 0.5px;
+}
+
+.welcome-content p {
+    font-size: 16px;
+    line-height: 1.7;
+    margin-bottom: 16px;
+    opacity: 0.95;
+    color: #2C3E50;
+    font-weight: 500;
+}
+
+.welcome-content ul {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 16px;
+    padding: 20px 24px;
+    margin: 20px 0;
+    backdrop-filter: blur(15px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.welcome-content ul li {
+    font-size: 15px;
+    line-height: 1.6;
+    padding: 6px 0;
+    border-left: 4px solid rgba(255, 255, 255, 0.4);
+    padding-left: 16px;
+    margin-left: 12px;
+    transition: all 0.3s ease;
+    color: #2C3E50;
+    font-weight: 500;
+}
+
+.welcome-content ul li:hover {
+    border-left-color: #ffd700;
+    transform: translateX(6px);
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding-right: 12px;
+}
+
+.welcome-content ul li strong {
+    color: #2C3E50;
+    font-weight: 700;
 }
 
 .welcome-quick-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 15px;
+    gap: 12px;
+    margin-top: 24px;
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 16px;
+    backdrop-filter: blur(15px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .welcome-quick-action-btn {
-    background: rgba(255, 255, 255, 0.2);
-    color: white;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    padding: 6px 12px;
-    border-radius: 16px;
-    font-size: 13px;
+    background: linear-gradient(45deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.1));
+    color: #2C3E50;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    padding: 10px 20px;
+    border-radius: 25px;
+    font-size: 14px;
+    font-weight: 600;
     text-decoration: none;
-    transition: all 0.2s;
+    transition: all 0.3s ease;
     cursor: pointer;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    backdrop-filter: blur(10px);
+
 }
 
 .welcome-quick-action-btn:hover {
-    background: rgba(255, 255, 255, 0.3);
-    color: white;
+    background: linear-gradient(45deg, #ffd700, #ffed4e);
+    color: #333;
     text-decoration: none;
-    transform: translateY(-1px);
+    transform: translateY(-3px) scale(1.05);
+    box-shadow: 0 8px 25px rgba(255, 215, 0, 0.4);
+    text-shadow: none;
+    border-color: #ffd700;
+}
+
+.welcome-quick-action-btn:active {
+    transform: translateY(0);
+}
+
+/* Welcome message meta styling */
+.message.welcome .message-meta {
+    background: rgba(255, 255, 255, 0.15);
+    padding: 12px 16px;
+    border-radius: 12px;
+    margin-top: 16px;
+    backdrop-filter: blur(15px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.message.welcome .message-meta .response-time {
+    color: #2C3E50;
+    font-style: italic;
+    font-size: 13px;
+    font-weight: 500;
 }
 
 /* Chat input styling */
@@ -204,11 +316,21 @@
     border-radius: 8px;
     margin-bottom: 4px;
     transition: all 0.2s;
+    cursor: pointer;
 }
 
 .conversation-item:hover {
     background-color: #f8f9fa;
     transform: translateX(4px);
+}
+
+.conversation-item.active {
+    background-color: #18bc9c;
+    color: white;
+}
+
+.conversation-item.active .text-muted {
+    color: rgba(255, 255, 255, 0.8) !important;
 }
 
 /* Responsive adjustments */
@@ -233,6 +355,204 @@
 .simple-tech-details,
 .smart-quick-actions {
     display: none !important;
+}
+
+/* Smart Quick Actions Styling */
+.smart-quick-actions-container {
+    margin: 16px 0;
+    padding: 0 48px; /* Align with AI message */
+}
+
+.smart-quick-actions {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 16px;
+    padding: 20px;
+    border: 1px solid #dee2e6;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    backdrop-filter: blur(10px);
+}
+
+.quick-actions-header {
+    margin-bottom: 16px;
+    font-weight: 600;
+    color: #495057;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.quick-actions-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.smart-quick-action-btn {
+    background: linear-gradient(135deg, #18bc9c, #16a085);
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(24, 188, 156, 0.3);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.smart-quick-action-btn:hover {
+    background: linear-gradient(135deg, #16a085, #138f75);
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 6px 20px rgba(24, 188, 156, 0.4);
+    color: white;
+    text-decoration: none;
+}
+
+.smart-quick-action-btn:active {
+    transform: translateY(0) scale(0.98);
+}
+
+/* Responsive quick actions */
+@media (max-width: 768px) {
+    .smart-quick-actions-container {
+        padding: 0 16px;
+    }
+
+    .smart-quick-action-btn {
+        font-size: 12px;
+        padding: 8px 12px;
+    }
+}
+
+/* raqibtech.com Branding Styles */
+.raqibtech-branding {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 24px;
+    border-radius: 20px;
+    box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+.brand-title {
+    font-size: 28px;
+    font-weight: 800;
+    margin: 0;
+
+}
+
+.brand-logo {
+    font-size: 32px;
+    margin-right: 8px;
+}
+
+.brand-text {
+    color: #ffd700;
+    letter-spacing: 1px;
+}
+
+.brand-domain {
+    color: #ffffff;
+    font-weight: 600;
+}
+
+.brand-subtitle {
+    font-size: 16px;
+    margin-bottom: 16px;
+    opacity: 0.9;
+    font-weight: 500;
+}
+
+.brand-stats .badge {
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* Account Dashboard Styles */
+.account-dashboard {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 16px;
+    padding: 24px;
+    border: 1px solid #dee2e6;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+}
+
+.dashboard-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-top: 20px;
+}
+
+.dashboard-action-btn {
+    background: white;
+    border: 2px solid #e9ecef;
+    border-radius: 12px;
+    padding: 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    text-align: left;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.dashboard-action-btn:hover {
+    border-color: #18bc9c;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(24, 188, 156, 0.2);
+    background: linear-gradient(135deg, #ffffff, #f8f9fa);
+}
+
+.action-icon {
+    font-size: 24px;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #18bc9c, #16a085);
+    border-radius: 12px;
+    flex-shrink: 0;
+}
+
+.action-text strong {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 4px;
+}
+
+.action-text small {
+    font-size: 12px;
+    color: #6c757d;
+    font-weight: 500;
+}
+
+/* Responsive dashboard */
+@media (max-width: 768px) {
+    .dashboard-actions {
+        grid-template-columns: 1fr;
+    }
+
+    .dashboard-action-btn {
+        padding: 16px;
+    }
+
+    .action-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 20px;
+    }
 }
 </style>
 
@@ -456,6 +776,25 @@
                 <!-- My Account Tab -->
                 <div class="tab-pane fade" id="account" role="tabpanel">
                     <div class="p-4">
+                        <!-- raqibtech.com Branding Header -->
+                        {% if session.get('user_authenticated') %}
+                        <div class="mb-4 text-center">
+                            <div class="raqibtech-branding">
+                                <h2 class="brand-title mb-2">
+                                    <span class="brand-logo">🚀</span>
+                                    <span class="brand-text">raqibtech</span>
+                                    <span class="brand-domain">.com</span>
+                                </h2>
+                                <p class="brand-subtitle">Your Trusted Nigerian E-commerce Partner</p>
+                                <div class="brand-stats">
+                                    <span class="badge bg-success me-2">🇳🇬 36 States + FCT</span>
+                                    <span class="badge bg-primary me-2">📦 1M+ Deliveries</span>
+                                    <span class="badge bg-warning">⭐ 4.8/5 Rating</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+
                         <div class="mb-4">
                             <h4 class="mb-3">
                                 <i class="bi bi-person-gear text-warning me-2"></i>
@@ -463,7 +802,7 @@
                             </h4>
                             {% if session.get('user_authenticated') %}
                                 <p class="text-muted">
-                                    Manage your account information and preferences.
+                                    Welcome back! Manage your account information and explore personalized features.
                                 </p>
                             {% else %}
                                 <p class="text-muted">
@@ -471,6 +810,50 @@
                                 </p>
                             {% endif %}
                         </div>
+
+                        {% if session.get('user_authenticated') %}
+                        <!-- Enhanced Quick Actions Dashboard for Logged-in Users -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <div class="account-dashboard">
+                                    <h5 class="mb-3">
+                                        <i class="bi bi-speedometer2 text-primary me-2"></i>
+                                        Personal Dashboard
+                                    </h5>
+                                    <div class="dashboard-actions">
+                                        <button class="dashboard-action-btn" onclick="sendQuickMessage('Show my recent orders')">
+                                            <div class="action-icon">📦</div>
+                                            <div class="action-text">
+                                                <strong>Recent Orders</strong>
+                                                <small>Track & manage</small>
+                                            </div>
+                                        </button>
+                                        <button class="dashboard-action-btn" onclick="sendQuickMessage('What are my account benefits?')">
+                                            <div class="action-icon">⭐</div>
+                                            <div class="action-text">
+                                                <strong>Account Benefits</strong>
+                                                <small>Tier & rewards</small>
+                                            </div>
+                                        </button>
+                                        <button class="dashboard-action-btn" onclick="sendQuickMessage('Recommend products for me')">
+                                            <div class="action-icon">🛍️</div>
+                                            <div class="action-text">
+                                                <strong>For You</strong>
+                                                <small>Personalized picks</small>
+                                            </div>
+                                        </button>
+                                        <button class="dashboard-action-btn" onclick="sendQuickMessage('Help with payments')">
+                                            <div class="action-icon">💳</div>
+                                            <div class="action-text">
+                                                <strong>Payments</strong>
+                                                <small>Methods & billing</small>
+                                            </div>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
 
                         <div class="row">
                             <!-- Account Actions -->
@@ -640,7 +1023,7 @@ class CustomerSupportPortal {
 
     async loadCurrentConversation() {
         if (!this.currentConversationId) {
-            this.showWelcomeMessage();
+            this.displayWelcomeMessage();
             return;
         }
 
@@ -732,6 +1115,11 @@ class CustomerSupportPortal {
                                         <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('How do I create an account?')">📝 Sign Up</button>
                                         <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('What services do you offer?')">💡 Learn More</button>
                                         <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Contact customer support')">📞 Contact Support</button>
+
+                                        <!-- 🆕 Product-related quick actions -->
+                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Browse your product catalog')">🏪 Browse Catalog</button>
+                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Show me electronics products')">📱 Electronics</button>
+                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Check prices for popular products')">💰 Check Prices</button>
                                     </div>
                                 </div>
                                 <p class="mt-3 mb-0">💬 <strong>Ask me anything!</strong> I can guide you about our services and help you get started! 🌟</p>`
@@ -856,6 +1244,93 @@ class CustomerSupportPortal {
     addCustomerResponseToChat(data) {
         // Create main response message with response time
         this.addMessageToChatDisplay(data.response, 'ai', false, data);
+
+        // 🆕 Add smart quick actions after every AI response
+        this.addSmartQuickActions(data);
+    }
+
+    // 🆕 Smart Quick Actions System
+    addSmartQuickActions(data) {
+        const chatMessages = document.getElementById('chatMessages');
+        if (!chatMessages) return;
+
+        const quickActionDiv = document.createElement('div');
+        quickActionDiv.className = 'smart-quick-actions-container';
+
+        // Generate contextual quick actions based on query type and authentication
+        const quickActions = this.generateSmartQuickActions(data);
+
+        quickActionDiv.innerHTML = `
+            <div class="smart-quick-actions">
+                <div class="quick-actions-header">
+                    <span>💡 Quick Actions</span>
+                </div>
+                <div class="quick-actions-buttons">
+                    ${quickActions.map(action => `
+                        <button class="smart-quick-action-btn" onclick="${action.onclick}">
+                            ${action.icon} ${action.text}
+                        </button>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+
+        chatMessages.appendChild(quickActionDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    generateSmartQuickActions(data) {
+        const actions = [];
+        const queryType = data.query_type || 'general';
+
+        if (this.userAuthenticated) {
+            // Authenticated user actions
+            switch (queryType) {
+                case 'order_analytics':
+                    actions.push(
+                        { icon: '📦', text: 'Track Another Order', onclick: `customerPortal.sendCustomerMessage('Track my order')` },
+                        { icon: '📋', text: 'View Order History', onclick: `customerPortal.sendCustomerMessage('Show my order history')` },
+                        { icon: '🚚', text: 'Update Delivery Address', onclick: `customerPortal.sendCustomerMessage('Update my delivery address')` },
+                        { icon: '💳', text: 'Payment Help', onclick: `customerPortal.sendCustomerMessage('Help with payment')` }
+                    );
+                    break;
+                case 'customer_analysis':
+                    actions.push(
+                        { icon: '👤', text: 'Update Profile', onclick: `customerPortal.sendCustomerMessage('Update my profile')` },
+                        { icon: '🔒', text: 'Account Security', onclick: `customerPortal.sendCustomerMessage('Account security settings')` },
+                        { icon: '⭐', text: 'Upgrade Account', onclick: `customerPortal.sendCustomerMessage('How to upgrade my account tier')` },
+                        { icon: '💼', text: 'Account Benefits', onclick: `customerPortal.sendCustomerMessage('What are my account benefits')` }
+                    );
+                    break;
+                case 'revenue_insights':
+                    actions.push(
+                        { icon: '💳', text: 'Payment Methods', onclick: `customerPortal.sendCustomerMessage('What payment methods do you accept')` },
+                        { icon: '🔄', text: 'Refund Request', onclick: `customerPortal.sendCustomerMessage('How to request a refund')` },
+                        { icon: '📊', text: 'Spending History', onclick: `customerPortal.sendCustomerMessage('Show my spending history')` },
+                        { icon: '💰', text: 'Payment Issues', onclick: `customerPortal.sendCustomerMessage('Help with payment issues')` }
+                    );
+                    break;
+                default:
+                    actions.push(
+                        { icon: '🛍️', text: 'Browse Products', onclick: `customerPortal.sendCustomerMessage('What products do you recommend')` },
+                        { icon: '📦', text: 'Track Order', onclick: `customerPortal.sendCustomerMessage('Track my order')` },
+                        { icon: '💳', text: 'Payment Help', onclick: `customerPortal.sendCustomerMessage('Help with payment')` },
+                        { icon: '📞', text: 'Contact Support', onclick: `customerPortal.sendCustomerMessage('Contact customer support')` }
+                    );
+            }
+        } else {
+            // Guest user actions - encourage engagement and signup
+            actions.push(
+                { icon: '🔐', text: 'Login', onclick: `window.location.href='/login'` },
+                { icon: '📝', text: 'Create Account', onclick: `customerPortal.sendCustomerMessage('How do I create an account?')` },
+                { icon: '🛍️', text: 'Explore Products', onclick: `customerPortal.sendCustomerMessage('What products do you offer?')` },
+                { icon: '📍', text: 'Delivery Areas', onclick: `customerPortal.sendCustomerMessage('What areas do you deliver to?')` },
+                { icon: '💳', text: 'Payment Options', onclick: `customerPortal.sendCustomerMessage('What payment methods do you accept?')` },
+                { icon: '📞', text: 'Contact Support', onclick: `customerPortal.sendCustomerMessage('How to contact customer support')` }
+            );
+        }
+
+        return actions;
     }
 
     showTypingIndicator() {
@@ -903,6 +1378,32 @@ class CustomerSupportPortal {
         }
     }
 
+    async loadConversationMessages(conversationId) {
+        try {
+            const response = await fetch(`/api/conversations/${conversationId}/messages`);
+            const data = await response.json();
+
+            if (data.success && data.messages) {
+                // Clear current chat
+                const chatMessages = document.getElementById('chatMessages');
+                if (chatMessages) {
+                    chatMessages.innerHTML = '';
+                }
+
+                // Load all messages in chronological order
+                data.messages.forEach(msg => {
+                    const senderType = msg.sender_type === 'user' ? 'customer' : 'ai';
+                    const metadata = msg.metadata || {};
+                    this.addMessageToChatDisplay(msg.content, senderType, false, metadata);
+                });
+
+                console.log(`✅ Loaded ${data.messages.length} messages for conversation ${conversationId}`);
+            }
+        } catch (error) {
+            console.error('❌ Error loading conversation messages:', error);
+        }
+    }
+
     updateConversationList(conversations) {
         const listContainer = document.getElementById('chatHistoryList');
         if (!listContainer) return;
@@ -924,7 +1425,7 @@ class CustomerSupportPortal {
             const convElement = document.createElement('div');
             convElement.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-start conversation-item';
             convElement.setAttribute('data-conversation-id', conv.conversation_id);
-            convElement.onclick = () => switchToConversation(conv.conversation_id);
+            convElement.onclick = () => this.switchToConversation(conv.conversation_id);
 
             convElement.innerHTML = `
                 <div class="conversation-info">
@@ -936,6 +1437,114 @@ class CustomerSupportPortal {
 
             listContainer.appendChild(convElement);
         });
+    }
+
+    async switchToConversation(conversationId) {
+        try {
+            // Switch conversation on server
+            const response = await fetch(`/api/conversations/${conversationId}/switch`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                // Load conversation messages
+                await this.loadConversationMessages(conversationId);
+
+                // Update active conversation highlighting
+                document.querySelectorAll('.conversation-item').forEach(item => {
+                    item.classList.remove('active');
+                });
+                const activeItem = document.querySelector(`[data-conversation-id="${conversationId}"]`);
+                if (activeItem) {
+                    activeItem.classList.add('active');
+                }
+
+                console.log(`✅ Switched to conversation ${conversationId}`);
+            }
+        } catch (error) {
+            console.error('❌ Error switching conversation:', error);
+        }
+    }
+
+    displayWelcomeMessage() {
+        const chatMessages = document.getElementById('chatMessages');
+        if (!chatMessages) return;
+
+        // Clear any existing messages
+        chatMessages.innerHTML = '';
+
+        const welcomeHtml = `
+            <div class="message ai welcome">
+                <div class="message-avatar">AI</div>
+                <div class="message-content">
+                    <div class="message-bubble">
+                        <div class="welcome-content">
+                            ${this.userAuthenticated ?
+                                `<h6 class="mb-2">👋 Welcome back! 🌟</h6>
+                                <p class="mb-3">🎉 Great to see you again! I'm excited to help you with your orders and account today! 😊✨</p>
+                                <p class="mb-3">💙 As your personal support assistant, I can help with:</p>
+                                <ul class="list-unstyled mb-3">
+                                    <li class="mb-1">🔍 <strong>Track your orders</strong> - Real-time delivery updates</li>
+                                    <li class="mb-1">💳 <strong>Payment assistance</strong> - Billing and payment issues</li>
+                                    <li class="mb-1">🚚 <strong>Delivery management</strong> - Address changes and scheduling</li>
+                                    <li class="mb-1">👤 <strong>Account settings</strong> - Profile and preferences</li>
+                                    <li class="mb-1">🛍️ <strong>Shopping help</strong> - Product recommendations</li>
+                                </ul>
+                                <p class="mt-3 mb-0">💬 <strong>Ask me anything!</strong> I'm here to help with your personal account and orders. 🌟💝</p>` :
+                                `<h6 class="mb-2">👋 Welcome to raqibtech.com! 🌟</h6>
+                                <p class="mb-3">😊 I'm your AI customer support guide! I'm here to show you what our platform can do.</p>
+                                <p class="mb-3">🔒 <strong>For Guest Users:</strong> I can provide general information about our services, but for personalized support with your orders and account, you'll need to sign up or log in!</p>
+                                <p class="mb-3">🌟 <strong>What raqibtech.com offers:</strong></p>
+                                <ul class="list-unstyled mb-3">
+                                    <li class="mb-1">🛍️ <strong>E-commerce Platform</strong> - Shop from thousands of products</li>
+                                    <li class="mb-1">🇳🇬 <strong>Nigeria-wide Delivery</strong> - We deliver to all 36 states + FCT</li>
+                                    <li class="mb-1">💳 <strong>Flexible Payments</strong> - Pay on Delivery, Card, Bank Transfer</li>
+                                    <li class="mb-1">👤 <strong>Account Tiers</strong> - Bronze, Silver, Gold, Platinum with benefits</li>
+                                    <li class="mb-1">📞 <strong>24/7 Support</strong> - AI and human support always available</li>
+                                </ul>
+                                <p class="mb-3">🎯 <strong>Ready for personalized service?</strong> Sign up or log in to:</p>
+                                <ul class="list-unstyled mb-2">
+                                    <li class="mb-1">✅ Track your specific orders in real-time</li>
+                                    <li class="mb-1">✅ Get personalized product recommendations</li>
+                                    <li class="mb-1">✅ Manage your account and payment methods</li>
+                                    <li class="mb-1">✅ Access order history and support tickets</li>
+                                </ul>
+                                <div class="welcome-quick-start-actions">
+                                    <p class="mb-2"><strong>✨ Quick Actions:</strong></p>
+                                    <div class="welcome-quick-actions">
+                                        <a href="/login" class="welcome-quick-action-btn">🔐 Login</a>
+                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('How do I create an account?')">📝 Sign Up</button>
+                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('What services do you offer?')">💡 Learn More</button>
+                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Contact customer support')">📞 Contact Support</button>
+
+                                        <!-- 🆕 Product-related quick actions -->
+                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Browse your product catalog')">🏪 Browse Catalog</button>
+                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Show me electronics products')">📱 Electronics</button>
+                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Check prices for popular products')">💰 Check Prices</button>
+                                    </div>
+                                </div>
+                                <p class="mt-3 mb-0">💬 <strong>Ask me anything!</strong> I can guide you about our services and help you get started! 🌟</p>`
+                            }
+                        </div>
+                    </div>
+                    <div class="message-meta">
+                        <span>${new Date().toLocaleTimeString()}</span>
+                        <span class="response-time">${this.userAuthenticated ?
+                            "Your personal support assistant - always here for you!" :
+                            "Sign up for personalized support - it's free!"
+                        }</span>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        chatMessages.innerHTML = welcomeHtml;
+        chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 }
 
@@ -984,8 +1593,11 @@ async function createNewChat() {
         const data = await response.json();
 
         if (data.success) {
-            // Reload page to show new conversation
-            window.location.reload();
+            // 🔧 FIX: Use the new conversation switching instead of page reload
+            if (window.customerPortal) {
+                await window.customerPortal.switchToConversation(data.conversation_id);
+                await window.customerPortal.refreshConversationList();
+            }
         }
     } catch (error) {
         console.error('Error creating new chat:', error);
@@ -993,22 +1605,9 @@ async function createNewChat() {
 }
 
 async function switchToConversation(conversationId) {
-    try {
-        const response = await fetch(`/api/conversations/${conversationId}/switch`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-            // Reload page to show selected conversation
-            window.location.reload();
-        }
-    } catch (error) {
-        console.error('Error switching conversation:', error);
+    // 🔧 FIX: Use the portal's switchToConversation method
+    if (window.customerPortal) {
+        await window.customerPortal.switchToConversation(conversationId);
     }
 }
 
@@ -1016,6 +1615,28 @@ async function switchToConversation(conversationId) {
 document.addEventListener('DOMContentLoaded', function() {
     console.log('🚀 Initializing raqibtech.com Customer Support Portal with Session Management');
     window.customerPortal = new CustomerSupportPortal();
+
+    // 🔧 NEW: Load current conversation if user is authenticated
+    const isAuthenticated = {{ 'true' if session.get('user_authenticated') else 'false' }};
+    const currentConversationId = '{{ current_conversation_id if current_conversation_id else '' }}';
+
+    if (isAuthenticated && currentConversationId) {
+        // Load the current conversation messages
+        window.customerPortal.loadConversationMessages(currentConversationId).then(() => {
+            // Mark as active in conversation list
+            const activeItem = document.querySelector(`[data-conversation-id="${currentConversationId}"]`);
+            if (activeItem) {
+                activeItem.classList.add('active');
+            }
+            console.log(`✅ Loaded current conversation: ${currentConversationId}`);
+        }).catch(error => {
+            console.error('❌ Error loading current conversation:', error);
+        });
+    } else if (!isAuthenticated) {
+        // For guest users, show welcome message
+        window.customerPortal.displayWelcomeMessage();
+    }
+
     console.log('✅ Customer support portal ready!');
 });
 </script>
