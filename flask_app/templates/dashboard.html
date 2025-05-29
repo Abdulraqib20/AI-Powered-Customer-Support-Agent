@@ -4,406 +4,603 @@
 
 {% block content %}
 
-<!-- Customer Support Navigation -->
-<div class="row">
+<!-- ChatGPT-inspired styling with Flatly Bootswatch theme -->
+<style>
+/* Main chat container styling */
+.chat-messages {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 20px;
+    max-height: 600px;
+    overflow-y: auto;
+    border: 1px solid #e9ecef;
+}
+
+/* Message styling - ChatGPT inspired */
+.message {
+    margin-bottom: 20px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.message.customer {
+    flex-direction: row-reverse;
+}
+
+.message-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.message.ai .message-avatar {
+    background: #2c3e50;
+    color: white;
+}
+
+.message.customer .message-avatar {
+    background: #18bc9c;
+    color: white;
+}
+
+.message-content {
+    flex: 1;
+    max-width: 75%;
+}
+
+.message-bubble {
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    padding: 16px 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    font-size: 15px;
+    line-height: 1.6;
+    word-wrap: break-word;
+}
+
+.message.customer .message-bubble {
+    background: #2c3e50;
+    color: white;
+    border-color: #2c3e50;
+}
+
+.message-meta {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #6c757d;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.message.customer .message-meta {
+    flex-direction: row-reverse;
+}
+
+.response-time {
+    font-size: 10px;
+    color: #95a5a6;
+    font-style: italic;
+}
+
+/* Welcome message special styling */
+.message.welcome .message-bubble {
+    background: linear-gradient(135deg, #3498db 0%, #2c3e50 100%);
+    color: white;
+    border: none;
+}
+
+.welcome-quick-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 15px;
+}
+
+.welcome-quick-action-btn {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-size: 13px;
+    text-decoration: none;
+    transition: all 0.2s;
+    cursor: pointer;
+}
+
+.welcome-quick-action-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    color: white;
+    text-decoration: none;
+    transform: translateY(-1px);
+}
+
+/* Chat input styling */
+.chat-input-container {
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    padding: 12px;
+    margin-top: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.chat-input-container .input-group {
+    border: none;
+}
+
+.chat-input-container .form-control {
+    border: none;
+    padding: 12px 16px;
+    font-size: 15px;
+    background: transparent;
+    box-shadow: none;
+}
+
+.chat-input-container .form-control:focus {
+    border: none;
+    box-shadow: none;
+    background: transparent;
+}
+
+.chat-input-container .btn {
+    border: none;
+    padding: 12px 20px;
+    background: #18bc9c;
+    color: white;
+    border-radius: 8px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.chat-input-container .btn:hover {
+    background: #16a085;
+    transform: translateY(-1px);
+}
+
+/* Typing indicator */
+.typing-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: #f8f9fa;
+    border-radius: 12px;
+    margin-top: 8px;
+}
+
+.typing-dots {
+    display: flex;
+    gap: 4px;
+}
+
+.typing-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #95a5a6;
+    animation: typing 1.4s infinite;
+}
+
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typing {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+    30% { transform: translateY(-8px); opacity: 1; }
+}
+
+/* Sidebar styling */
+.conversation-item {
+    border-radius: 8px;
+    margin-bottom: 4px;
+    transition: all 0.2s;
+}
+
+.conversation-item:hover {
+    background-color: #f8f9fa;
+    transform: translateX(4px);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .message-content {
+        max-width: 85%;
+    }
+
+    .message-avatar {
+        width: 28px;
+        height: 28px;
+        font-size: 14px;
+    }
+
+    .message-bubble {
+        padding: 12px 16px;
+        font-size: 14px;
+    }
+}
+
+/* Remove technical details completely */
+.simple-tech-details,
+.smart-quick-actions {
+    display: none !important;
+}
+</style>
+
+<!-- Session and User Info Header -->
+<div class="row mb-3">
     <div class="col-12">
-        <!-- Support Navigation Tabs -->
-        <ul class="nav nav-tabs nav-fill" id="supportTabs" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="chat-tab" data-bs-toggle="tab" data-bs-target="#chat" type="button" role="tab">
-                    <i class="bi bi-chat-heart-fill me-2"></i>
-                    💬 Get Help Now
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="orders-tab" data-bs-toggle="tab" data-bs-target="#orders" type="button" role="tab">
-                    <i class="bi bi-box-seam me-2"></i>
-                    📦 Track My Orders
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="account-tab" data-bs-toggle="tab" data-bs-target="#account" type="button" role="tab">
-                    <i class="bi bi-person-gear me-2"></i>
-                    👤 My Account
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="contact-tab" data-bs-toggle="tab" data-bs-target="#contact" type="button" role="tab">
-                    <i class="bi bi-telephone-fill me-2"></i>
-                    📞 Contact Support
-                </button>
-            </li>
-        </ul>
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="session-info">
+                {% if session.get('user_authenticated') %}
+                    <span class="badge bg-success">
+                        <i class="bi bi-person-check-fill me-1"></i>
+                        Logged in as {{ session.get('user_email', 'User') }}
+                    </span>
+                {% else %}
+                    <span class="badge bg-secondary">
+                        <i class="bi bi-person me-1"></i>
+                        Guest Session
+                    </span>
+                {% endif %}
+            </div>
+            <div class="session-actions">
+                {% if session.get('user_authenticated') %}
+                    <a href="/logout" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-box-arrow-right me-1"></i>Logout
+                    </a>
+                {% else %}
+                    <a href="/login" class="btn btn-primary btn-sm">
+                        <i class="bi bi-box-arrow-in-right me-1"></i>Login
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
 
-        <!-- Tab Content -->
-        <div class="tab-content border border-top-0 p-4" id="supportTabContent">
+<!-- Main Chat Interface with Sidebar -->
+<div class="row">
+    <!-- Chat History Sidebar -->
+    <div class="col-lg-3 mb-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">
+                    <i class="bi bi-chat-left-text me-2"></i>Chat History
+                </h6>
+                <button class="btn btn-primary btn-sm" onclick="createNewChat()">
+                    <i class="bi bi-plus-circle me-1"></i>New
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <div id="chatHistoryList" class="list-group list-group-flush">
+                    {% for conv in conversations %}
+                    <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-start conversation-item"
+                         data-conversation-id="{{ conv.conversation_id }}"
+                         onclick="switchToConversation('{{ conv.conversation_id }}')">
+                        <div class="conversation-info">
+                            <h6 class="mb-1 conversation-title">{{ conv.conversation_title }}</h6>
+                            <small class="text-muted">{{ conv.message_count }} messages</small>
+                        </div>
+                        <small class="text-muted">{{ conv.updated_at.strftime('%m/%d %H:%M') }}</small>
+                    </div>
+                    {% endfor %}
 
-            <!-- Get Help Now Tab (Primary Chat Interface) -->
-            <div class="tab-pane fade show active" id="chat" role="tabpanel">
-                <div class="mb-4">
-                    <h4 class="mb-3">
-                        <i class="bi bi-robot text-primary me-2"></i>
-                        Chat with our AI Support Assistant
-                    </h4>
-                    <p class="text-muted mb-4">
-                        Ask me anything about your orders, payments, delivery, account, or shopping on raqibtech.com!
-                    </p>
+                    {% if not conversations %}
+                    <div class="text-center text-muted p-3">
+                        <i class="bi bi-chat-dots display-4 mb-2"></i>
+                        <p class="mb-0">No chat history yet</p>
+                        <small>Start a conversation to see it here</small>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Chat Area -->
+    <div class="col-lg-9">
+        <!-- Customer Support Navigation -->
+        <div class="card">
+            <!-- Support Navigation Tabs -->
+            <ul class="nav nav-tabs nav-fill" id="supportTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="chat-tab" data-bs-toggle="tab" data-bs-target="#chat" type="button" role="tab">
+                        <i class="bi bi-chat-heart-fill me-2"></i>
+                        💬 Get Help Now
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="orders-tab" data-bs-toggle="tab" data-bs-target="#orders" type="button" role="tab">
+                        <i class="bi bi-box-seam me-2"></i>
+                        📦 Track My Orders
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="account-tab" data-bs-toggle="tab" data-bs-target="#account" type="button" role="tab">
+                        <i class="bi bi-person-gear me-2"></i>
+                        👤 My Account
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="contact-tab" data-bs-toggle="tab" data-bs-target="#contact" type="button" role="tab">
+                        <i class="bi bi-telephone-fill me-2"></i>
+                        📞 Contact Support
+                    </button>
+                </li>
+            </ul>
+
+            <!-- Tab Content -->
+            <div class="tab-content" id="supportTabContent">
+
+                <!-- Get Help Now Tab (Primary Chat Interface) -->
+                <div class="tab-pane fade show active" id="chat" role="tabpanel">
+                    <div class="p-4">
+                        <div class="mb-4">
+                            <h4 class="mb-3">
+                                <i class="bi bi-robot text-primary me-2"></i>
+                                Chat with our AI Support Assistant
+                            </h4>
+                            <p class="text-muted mb-4">
+                                Ask me anything about your orders, payments, delivery, account, or shopping on raqibtech.com!
+                            </p>
+                        </div>
+
+                        <!-- Chat Messages Container -->
+                        <div class="chat-messages" id="chatMessages">
+                            <!-- Messages will be loaded dynamically -->
+                            <div id="loadingIndicator" class="text-center py-4">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading conversation...</span>
+                                </div>
+                                <p class="mt-2 text-muted">Loading your conversation...</p>
+                            </div>
+                        </div>
+
+                        <!-- Chat Input -->
+                        <div class="chat-input-container bg-light p-3 rounded">
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="chatInput"
+                                       placeholder="Ask me anything..."
+                                       onkeypress="handleChatKeyPress(event)">
+                                <button class="btn btn-primary" type="button" onclick="sendChatMessage()">
+                                    <i class="bi bi-send-fill me-1"></i>Send
+                                </button>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mt-2">
+                                <small class="text-muted">
+                                    <i class="bi bi-shield-check me-1"></i>Your conversations are secure and private
+                                </small>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="row">
-                    <!-- Main Chat Interface -->
-                    <div class="col-lg-8">
-                        <div class="card">
-                            <div class="chat-messages" id="chatMessages">
-                                <div class="message ai welcome">
-                                    <div class="message-header">
-                                        <div class="ai-avatar">
-                                            <i class="bi bi-robot"></i>
-                                        </div>
-                                        <strong>raqibtech.com AI Assistant</strong>
-                                        <span class="badge bg-success ms-2">Online</span>
+                <!-- Track My Orders Tab -->
+                <div class="tab-pane fade" id="orders" role="tabpanel">
+                    <div class="p-4">
+                        <div class="mb-4">
+                            <h4 class="mb-3">
+                                <i class="bi bi-box-seam text-primary me-2"></i>
+                                Track Your Orders
+                            </h4>
+                            <p class="text-muted">
+                                {% if session.get('user_authenticated') %}
+                                    Your recent orders will appear here. You can also ask the AI assistant about specific orders.
+                                {% else %}
+                                    <a href="/login" class="text-decoration-none">Login</a> to see your order history, or ask the AI assistant for help.
+                                {% endif %}
+                            </p>
+                        </div>
+
+                        <!-- Order Tracking Form -->
+                        <div class="row mb-4">
+                            <div class="col-lg-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">Quick Order Lookup</h6>
                                     </div>
-                                    <div class="message-bubble">
-                                        <div class="welcome-content">
-                                            <h6 class="mb-2">👋 Hello! Welcome to raqibtech.com support!</h6>
-                                            <p class="mb-3">I'm here to help you with:</p>
-                                            <ul class="list-unstyled mb-3">
-                                                <li class="mb-1">🔍 <strong>Order tracking</strong> - "Where is my order?"</li>
-                                                <li class="mb-1">💳 <strong>Payment help</strong> - "Payment issue with my order"</li>
-                                                <li class="mb-1">🚚 <strong>Delivery updates</strong> - "When will my order arrive?"</li>
-                                                <li class="mb-1">👤 <strong>Account questions</strong> - "Update my profile"</li>
-                                                <li class="mb-1">🛍️ <strong>Shopping help</strong> - "Product recommendations"</li>
-                                            </ul>
-                                            <div class="quick-start-actions">
-                                                <p class="mb-2"><strong>Quick Start:</strong></p>
-                                                <div class="quick-actions">
-                                                    <button class="quick-action-btn" onclick="sendQuickMessage('Track my recent order')">
-                                                        🔍 Track My Order
-                                                    </button>
-                                                    <button class="quick-action-btn" onclick="sendQuickMessage('Help with payment issue')">
-                                                        💳 Payment Help
-                                                    </button>
-                                                    <button class="quick-action-btn" onclick="sendQuickMessage('Where is my delivery?')">
-                                                        🚚 Delivery Status
-                                                    </button>
-                                                    <button class="quick-action-btn" onclick="sendQuickMessage('Update my account information')">
-                                                        👤 Account Help
-                                                    </button>
-                                                </div>
+                                    <div class="card-body">
+                                        <div class="mb-3">
+                                            <label class="form-label">Order ID</label>
+                                            <input type="text" class="form-control" id="orderIdInput"
+                                                   placeholder="Enter your order ID (e.g., 12345)">
+                                        </div>
+                                        <button class="btn btn-primary w-100" onclick="trackOrderViaChat()">
+                                            <i class="bi bi-search me-1"></i>Track My Order
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-lg-6">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="mb-3">
+                                            <i class="bi bi-info-circle text-info me-1"></i>
+                                            Order Status Guide
+                                        </h6>
+                                        <ul class="list-unstyled small">
+                                            <li class="mb-1">
+                                                <span class="badge bg-warning me-2">Pending</span>
+                                                Order received, being prepared
+                                            </li>
+                                            <li class="mb-1">
+                                                <span class="badge bg-info me-2">Processing</span>
+                                                Order being processed for delivery
+                                            </li>
+                                            <li class="mb-1">
+                                                <span class="badge bg-success me-2">Delivered</span>
+                                                Order delivered successfully
+                                            </li>
+                                            <li class="mb-1">
+                                                <span class="badge bg-secondary me-2">Returned</span>
+                                                Order was returned
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- My Account Tab -->
+                <div class="tab-pane fade" id="account" role="tabpanel">
+                    <div class="p-4">
+                        <div class="mb-4">
+                            <h4 class="mb-3">
+                                <i class="bi bi-person-gear text-warning me-2"></i>
+                                My Account & Profile
+                            </h4>
+                            {% if session.get('user_authenticated') %}
+                                <p class="text-muted">
+                                    Manage your account information and preferences.
+                                </p>
+                            {% else %}
+                                <p class="text-muted">
+                                    <a href="/login" class="text-decoration-none">Login</a> to access your account settings and order history.
+                                </p>
+                            {% endif %}
+                        </div>
+
+                        <div class="row">
+                            <!-- Account Actions -->
+                            <div class="col-lg-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">Account Services</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="d-grid gap-2">
+                                            <button class="btn btn-outline-primary" onclick="sendQuickMessage('Update my profile information')">
+                                                <i class="bi bi-person-fill-gear me-2"></i>Update Profile Information
+                                            </button>
+                                            <button class="btn btn-outline-success" onclick="sendQuickMessage('Change my delivery address')">
+                                                <i class="bi bi-geo-alt-fill me-2"></i>Update Delivery Address
+                                            </button>
+                                            <button class="btn btn-outline-warning" onclick="sendQuickMessage('Check my account tier and benefits')">
+                                                <i class="bi bi-star-fill me-2"></i>View Account Tier & Benefits
+                                            </button>
+                                            <button class="btn btn-outline-info" onclick="sendQuickMessage('Update my payment methods')">
+                                                <i class="bi bi-credit-card-fill me-2"></i>Manage Payment Methods
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Account Benefits -->
+                            <div class="col-lg-6">
+                                <div class="card">
+                                    <div class="card-header bg-success text-white">
+                                        <h6 class="mb-0">Account Tiers & Benefits</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="tier-info">
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <span class="badge bg-secondary">Bronze</span>
+                                                <small>Standard benefits</small>
+                                            </div>
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <span class="badge bg-primary">Silver</span>
+                                                <small>5% discount + priority support</small>
+                                            </div>
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <span class="badge bg-warning">Gold</span>
+                                                <small>10% discount + free delivery</small>
+                                            </div>
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <span class="badge bg-info">Platinum</span>
+                                                <small>15% discount + premium perks</small>
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="message-timestamp">
-                                        <i class="bi bi-clock me-1"></i>Support available 24/7
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="card-footer bg-light">
-                                <div class="input-group">
-                                    <input type="text" class="form-control" id="chatInput"
-                                           placeholder="Ask me anything..."
-                                           onkeypress="handleChatKeyPress(event)">
-                                    <button class="btn btn-primary" type="button" onclick="sendChatMessage()">
-                                        <i class="bi bi-send-fill me-1"></i>Send
-                                    </button>
-                                </div>
-                                <div class="d-flex justify-content-between align-items-center mt-2">
-                                    <small class="text-muted">
-                                        <i class="bi bi-shield-check me-1"></i>Your conversations are secure and private
-                                    </small>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="showTechnicalDetails">
-                                        <label class="form-check-label" for="showTechnicalDetails">
-                                            <small class="text-muted">Show technical details</small>
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Customer Help Sidebar -->
-                    <div class="col-lg-4">
-                        <!-- Quick Help Categories -->
-                        <div class="card mb-3">
-                            <div class="card-header bg-primary text-white">
-                                <h6 class="mb-0">
-                                    <i class="bi bi-lightning-fill me-1"></i>
-                                    Common Questions
-                                </h6>
-                            </div>
-                            <div class="card-body">
-                                <div class="d-grid gap-2">
-                                    <button class="btn btn-outline-primary btn-sm category-btn" data-category="order_tracking">
-                                        <i class="bi bi-box-seam me-1"></i> Order & Delivery Questions
-                                    </button>
-                                    <button class="btn btn-outline-success btn-sm category-btn" data-category="payments">
-                                        <i class="bi bi-credit-card me-1"></i> Payment & Billing Help
-                                    </button>
-                                    <button class="btn btn-outline-warning btn-sm category-btn" data-category="account">
-                                        <i class="bi bi-person-gear me-1"></i> Account & Profile
-                                    </button>
-                                    <button class="btn btn-outline-info btn-sm category-btn" data-category="shopping">
-                                        <i class="bi bi-bag-heart me-1"></i> Shopping & Products
-                                    </button>
-                                </div>
-
-                                <!-- Suggested Questions -->
-                                <div id="suggestedQuestions" class="mt-3" style="display: none;">
-                                    <small class="text-muted"><strong>Try asking:</strong></small>
-                                    <div id="questionsContainer" class="mt-2"></div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Support Status -->
-                        <div class="card">
-                            <div class="card-header bg-info text-white">
-                                <h6 class="mb-0">
-                                    <i class="bi bi-headset me-1"></i>
-                                    Support Status
-                                </h6>
-                            </div>
-                            <div class="card-body">
-                                <div class="support-status-info">
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>AI Assistant</span>
-                                        <span class="badge bg-success">Online 24/7</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span>Live Chat</span>
-                                        <span class="badge bg-success">Available</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between mb-3">
-                                        <span>Phone Support</span>
-                                        <span class="badge bg-primary">8AM-8PM WAT</span>
-                                    </div>
-
-                                    <div class="current-time">
-                                        <small class="text-muted">
-                                            <i class="bi bi-clock me-1"></i>
-                                            Nigeria Time: <span class="nigerian-time">--:-- WAT</span>
-                                        </small>
-                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Track My Orders Tab -->
-            <div class="tab-pane fade" id="orders" role="tabpanel">
-                <div class="mb-4">
-                    <h4 class="mb-3">
-                        <i class="bi bi-box-seam text-primary me-2"></i>
-                        Track Your Orders
-                    </h4>
-                    <p class="text-muted">
-                        Enter your order ID or email to track your recent orders and delivery status.
-                    </p>
-                </div>
-
-                <!-- Order Tracking Form -->
-                <div class="row mb-4">
-                    <div class="col-lg-6">
-                        <div class="card">
-                            <div class="card-header">
-                                <h6 class="mb-0">Quick Order Lookup</h6>
-                            </div>
-                            <div class="card-body">
-                                <div class="mb-3">
-                                    <label class="form-label">Order ID</label>
-                                    <input type="text" class="form-control" id="orderIdInput"
-                                           placeholder="Enter your order ID (e.g., 12345)">
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">Email (Optional)</label>
-                                    <input type="email" class="form-control" id="emailInput"
-                                           placeholder="Your email address">
-                                </div>
-                                <button class="btn btn-primary w-100" onclick="trackCustomerOrder()">
-                                    <i class="bi bi-search me-1"></i>Track My Order
-                                </button>
-                            </div>
+                <!-- Contact Support Tab -->
+                <div class="tab-pane fade" id="contact" role="tabpanel">
+                    <div class="p-4">
+                        <div class="mb-4">
+                            <h4 class="mb-3">
+                                <i class="bi bi-telephone-fill text-danger me-2"></i>
+                                Contact raqibtech.com Support
+                            </h4>
+                            <p class="text-muted">
+                                Multiple ways to reach our support team across Nigeria.
+                            </p>
                         </div>
-                    </div>
-                    <div class="col-lg-6">
-                        <div class="card bg-light">
-                            <div class="card-body">
-                                <h6 class="mb-3">
-                                    <i class="bi bi-info-circle text-info me-1"></i>
-                                    Order Status Guide
-                                </h6>
-                                <ul class="list-unstyled small">
-                                    <li class="mb-1">
-                                        <span class="badge bg-warning me-2">Pending</span>
-                                        Order received, being prepared
-                                    </li>
-                                    <li class="mb-1">
-                                        <span class="badge bg-info me-2">Processing</span>
-                                        Order being processed for delivery
-                                    </li>
-                                    <li class="mb-1">
-                                        <span class="badge bg-success me-2">Delivered</span>
-                                        Order delivered successfully
-                                    </li>
-                                    <li class="mb-1">
-                                        <span class="badge bg-secondary me-2">Returned</span>
-                                        Order was returned
-                                    </li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                </div>
 
-                <!-- Recent Orders Display -->
-                <div id="customerOrdersDisplay">
-                    <div class="text-center text-muted py-5">
-                        <i class="bi bi-box display-1 mb-3"></i>
-                        <p>Enter your order details above to track your orders</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- My Account Tab -->
-            <div class="tab-pane fade" id="account" role="tabpanel">
-                <div class="mb-4">
-                    <h4 class="mb-3">
-                        <i class="bi bi-person-gear text-warning me-2"></i>
-                        My Account & Profile
-                    </h4>
-                    <p class="text-muted">
-                        Manage your account information, delivery addresses, and preferences.
-                    </p>
-                </div>
-
-                <div class="row">
-                    <!-- Account Actions -->
-                    <div class="col-lg-6">
-                        <div class="card">
-                            <div class="card-header">
-                                <h6 class="mb-0">Account Services</h6>
-                            </div>
-                            <div class="card-body">
-                                <div class="d-grid gap-2">
-                                    <button class="btn btn-outline-primary" onclick="sendQuickMessage('Update my profile information')">
-                                        <i class="bi bi-person-fill-gear me-2"></i>Update Profile Information
-                                    </button>
-                                    <button class="btn btn-outline-success" onclick="sendQuickMessage('Change my delivery address')">
-                                        <i class="bi bi-geo-alt-fill me-2"></i>Update Delivery Address
-                                    </button>
-                                    <button class="btn btn-outline-warning" onclick="sendQuickMessage('Check my account tier and benefits')">
-                                        <i class="bi bi-star-fill me-2"></i>View Account Tier & Benefits
-                                    </button>
-                                    <button class="btn btn-outline-info" onclick="sendQuickMessage('Update my payment methods')">
-                                        <i class="bi bi-credit-card-fill me-2"></i>Manage Payment Methods
-                                    </button>
+                        <div class="row">
+                            <!-- Contact Methods -->
+                            <div class="col-lg-4 mb-3">
+                                <div class="card h-100 text-center">
+                                    <div class="card-body">
+                                        <i class="bi bi-telephone-fill text-success display-4 mb-3"></i>
+                                        <h6>Phone Support</h6>
+                                        <p class="text-muted small">Speak with our support team</p>
+                                        <strong class="text-success">+234 (702) 5965-922 (72242)</strong>
+                                        <p class="small mt-2">Daily 8AM - 8PM (WAT)</p>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
 
-                    <!-- Account Benefits -->
-                    <div class="col-lg-6">
-                        <div class="card">
-                            <div class="card-header bg-success text-white">
-                                <h6 class="mb-0">Account Tiers & Benefits</h6>
+                            <div class="col-lg-4 mb-3">
+                                <div class="card h-100 text-center">
+                                    <div class="card-body">
+                                        <i class="bi bi-envelope-fill text-primary display-4 mb-3"></i>
+                                        <h6>Email Support</h6>
+                                        <p class="text-muted small">Send us your questions</p>
+                                        <strong class="text-primary">support@raqibtech.com</strong>
+                                        <p class="small mt-2">Response within 24 hours</p>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="card-body">
-                                <div class="tier-info">
-                                    <div class="d-flex justify-content-between align-items-center mb-2">
-                                        <span class="badge bg-secondary">Bronze</span>
-                                        <small>Standard benefits</small>
-                                    </div>
-                                    <div class="d-flex justify-content-between align-items-center mb-2">
-                                        <span class="badge bg-primary">Silver</span>
-                                        <small>5% discount + priority support</small>
-                                    </div>
-                                    <div class="d-flex justify-content-between align-items-center mb-2">
-                                        <span class="badge bg-warning">Gold</span>
-                                        <small>10% discount + free delivery</small>
-                                    </div>
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <span class="badge bg-info">Platinum</span>
-                                        <small>15% discount + premium perks</small>
+
+                            <div class="col-lg-4 mb-3">
+                                <div class="card h-100 text-center">
+                                    <div class="card-body">
+                                        <i class="bi bi-chat-heart-fill text-danger display-4 mb-3"></i>
+                                        <h6>Live AI Chat</h6>
+                                        <p class="text-muted small">Instant help available</p>
+                                        <strong class="text-danger">Available 24/7</strong>
+                                        <p class="small mt-2">
+                                            <button class="btn btn-sm btn-outline-danger" onclick="document.getElementById('chat-tab').click()">
+                                                Start Chat Now
+                                            </button>
+                                        </p>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                </div>
-            </div>
 
-            <!-- Contact Support Tab -->
-            <div class="tab-pane fade" id="contact" role="tabpanel">
-                <div class="mb-4">
-                    <h4 class="mb-3">
-                        <i class="bi bi-telephone-fill text-danger me-2"></i>
-                        Contact raqibtech.com Support
-                    </h4>
-                    <p class="text-muted">
-                        Multiple ways to reach our support team across Nigeria.
-                    </p>
-                </div>
-
-                <div class="row">
-                    <!-- Contact Methods -->
-                    <div class="col-lg-4 mb-3">
-                        <div class="card h-100 text-center">
-                            <div class="card-body">
-                                <i class="bi bi-telephone-fill text-success display-4 mb-3"></i>
-                                <h6>Phone Support</h6>
-                                <p class="text-muted small">Speak with our support team</p>
-                                <strong class="text-success">+234 800 RAQIB (72242)</strong>
-                                <p class="small mt-2">Daily 8AM - 8PM (WAT)</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-lg-4 mb-3">
-                        <div class="card h-100 text-center">
-                            <div class="card-body">
-                                <i class="bi bi-envelope-fill text-primary display-4 mb-3"></i>
-                                <h6>Email Support</h6>
-                                <p class="text-muted small">Send us your questions</p>
-                                <strong class="text-primary">support@raqibtech.com</strong>
-                                <p class="small mt-2">Response within 24 hours</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-lg-4 mb-3">
-                        <div class="card h-100 text-center">
-                            <div class="card-body">
-                                <i class="bi bi-chat-heart-fill text-danger display-4 mb-3"></i>
-                                <h6>Live AI Chat</h6>
-                                <p class="text-muted small">Instant help available</p>
-                                <strong class="text-danger">Available 24/7</strong>
-                                <p class="small mt-2">
-                                    <button class="btn btn-sm btn-outline-danger" onclick="document.getElementById('chat-tab').click()">
-                                        Start Chat Now
-                                    </button>
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Nigerian Coverage -->
-                <div class="row mt-4">
-                    <div class="col-12">
-                        <div class="card bg-success text-white">
-                            <div class="card-body">
-                                <h6 class="mb-3">
-                                    <i class="bi bi-geo-alt-fill me-2"></i>
-                                    🇳🇬 Nationwide Coverage in Nigeria
-                                </h6>
-                                <p class="mb-0">
-                                    We deliver to all 36 Nigerian states + FCT with dedicated support for your region.
-                                    Payment options include Pay on Delivery, Bank Transfer, Card, and RaqibTechPay.
-                                </p>
+                        <!-- Nigerian Coverage -->
+                        <div class="row mt-4">
+                            <div class="col-12">
+                                <div class="card bg-success text-white">
+                                    <div class="card-body">
+                                        <h6 class="mb-3">
+                                            <i class="bi bi-geo-alt-fill me-2"></i>
+                                            🇳🇬 Nationwide Coverage in Nigeria
+                                        </h6>
+                                        <p class="mb-0">
+                                            We deliver to all 36 Nigerian states + FCT with dedicated support for your region.
+                                            Payment options include Pay on Delivery, Bank Transfer, Card, and RaqibTechPay.
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -413,23 +610,25 @@
     </div>
 </div>
 
-<!-- Customer Support JavaScript -->
+<!-- Hidden data for JavaScript -->
 <script>
-// Customer-focused support system
+window.currentConversationId = {% if current_conversation_id %}'{{ current_conversation_id }}'{% else %}null{% endif %};
+window.userAuthenticated = {{ 'true' if session.get('user_authenticated') else 'false' }};
+</script>
+
+<!-- Enhanced Customer Support JavaScript with Session Management -->
+<script>
+// Customer-focused support system with session and chat history
 class CustomerSupportPortal {
     constructor() {
-        console.log('🛍️ Initializing raqibtech.com Customer Support Portal...');
+        console.log('🛍️ Initializing raqibtech.com Customer Support Portal with Session Management...');
+        this.currentConversationId = window.currentConversationId;
+        this.userAuthenticated = window.userAuthenticated;
         this.initializeCustomerFeatures();
+        this.loadCurrentConversation();
     }
 
     initializeCustomerFeatures() {
-        // Category help buttons
-        document.querySelectorAll('.category-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                this.showCategoryQuestions(e.target.dataset.category);
-            });
-        });
-
         // Focus chat input when page loads
         setTimeout(() => {
             const chatInput = document.getElementById('chatInput');
@@ -437,6 +636,118 @@ class CustomerSupportPortal {
                 chatInput.focus();
             }
         }, 1000);
+    }
+
+    async loadCurrentConversation() {
+        if (!this.currentConversationId) {
+            this.showWelcomeMessage();
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/conversations/${this.currentConversationId}/messages`);
+            const data = await response.json();
+
+            if (data.success && data.messages.length > 0) {
+                this.displayConversationHistory(data.messages);
+            } else {
+                this.showWelcomeMessage();
+            }
+        } catch (error) {
+            console.error('Error loading conversation:', error);
+            this.showWelcomeMessage();
+        }
+    }
+
+    displayConversationHistory(messages) {
+        const chatMessages = document.getElementById('chatMessages');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+
+        if (loadingIndicator) {
+            loadingIndicator.remove();
+        }
+
+        chatMessages.innerHTML = '';
+
+        messages.forEach(message => {
+            this.addMessageToChatDisplay(message.content, message.sender_type, false, message.metadata || {});
+        });
+
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    showWelcomeMessage() {
+        const chatMessages = document.getElementById('chatMessages');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+
+        if (loadingIndicator) {
+            loadingIndicator.remove();
+        }
+
+        const welcomeMessage = this.createWelcomeMessage();
+        chatMessages.innerHTML = welcomeMessage;
+    }
+
+    createWelcomeMessage() {
+        return `
+            <div class="message ai welcome">
+                <div class="message-avatar">AI</div>
+                <div class="message-content">
+                    <div class="message-bubble">
+                        <div class="welcome-content">
+                            ${this.userAuthenticated ?
+                                `<h6 class="mb-2">👋 Welcome back! 🌟</h6>
+                                <p class="mb-3">🎉 Great to see you again! I'm excited to help you with your orders and account today! 😊✨</p>
+                                <p class="mb-3">💙 As your personal support assistant, I can help with:</p>
+                                <ul class="list-unstyled mb-3">
+                                    <li class="mb-1">🔍 <strong>Track your orders</strong> - Real-time delivery updates</li>
+                                    <li class="mb-1">💳 <strong>Payment assistance</strong> - Billing and payment issues</li>
+                                    <li class="mb-1">🚚 <strong>Delivery management</strong> - Address changes and scheduling</li>
+                                    <li class="mb-1">👤 <strong>Account settings</strong> - Profile and preferences</li>
+                                    <li class="mb-1">🛍️ <strong>Shopping help</strong> - Product recommendations</li>
+                                </ul>
+                                <p class="mt-3 mb-0">💬 <strong>Ask me anything!</strong> I'm here to help with your personal account and orders. 🌟💝</p>` :
+                                `<h6 class="mb-2">👋 Welcome to raqibtech.com! 🌟</h6>
+                                <p class="mb-3">😊 I'm your AI customer support guide! I'm here to show you what our platform can do.</p>
+                                <p class="mb-3">🔒 <strong>For Guest Users:</strong> I can provide general information about our services, but for personalized support with your orders and account, you'll need to sign up or log in!</p>
+                                <p class="mb-3">🌟 <strong>What raqibtech.com offers:</strong></p>
+                                <ul class="list-unstyled mb-3">
+                                    <li class="mb-1">🛍️ <strong>E-commerce Platform</strong> - Shop from thousands of products</li>
+                                    <li class="mb-1">🇳🇬 <strong>Nigeria-wide Delivery</strong> - We deliver to all 36 states + FCT</li>
+                                    <li class="mb-1">💳 <strong>Flexible Payments</strong> - Pay on Delivery, Card, Bank Transfer</li>
+                                    <li class="mb-1">👤 <strong>Account Tiers</strong> - Bronze, Silver, Gold, Platinum with benefits</li>
+                                    <li class="mb-1">📞 <strong>24/7 Support</strong> - AI and human support always available</li>
+                                </ul>
+                                <p class="mb-3">🎯 <strong>Ready for personalized service?</strong> Sign up or log in to:</p>
+                                <ul class="list-unstyled mb-2">
+                                    <li class="mb-1">✅ Track your specific orders in real-time</li>
+                                    <li class="mb-1">✅ Get personalized product recommendations</li>
+                                    <li class="mb-1">✅ Manage your account and payment methods</li>
+                                    <li class="mb-1">✅ Access order history and support tickets</li>
+                                </ul>
+                                <div class="welcome-quick-start-actions">
+                                    <p class="mb-2"><strong>✨ Quick Actions:</strong></p>
+                                    <div class="welcome-quick-actions">
+                                        <a href="/login" class="welcome-quick-action-btn">🔐 Login</a>
+                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('How do I create an account?')">📝 Sign Up</button>
+                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('What services do you offer?')">💡 Learn More</button>
+                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Contact customer support')">📞 Contact Support</button>
+                                    </div>
+                                </div>
+                                <p class="mt-3 mb-0">💬 <strong>Ask me anything!</strong> I can guide you about our services and help you get started! 🌟</p>`
+                            }
+                        </div>
+                    </div>
+                    <div class="message-meta">
+                        <span>${new Date().toLocaleTimeString()}</span>
+                        <span class="response-time">${this.userAuthenticated ?
+                            "Your personal support assistant - always here for you!" :
+                            "Sign up for personalized support - it's free!"
+                        }</span>
+                    </div>
+                </div>
+            </div>
+        `;
     }
 
     async sendCustomerMessage(message = null) {
@@ -450,7 +761,7 @@ class CustomerSupportPortal {
         if (!message) chatInput.value = '';
 
         // Add user message to chat
-        this.addMessageToChat(userMessage, 'customer');
+        this.addMessageToChatDisplay(userMessage, 'customer');
 
         // Show typing indicator
         this.showTypingIndicator();
@@ -463,8 +774,7 @@ class CustomerSupportPortal {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    query: userMessage,
-                    include_sql: document.getElementById('showTechnicalDetails')?.checked || false
+                    query: userMessage
                 })
             });
 
@@ -477,18 +787,20 @@ class CustomerSupportPortal {
 
             if (data.success) {
                 this.addCustomerResponseToChat(data);
+                // Refresh conversation list
+                this.refreshConversationList();
             } else {
-                this.addMessageToChat(data.message || 'Sorry, I encountered an issue. Please try again.', 'ai', true);
+                this.addMessageToChatDisplay(data.message || 'Sorry, I encountered an issue. Please try again.', 'ai', true);
             }
 
         } catch (error) {
             this.removeTypingIndicator();
             console.error('❌ Customer chat error:', error);
-            this.addMessageToChat('I apologize, but I\'m experiencing technical difficulties. Please try again or contact our phone support at +234 800 RAQIB.', 'ai', true);
+            this.addMessageToChatDisplay('I apologize, but I\'m experiencing technical difficulties. Please try again or contact our phone support at +234 (702) 5965-922.', 'ai', true);
         }
     }
 
-    addMessageToChat(message, sender, isError = false) {
+    addMessageToChatDisplay(message, sender, isError = false, metadata = {}) {
         const chatMessages = document.getElementById('chatMessages');
         if (!chatMessages) return;
 
@@ -500,173 +812,50 @@ class CustomerSupportPortal {
         }
 
         const timestamp = new Date().toLocaleTimeString();
-        const senderName = sender === 'customer' ? 'You' : 'raqibtech.com Assistant';
+
+        // Create avatar
+        const avatar = document.createElement('div');
+        avatar.className = 'message-avatar';
+        avatar.innerHTML = sender === 'customer' ? 'U' : 'AI';
+
+        // Create message content container
+        const messageContent = document.createElement('div');
+        messageContent.className = 'message-content';
+
+        // Create message bubble
+        const messageBubble = document.createElement('div');
+        messageBubble.className = 'message-bubble';
+        messageBubble.innerHTML = message;
+
+        // Create message meta (timestamp and response time for AI)
+        const messageMeta = document.createElement('div');
+        messageMeta.className = 'message-meta';
 
         if (sender === 'customer') {
-            messageDiv.innerHTML = `
-                <div class="message-header">
-                    <strong>${senderName}</strong>
-                </div>
-                <div class="message-bubble">
-                    ${message}
-                </div>
-                <div class="message-timestamp">${timestamp}</div>
-            `;
+            messageMeta.innerHTML = `<span>${timestamp}</span>`;
         } else {
-            messageDiv.innerHTML = `
-                <div class="message-header">
-                    <div class="ai-avatar">
-                        <i class="bi bi-robot"></i>
-                    </div>
-                    <strong>${senderName}</strong>
-                </div>
-                <div class="message-bubble">
-                    ${message}
-                </div>
-                <div class="message-timestamp">${timestamp}</div>
+            // For AI messages, include response time if available
+            const responseTime = metadata.execution_time || '';
+            messageMeta.innerHTML = `
+                <span>${timestamp}</span>
+                ${responseTime ? `<span class="response-time">⚡ ${responseTime}</span>` : ''}
             `;
         }
+
+        // Assemble message
+        messageContent.appendChild(messageBubble);
+        messageContent.appendChild(messageMeta);
+
+        messageDiv.appendChild(avatar);
+        messageDiv.appendChild(messageContent);
 
         chatMessages.appendChild(messageDiv);
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
     addCustomerResponseToChat(data) {
-        const chatMessages = document.getElementById('chatMessages');
-        if (!chatMessages) return;
-
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'message ai customer-response';
-
-        const timestamp = new Date().toLocaleTimeString();
-
-        let messageContent = `
-            <div class="message-header">
-                <div class="ai-avatar">
-                    <i class="bi bi-robot"></i>
-                </div>
-                <strong>raqibtech.com Assistant</strong>
-            </div>
-            <div class="message-bubble">
-                <div class="message-content mb-2">${data.response}</div>
-        `;
-
-        // Add helpful follow-up actions for customers
-        if (data.query_type) {
-            const followUpActions = this.getCustomerFollowUpActions(data.query_type);
-            if (followUpActions.length > 0) {
-                messageContent += `
-                    <div class="follow-up-actions mt-2">
-                        <small class="text-muted d-block mb-2">What else can I help you with?</small>
-                        <div class="quick-actions">
-                            ${followUpActions.map(action =>
-                                `<button class="quick-action-btn" onclick="customerPortal.sendCustomerMessage('${action}')">${action}</button>`
-                            ).join('')}
-                        </div>
-                    </div>
-                `;
-            }
-        }
-
-        // Show technical details if requested
-        if (document.getElementById('showTechnicalDetails')?.checked && data.sql_query) {
-            messageContent += `
-                <details class="mt-2">
-                    <summary class="small text-muted">Technical Details</summary>
-                    <div class="technical-info small mt-1 p-2 rounded">
-                        <strong>Query Type:</strong> ${data.query_type || 'N/A'}<br>
-                        <strong>Results:</strong> ${data.results_count || 0} records<br>
-                        <strong>Processing Time:</strong> ${data.execution_time || 'N/A'}
-                    </div>
-                </details>
-            `;
-        }
-
-        messageContent += `
-            </div>
-            <div class="message-timestamp">
-                <i class="bi bi-clock me-1"></i>${timestamp}
-            </div>
-        `;
-
-        messageDiv.innerHTML = messageContent;
-        chatMessages.appendChild(messageDiv);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-
-    getCustomerFollowUpActions(queryType) {
-        const actions = {
-            'order_analytics': [
-                'Update my delivery address',
-                'Check payment status',
-                'Cancel an order'
-            ],
-            'customer_analysis': [
-                'Update my profile',
-                'Change password',
-                'View account benefits'
-            ],
-            'revenue_insights': [
-                'Check my spending',
-                'View payment history',
-                'Update payment method'
-            ]
-        };
-
-        return actions[queryType] || [
-            'Track another order',
-            'Update my account',
-            'Contact phone support'
-        ];
-    }
-
-    showCategoryQuestions(category) {
-        const questions = {
-            'order_tracking': [
-                'Track my order #12345',
-                'Where is my delivery?',
-                'Change delivery address',
-                'Cancel my order'
-            ],
-            'payments': [
-                'Payment issue with my order',
-                'Update my payment method',
-                'Refund request',
-                'Payment options available'
-            ],
-            'account': [
-                'Update my profile information',
-                'Change my password',
-                'Check my account tier',
-                'Update delivery address'
-            ],
-            'shopping': [
-                'Product recommendations',
-                'Return policy',
-                'Delivery charges',
-                'Product availability'
-            ]
-        };
-
-        const container = document.getElementById('questionsContainer');
-        const questionsDiv = document.getElementById('suggestedQuestions');
-
-        if (container && questionsDiv) {
-            container.innerHTML = '';
-
-            questions[category].forEach(question => {
-                const btn = document.createElement('button');
-                btn.className = 'btn btn-sm btn-outline-secondary me-1 mb-1';
-                btn.textContent = question;
-                btn.onclick = () => {
-                    this.sendCustomerMessage(question);
-                    questionsDiv.style.display = 'none';
-                };
-                container.appendChild(btn);
-            });
-
-            questionsDiv.style.display = 'block';
-        }
+        // Create main response message with response time
+        this.addMessageToChatDisplay(data.response, 'ai', false, data);
     }
 
     showTypingIndicator() {
@@ -677,15 +866,15 @@ class CustomerSupportPortal {
         typingDiv.className = 'message ai typing';
         typingDiv.id = 'typingIndicator';
         typingDiv.innerHTML = `
-            <div class="message-header">
-                <div class="ai-avatar">
-                    <i class="bi bi-robot"></i>
-                </div>
-                <strong>raqibtech.com Assistant</strong>
-            </div>
-            <div class="message-bubble">
-                <div class="typing-animation">
-                    <span></span><span></span><span></span>
+            <div class="message-avatar">AI</div>
+            <div class="message-content">
+                <div class="typing-indicator">
+                    <span style="color: #6c757d; font-size: 14px;">raqibtech.com Assistant is typing</span>
+                    <div class="typing-dots">
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                    </div>
                 </div>
             </div>
         `;
@@ -701,23 +890,52 @@ class CustomerSupportPortal {
         }
     }
 
-    async trackCustomerOrder() {
-        const orderIdInput = document.getElementById('orderIdInput');
-        const emailInput = document.getElementById('emailInput');
+    async refreshConversationList() {
+        try {
+            const response = await fetch('/api/conversations');
+            const data = await response.json();
 
-        const orderId = orderIdInput?.value.trim();
+            if (data.success) {
+                this.updateConversationList(data.conversations);
+            }
+        } catch (error) {
+            console.error('Error refreshing conversation list:', error);
+        }
+    }
 
-        if (!orderId) {
-            alert('Please enter your order ID');
+    updateConversationList(conversations) {
+        const listContainer = document.getElementById('chatHistoryList');
+        if (!listContainer) return;
+
+        listContainer.innerHTML = '';
+
+        if (conversations.length === 0) {
+            listContainer.innerHTML = `
+                <div class="text-center text-muted p-3">
+                    <i class="bi bi-chat-dots display-4 mb-2"></i>
+                    <p class="mb-0">No chat history yet</p>
+                    <small>Start a conversation to see it here</small>
+                </div>
+            `;
             return;
         }
 
-        // Use the chat system to track the order
-        const query = `Track my order ${orderId}`;
-        this.sendCustomerMessage(query);
+        conversations.forEach(conv => {
+            const convElement = document.createElement('div');
+            convElement.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-start conversation-item';
+            convElement.setAttribute('data-conversation-id', conv.conversation_id);
+            convElement.onclick = () => switchToConversation(conv.conversation_id);
 
-        // Switch to chat tab to show results
-        document.getElementById('chat-tab').click();
+            convElement.innerHTML = `
+                <div class="conversation-info">
+                    <h6 class="mb-1 conversation-title">${conv.title}</h6>
+                    <small class="text-muted">${conv.message_count} messages</small>
+                </div>
+                <small class="text-muted">${new Date(conv.updated_at).toLocaleDateString()}</small>
+            `;
+
+            listContainer.appendChild(convElement);
+        });
     }
 }
 
@@ -734,9 +952,17 @@ function sendQuickMessage(message) {
     }
 }
 
-function trackCustomerOrder() {
-    if (window.customerPortal) {
-        window.customerPortal.trackCustomerOrder();
+function trackOrderViaChat() {
+    const orderIdInput = document.getElementById('orderIdInput');
+    const orderId = orderIdInput?.value.trim();
+
+    if (orderId) {
+        sendQuickMessage(`Track my order ${orderId}`);
+        // Switch to chat tab
+        document.getElementById('chat-tab').click();
+    } else {
+        sendQuickMessage('Help me track my order');
+        document.getElementById('chat-tab').click();
     }
 }
 
@@ -746,9 +972,49 @@ function handleChatKeyPress(event) {
     }
 }
 
+async function createNewChat() {
+    try {
+        const response = await fetch('/api/conversations/new', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            // Reload page to show new conversation
+            window.location.reload();
+        }
+    } catch (error) {
+        console.error('Error creating new chat:', error);
+    }
+}
+
+async function switchToConversation(conversationId) {
+    try {
+        const response = await fetch(`/api/conversations/${conversationId}/switch`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            // Reload page to show selected conversation
+            window.location.reload();
+        }
+    } catch (error) {
+        console.error('Error switching conversation:', error);
+    }
+}
+
 // Initialize customer portal when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 Initializing raqibtech.com Customer Support Portal');
+    console.log('🚀 Initializing raqibtech.com Customer Support Portal with Session Management');
     window.customerPortal = new CustomerSupportPortal();
     console.log('✅ Customer support portal ready!');
 });

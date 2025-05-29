@@ -189,6 +189,11 @@ class CustomerRepository:
         query = "SELECT * FROM customer_distribution_view"
         return self.db.execute_query(query)
 
+    def get_all_customers(self, limit: int = 100) -> List[Dict]:
+        """Get all customers with optional limit"""
+        query = "SELECT * FROM customers ORDER BY created_at DESC LIMIT %s"
+        return self.db.execute_query(query, (limit,))
+
 class OrderRepository:
     """Repository for order-related database operations"""
 
@@ -236,21 +241,26 @@ class OrderRepository:
         return self.db.execute_query(query)
 
     def get_revenue_by_state(self, start_date: date = None, end_date: date = None) -> List[Dict]:
-        """Get revenue by state within date range"""
-        base_query = """
-        SELECT c.state, SUM(o.total_amount) as total_revenue, COUNT(o.order_id) as order_count
-        FROM orders o
-        JOIN customers c ON o.customer_id = c.customer_id
-        """
-
+        """Get revenue by state for a date range"""
         if start_date and end_date:
-            query = base_query + " WHERE o.created_at::date BETWEEN %s AND %s GROUP BY c.state ORDER BY total_revenue DESC"
+            query = """
+            SELECT o.customer_state as state, SUM(o.total_amount) as total_revenue, COUNT(*) as order_count
+            FROM orders o
+            WHERE o.created_at BETWEEN %s AND %s
+            GROUP BY o.customer_state
+            ORDER BY total_revenue DESC
+            """
             params = (start_date, end_date)
         else:
-            query = base_query + " GROUP BY c.state ORDER BY total_revenue DESC"
+            query = "SELECT * FROM revenue_by_state_view"
             params = ()
 
         return self.db.execute_query(query, params)
+
+    def get_recent_orders(self, limit: int = 10) -> List[Dict]:
+        """Get recent orders with optional limit"""
+        query = "SELECT * FROM orders ORDER BY created_at DESC LIMIT %s"
+        return self.db.execute_query(query, (limit,))
 
 class AnalyticsRepository:
     """Repository for analytics-related database operations"""
@@ -294,6 +304,60 @@ class AnalyticsRepository:
         """
         results = self.db.execute_query(query)
         return {row['metric_type']: row for row in results}
+
+    def get_overview_analytics(self) -> Dict[str, Any]:
+        """Get overview analytics for dashboard"""
+        try:
+            # Get basic counts and metrics
+            overview = {
+                'total_customers': 0,
+                'total_orders': 0,
+                'total_revenue': 0,
+                'pending_orders': 0,
+                'active_conversations': 0
+            }
+
+            # Get customer count
+            customer_query = "SELECT COUNT(*) as count FROM customers"
+            customer_result = self.db.execute_query(customer_query)
+            if customer_result:
+                overview['total_customers'] = customer_result[0]['count']
+
+            # Get order statistics
+            order_query = """
+                SELECT
+                    COUNT(*) as total_orders,
+                    SUM(total_amount) as total_revenue,
+                    COUNT(CASE WHEN order_status = 'Pending' THEN 1 END) as pending_orders
+                FROM orders
+            """
+            order_result = self.db.execute_query(order_query)
+            if order_result:
+                overview['total_orders'] = order_result[0]['total_orders'] or 0
+                overview['total_revenue'] = float(order_result[0]['total_revenue'] or 0)
+                overview['pending_orders'] = order_result[0]['pending_orders'] or 0
+
+            # Get active conversations count
+            try:
+                conversation_query = "SELECT COUNT(*) as count FROM chat_conversations WHERE is_active = true"
+                conversation_result = self.db.execute_query(conversation_query)
+                if conversation_result:
+                    overview['active_conversations'] = conversation_result[0]['count']
+            except:
+                # If chat tables don't exist, just set to 0
+                overview['active_conversations'] = 0
+
+            return overview
+
+        except Exception as e:
+            print(f"❌ Error getting overview analytics: {e}")
+            return {
+                'total_customers': 0,
+                'total_orders': 0,
+                'total_revenue': 0,
+                'pending_orders': 0,
+                'active_conversations': 0
+            }
 
 # Global database manager instance
 db_manager = None

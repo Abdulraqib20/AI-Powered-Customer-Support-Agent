@@ -33,10 +33,14 @@ from psycopg2.extras import RealDictCursor
 import redis
 from groq import Groq
 import decimal
+import time
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Create app_logger as an alias to logger for compatibility
+app_logger = logger
 
 class DateTimeJSONEncoder(json.JSONEncoder):
     """Custom JSON encoder to handle datetime and decimal objects"""
@@ -84,6 +88,7 @@ class QueryType(Enum):
     PRODUCT_PERFORMANCE = "product_performance"
     TEMPORAL_ANALYSIS = "temporal_analysis"
     GENERAL_CONVERSATION = "general_conversation"
+    PRODUCT_INFO_GENERAL = "product_info_general"
 
 @dataclass
 class QueryContext:
@@ -245,7 +250,8 @@ class EnhancedDatabaseQuerying:
             logger.info(f"Extracted order_id: {entities['order_id']}")
 
         # 🆕 CONTEXT INHERITANCE: If no explicit entities found, check conversation history
-        if conversation_history and not entities['order_id'] and not entities['customer_id']:
+        # Only inherit context for non-authenticated users or when no specific entities are found
+        if conversation_history and not entities['order_id']:
             # Look for order_id or customer_id from recent conversation
             for conversation in conversation_history[:3]:  # Check last 3 conversations
                 if 'entities' in conversation:
@@ -256,13 +262,16 @@ class EnhancedDatabaseQuerying:
                         entities['order_id'] = conv_entities['order_id']
                         logger.info(f"🔄 Inherited order_id from conversation history: {entities['order_id']}")
 
-                    # Try to extract customer_id from execution results if order was queried
-                    if conversation.get('execution_result'):
-                        for result in conversation['execution_result']:
-                            if 'customer_id' in result and not entities['customer_id']:
-                                entities['customer_id'] = str(result['customer_id'])
-                                logger.info(f"🔄 Inherited customer_id from conversation history: {entities['customer_id']}")
-                                break
+                    # 🔧 FIX: Only inherit customer_id if the user is NOT authenticated
+                    # This prevents authenticated users from getting overridden by conversation history
+                    if not entities.get('customer_id') and not entities.get('customer_verified'):
+                        # Try to extract customer_id from execution results if order was queried
+                        if conversation.get('execution_result'):
+                            for result in conversation['execution_result']:
+                                if 'customer_id' in result and not entities['customer_id']:
+                                    entities['customer_id'] = str(result['customer_id'])
+                                    logger.info(f"🔄 Inherited customer_id from conversation history: {entities['customer_id']}")
+                                    break
 
         # 🆕 ADDITIONAL CONTEXT: If we have order_id from history but need customer_id for order history
         if entities.get('order_id') and not entities.get('customer_id') and 'history' in query_lower:
@@ -278,7 +287,7 @@ class EnhancedDatabaseQuerying:
             else:
                 return QueryType.CUSTOMER_ANALYSIS, entities
 
-        elif any(keyword in query_lower for keyword in ['order', 'orders', 'purchase', 'transaction', 'history']):
+        elif any(keyword in query_lower for keyword in ['order', 'orders', 'purchase', 'transaction', 'history', 'delivery', 'track', 'tracking', 'where is', 'status', 'shipped', 'shipping']):
             return QueryType.ORDER_ANALYTICS, entities
 
         elif any(keyword in query_lower for keyword in ['revenue', 'sales', 'money', 'naira', '₦', 'income']):
@@ -347,6 +356,8 @@ QUERY GENERATION RULES:
 11. Limit results appropriately (usually 10-50 rows unless a specific ID is queried)
 12. Order results logically
 13. Handle NULL values gracefully
+14. NEVER use CURRENT_USER - use actual customer_id values from context when available
+15. For delivery/tracking queries: Use order_status IN ('Processing', 'Delivered') and join with customer data
 
 USER QUERY: "{user_query}"
 QUERY TYPE: {query_type.value}
@@ -358,7 +369,7 @@ Generate ONLY the SQL query, no explanations or markdown formatting.
 
         try:
             response = self.groq_client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model="llama-3.3-70b-versatile",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Generate SQL query for: {user_query}"}
@@ -389,8 +400,24 @@ Generate ONLY the SQL query, no explanations or markdown formatting.
             return "SELECT * FROM customers ORDER BY created_at DESC LIMIT 10;"
 
         elif query_type == QueryType.ORDER_ANALYTICS:
+            # 🔧 FIX: Proper guest user handling
+            customer_verified = entities.get('customer_verified', False)
+            customer_id = entities.get('customer_id')
+
+            # If we have customer_id from session (authenticated user), get their orders
+            if customer_verified and customer_id:
+                return f"""
+                SELECT o.order_id, o.order_status, o.payment_method, o.total_amount,
+                       o.delivery_date, o.created_at, o.product_category, c.name as customer_name,
+                       c.address, c.state, c.lga
+                FROM orders o
+                JOIN customers c ON o.customer_id = c.customer_id
+                WHERE o.customer_id = {customer_id}
+                ORDER BY o.created_at DESC
+                LIMIT 20;
+                """
             # If we have customer_id from conversation history, use it for order history
-            if entities.get('customer_id'):
+            elif entities.get('customer_id') and not customer_verified:
                 customer_id = entities['customer_id']
                 return f"""
                 SELECT o.order_id, o.order_status, o.payment_method, o.total_amount,
@@ -423,8 +450,9 @@ Generate ONLY the SQL query, no explanations or markdown formatting.
                 JOIN customers c ON o.customer_id = c.customer_id
                 WHERE o.order_id = {order_id};
                 """
-            # Default fallback
-            return "SELECT * FROM orders ORDER BY created_at DESC LIMIT 10;"
+            # 🆕 GUEST USER FALLBACK: Return empty result for guest users asking about orders
+            else:
+                return "SELECT 'Guest user - authentication required' as message, 'Please provide your order ID or log in to view your orders' as suggestion;"
 
         elif query_type == QueryType.REVENUE_INSIGHTS:
             return """
@@ -562,10 +590,144 @@ Generate ONLY the SQL query, no explanations or markdown formatting.
             logger.error(f"❌ History retrieval error: {e}")
             return []
 
-    def generate_nigerian_response(self, query_context: QueryContext, conversation_history: List[Dict]) -> str:
+    def detect_user_sentiment(self, user_query: str) -> Dict[str, Any]:
         """
-        🇳🇬 Generate Nigerian business-aware natural language response
+        🎭 Detect user sentiment and emotional state for empathetic responses
         """
+        sentiment_data = {
+            'emotion': 'neutral',
+            'intensity': 'medium',
+            'keywords': [],
+            'empathy_needed': False
+        }
+
+        query_lower = user_query.lower()
+
+        # Frustrated/Angry indicators
+        if any(word in query_lower for word in ['urgent', 'frustrated', 'angry', 'annoyed', 'terrible', 'awful', 'hate', 'worst', 'stupid', 'ridiculous']):
+            sentiment_data.update({
+                'emotion': 'frustrated',
+                'intensity': 'high',
+                'empathy_needed': True,
+                'keywords': ['urgent', 'frustrated', 'angry']
+            })
+
+        # Worried/Anxious indicators
+        elif any(word in query_lower for word in ['worried', 'anxious', 'concerned', 'scared', 'nervous', 'help me', 'please help', 'urgent']):
+            sentiment_data.update({
+                'emotion': 'worried',
+                'intensity': 'high',
+                'empathy_needed': True,
+                'keywords': ['worried', 'anxious', 'help needed']
+            })
+
+        # Confused indicators
+        elif any(word in query_lower for word in ['confused', 'don\'t understand', 'unclear', 'lost', 'what does', 'how do']):
+            sentiment_data.update({
+                'emotion': 'confused',
+                'intensity': 'medium',
+                'empathy_needed': True,
+                'keywords': ['confused', 'needs guidance']
+            })
+
+        # Happy/Positive indicators
+        elif any(word in query_lower for word in ['thank', 'thanks', 'great', 'awesome', 'wonderful', 'perfect', 'love', 'amazing']):
+            sentiment_data.update({
+                'emotion': 'happy',
+                'intensity': 'medium',
+                'empathy_needed': False,
+                'keywords': ['positive', 'grateful']
+            })
+
+        # Impatient indicators
+        elif any(word in query_lower for word in ['still waiting', 'taking too long', 'when will', 'hurry', 'asap', 'immediately']):
+            sentiment_data.update({
+                'emotion': 'impatient',
+                'intensity': 'high',
+                'empathy_needed': True,
+                'keywords': ['time-sensitive', 'waiting']
+            })
+
+        return sentiment_data
+
+    def get_empathetic_response_style(self, sentiment_data: Dict[str, Any], query_context: QueryContext) -> str:
+        """
+        💝 Generate empathetic response style based on detected sentiment
+        """
+        emotion = sentiment_data['emotion']
+        intensity = sentiment_data['intensity']
+
+        if emotion == 'frustrated':
+            return """
+EMOTIONAL CONTEXT: Customer is frustrated and needs immediate empathy
+RESPONSE STYLE:
+- Start with sincere apology and acknowledgment: "I completely understand your frustration 😔"
+- Use calming emojis: 😔, 💙, 🤗
+- Be extra helpful and solution-focused
+- Offer immediate assistance: "Let me help you right away"
+- End with reassurance: "I'm here to make this right for you ✨"
+"""
+        elif emotion == 'worried':
+            return """
+EMOTIONAL CONTEXT: Customer is worried/anxious and needs reassurance
+RESPONSE STYLE:
+- Acknowledge their concern: "I understand you're worried 🤗"
+- Use comforting emojis: 🤗, 💙, ✨, 🌟
+- Provide clear, step-by-step guidance
+- Offer continuous support: "I'm here to help you through this"
+- End with positive assurance: "Everything will be okay! 🌟"
+"""
+        elif emotion == 'confused':
+            return """
+EMOTIONAL CONTEXT: Customer is confused and needs patient guidance
+RESPONSE STYLE:
+- Show understanding: "No worries, I'm here to help clarify! 😊"
+- Use friendly emojis: 😊, 💡, 🎯, ✨
+- Break down information clearly
+- Use simple, easy-to-understand language
+- Encourage questions: "Feel free to ask if anything is unclear! 💡"
+"""
+        elif emotion == 'happy':
+            return """
+EMOTIONAL CONTEXT: Customer is positive and happy
+RESPONSE STYLE:
+- Mirror their positivity: "So happy to help! 😊"
+- Use joyful emojis: 😊, 🎉, ✨, 🌟, 💚
+- Be enthusiastic and energetic
+- Share in their satisfaction
+- Keep the positive momentum: "Glad I could help! 🎉"
+"""
+        elif emotion == 'impatient':
+            return """
+EMOTIONAL CONTEXT: Customer is impatient and needs quick action
+RESPONSE STYLE:
+- Acknowledge urgency: "I understand time is important! ⚡"
+- Use action emojis: ⚡, 🚀, 💨, ⏰
+- Be direct and efficient
+- Provide immediate next steps
+- Show speed: "Let me get this sorted quickly for you! 🚀"
+"""
+        else:
+            return """
+EMOTIONAL CONTEXT: Neutral customer interaction
+RESPONSE STYLE:
+- Be warm and friendly: "Happy to help! 😊"
+- Use supportive emojis: 😊, ✨, 💙, 🌟
+- Maintain professional warmth
+- Be solution-oriented
+- End positively: "Hope this helps! ✨"
+"""
+
+    def generate_nigerian_response(self, query_context: QueryContext, conversation_history: List[Dict], session_context: Dict[str, Any] = None) -> str:
+        """
+        🇳🇬 Generate Nigerian business-aware natural language response with enhanced emotional intelligence
+        """
+
+        # 🎭 STEP 1: Analyze user sentiment and emotional state
+        sentiment_data = self.detect_user_sentiment(query_context.user_query)
+        empathetic_style = self.get_empathetic_response_style(sentiment_data, query_context)
+
+        logger.info(f"🎭 Detected emotion: {sentiment_data['emotion']} (intensity: {sentiment_data['intensity']})")
 
         # Prepare execution results summary
         results_summary = ""
@@ -590,85 +752,206 @@ Generate ONLY the SQL query, no explanations or markdown formatting.
         if conversation_history:
             conversation_context = f"Recent conversation history: {safe_json_dumps(conversation_history[-2:])}"
 
-        response_prompt = f"""
-You are a live chat customer support agent for raqibtech.com. You are having a real-time conversation with a customer.
+        # Extract authentication status from session_context
+        customer_verified = session_context.get('customer_verified', False) if session_context else False
+        customer_id = session_context.get('customer_id', 'None') if session_context else 'None'
+        customer_name = session_context.get('customer_name', 'valued customer') if session_context else 'valued customer'
+
+        # 🔧 GUEST USER HANDLING: Provide different context for guest vs authenticated users
+        if not customer_verified and query_context.query_type == QueryType.ORDER_ANALYTICS:
+            # For guest users asking about orders, provide platform information instead
+            response_prompt = f"""
+You are a helpful customer support guide for raqibtech.com. You're speaking with a guest user who isn't logged in.
+
+🎭 EMOTIONAL INTELLIGENCE CONTEXT:
+User's Current Emotion: {sentiment_data['emotion']} (Intensity: {sentiment_data['intensity']})
+Empathy Required: {sentiment_data['empathy_needed']}
+Emotional Keywords Detected: {sentiment_data['keywords']}
+
+{empathetic_style}
+
+PLATFORM: raqibtech.com (Nigerian e-commerce platform)
+GUEST USER CONTEXT: This user is not authenticated and cannot access personal order data.
+
+CUSTOMER'S QUESTION: "{query_context.user_query}"
+
+🌟 GUEST USER RESPONSE GUIDELINES:
+1. 🎭 Respond according to their emotional state with appropriate emojis
+2. 🔒 Explain that personal order tracking requires logging in or providing order ID
+3. 🛍️ Instead, provide helpful information about raqibtech.com's services:
+   - Nigeria-wide delivery (all 36 states + FCT)
+   - Payment options: Pay on Delivery, Bank Transfer, Card, RaqibTechPay
+   - Account tiers: Bronze, Silver, Gold, Platinum with increasing benefits
+   - 24/7 customer support availability
+4. 💡 Guide them on how to:
+   - Create an account for personalized service
+   - Track orders with order ID (if they have one)
+   - Contact support for immediate help
+5. 😊 Be warm, helpful, and encouraging about signing up
+6. 🎯 Focus on platform capabilities rather than personal data
+7. ✨ End with encouragement to join the platform for better service
+
+Keep responses under 100 words but pack them with helpful information and appropriate emotion.
+
+Respond as a caring, helpful customer support guide:
+"""
+        else:
+            # Standard response prompt for authenticated users or general queries
+            response_prompt = f"""
+You are a caring, empathetic customer support agent for raqibtech.com. You are having a real-time conversation with a {customer_name}.
+
+🎭 EMOTIONAL INTELLIGENCE CONTEXT:
+User's Current Emotion: {sentiment_data['emotion']} (Intensity: {sentiment_data['intensity']})
+Empathy Required: {sentiment_data['empathy_needed']}
+Emotional Keywords Detected: {sentiment_data['keywords']}
+
+{empathetic_style}
 
 PLATFORM: raqibtech.com (Nigerian e-commerce platform)
 CONVERSATION TYPE: Live customer support chat
+
+CUSTOMER AUTHENTICATION STATUS:
+- Authenticated: {customer_verified}
+- Customer ID: {customer_id}
+- Customer Name: {customer_name}
 
 CONVERSATION HISTORY: {safe_json_dumps(conversation_history[-3:]) if conversation_history else "This is the start of the conversation"}
 
 CUSTOMER'S CURRENT MESSAGE: "{query_context.user_query}"
 AVAILABLE DATABASE INFO: {safe_json_dumps(query_context.execution_result, max_items=3) if query_context.execution_result else "No data found"}
 
-CRITICAL INSTRUCTIONS:
-1. NEVER put your response in quotes - respond naturally
-2. USE the database information directly to answer customer questions
-3. If database shows order_status for an order, provide that exact status to the customer
-4. If customer provided order ID and you found database results, use that information
-5. Don't ask for additional verification if you already have the data they need
-6. Be conversational and helpful
-7. Keep responses under 80 words
-8. Format currency as ₦ for Nigerian Naira
+🌟 ENHANCED EMOTIONAL RESPONSE GUIDELINES:
+1. 🎭 ALWAYS respond according to the detected emotional state using appropriate emojis and tone
+2. 💝 If empathy is needed, start with emotional acknowledgment before providing information
+3. 😊 Use emojis throughout the response to match the customer's emotional state and brighten their day
+4. 🤗 Be a reliable support friend - warm, caring, and genuinely helpful
+5. 🌟 End responses with encouraging, positive energy and offer continued support
+6. 💙 If customer shows frustration, apologize sincerely and focus on immediate solutions
+7. 🎉 If customer is happy, share their joy and maintain the positive energy
+8. 💡 If customer is confused, be extra patient and break things down clearly with helpful emojis
+9. ⚡ If customer is impatient, acknowledge urgency and provide quick, actionable solutions
+10. 🇳🇬 Maintain Nigerian business context while being emotionally intelligent
 
-CUSTOMER SERVICE LOGIC:
-- If database returned order status information: Share that status directly with the customer
-- If customer asked about order ID and database has results: Answer using those results
-- If asking about delivery and you have order data: Provide delivery status
-- Only ask for verification if you truly don't have the information they need
+TECHNICAL RESPONSE LOGIC:
+- If customer is NOT authenticated and asking about orders: Guide them warmly to log in or provide order ID
+- If customer IS authenticated and database has their order data: Use that data to help them enthusiastically
+- If database shows "Guest user - authentication required": Ask customer to log in with friendly guidance
+- If customer is asking about orders but you only have guest fallback data: Ask for authentication with understanding
+- Use database information directly to answer customer questions ONLY if it's legitimate customer data
+- If database shows order_status for a legitimate order: provide that exact status with appropriate emotional response
+- If customer provided order ID and you found real database results: use that information with matching emotion
+- Don't show random orders to guests - guide them to proper authentication with empathy
+- Keep responses under 100 words but pack them with emotion and helpfulness
+- Format currency as ₦ for Nigerian Naira
 
-ORDER STATUS MEANINGS:
-- "Pending": Order received and being prepared
-- "Processing": Order is being processed and prepared for delivery
-- "Delivered": Order has been delivered to customer
-- "Returned": Order was returned
+EMOJI USAGE BY EMOTION:
+- Frustrated: 😔, 💙, 🤗, ✨ (calming, supportive)
+- Worried: 🤗, 💙, ✨, 🌟 (comforting, reassuring)
+- Confused: 😊, 💡, 🎯, ✨ (helpful, clarifying)
+- Happy: 😊, 🎉, ✨, 🌟, 💚 (joyful, celebratory)
+- Impatient: ⚡, 🚀, 💨, ⏰ (urgent, action-oriented)
+- Neutral: 😊, ✨, 💙, 🌟 (warm, friendly)
 
-Respond naturally as a helpful customer support agent (no quotes, no signatures):
+ORDER STATUS MEANINGS WITH EMOTIONAL CONTEXT:
+- "Pending": Order received and being prepared (use reassuring tone with ⏳, ✨)
+- "Processing": Order is being processed and prepared for delivery (use excited tone with 🚀, 📦)
+- "Delivered": Order has been delivered to customer (use celebratory tone with 🎉, ✅)
+- "Returned": Order was returned (use understanding tone with 🤗, 💙)
+
+Respond as a caring, emotionally intelligent customer support friend (no quotes, no signatures):
 """
 
         try:
             response = self.groq_client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model="llama-3.3-70b-versatile",  # Keep for complex emotional understanding
                 messages=[
                     {"role": "system", "content": response_prompt},
-                    {"role": "user", "content": f"Generate response for: {query_context.user_query}"}
+                    {"role": "user", "content": f"Generate emotionally intelligent response for: {query_context.user_query}"}
                 ],
-                temperature=0.3,
-                max_tokens=400
+                temperature=0.7,  # Increased for more creative emotional responses
+                max_tokens=500    # Increased for more detailed emotional responses
             )
 
             ai_response = response.choices[0].message.content.strip()
-            logger.info(f"🇳🇬 Generated Nigerian response")
+            logger.info(f"🇳🇬 Generated emotionally intelligent Nigerian response with {sentiment_data['emotion']} tone")
             return ai_response
 
         except Exception as e:
             logger.error(f"❌ Response generation error: {e}")
-            return self._get_fallback_response(query_context)
+            return self._get_fallback_emotional_response(query_context, sentiment_data)
 
-    def _get_fallback_response(self, query_context: QueryContext) -> str:
-        """Generate fallback response for error scenarios"""
+    def _get_fallback_emotional_response(self, query_context: QueryContext, sentiment_data: Dict[str, Any]) -> str:
+        """Generate fallback emotional response for error scenarios"""
+
+        emotion = sentiment_data['emotion']
 
         if query_context.error_message:
-            return """Sorry, I'm having a technical issue right now. Can you try asking your question again?
+            if emotion == 'frustrated':
+                return """I'm so sorry for the technical issue! 😔 I completely understand your frustration and I'm working to fix this right away.
 
-If you need immediate help, you can also visit raqibtech.com directly or contact our support team."""
+Please try your question again, or contact our support team at +234 (702) 5965-922 for immediate help. I'm here to make this right! 💙✨"""
+
+            elif emotion == 'worried':
+                return """I understand you're concerned, and I want to reassure you everything is okay! 🤗 We're just having a small technical moment.
+
+Please don't worry - try your question again or reach out to our team directly. We're here to help you! 🌟💙"""
+
+            else:
+                return """I apologize for the technical hiccup! 😊 No worries though - these things happen.
+
+Please try asking your question again, or contact our support team at +234 (702) 5965-922. I'm here to help! ✨"""
 
         elif query_context.execution_result:
             results_count = len(query_context.execution_result)
-            return f"""I found some information that might help! To give you the right details, could you share your order number or email address with me?
 
-This helps me make sure I'm giving you the correct information about your raqibtech.com account."""
+            if emotion == 'happy':
+                return f"""Great news! 🎉 I found some helpful information for you! To give you the most accurate details for your raqibtech.com account,
+
+could you share your order number or email address? I'm excited to help you get exactly what you need! ✨🌟"""
+
+            elif emotion == 'impatient':
+                return f"""I found information quickly for you! ⚡ To get you the right details fast, please share your order number or email address.
+
+This will help me give you instant, accurate information about your raqibtech.com account! 🚀"""
+
+            else:
+                return f"""I found some helpful information! 😊 To make sure I give you the right details for your raqibtech.com account,
+
+could you please share your order number or email address with me? I'm here to help! ✨💙"""
 
         else:
-            return """I'd be happy to help! What specifically are you looking for?
+            if emotion == 'confused':
+                return """No worries at all! 😊 I'm here to help clarify anything you need about raqibtech.com. 💡
 
 I can help with:
-• Order tracking and delivery status
-• Account questions
-• Payment issues
-• Product information
+• Order tracking and delivery status 📦
+• Account questions 👤
+• Payment assistance 💳
+• Product information 🛍️
 
-Just let me know what you need assistance with."""
+What would you like to know? I'm happy to guide you step by step! ✨"""
+
+            elif emotion == 'frustrated':
+                return """I'm truly sorry for any frustration! 😔 Let me help make this better right away. 💙
+
+I can assist with:
+• Order tracking and delivery updates 📦⚡
+• Payment and account issues 💳🔧
+• Quick product help 🛍️💨
+• Immediate support 🤗
+
+What do you need help with? I'm here to fix this for you! ✨"""
+
+            else:
+                return """I'd love to help you! 😊 I'm your friendly raqibtech.com support assistant. 🌟
+
+I can help with:
+• Order tracking and delivery status 📦
+• Account and payment questions 💳
+• Product recommendations 🛍️
+• General shopping support 🤗
+
+What can I assist you with today? ✨"""
 
     def process_query(self, user_query: str, user_id: str = "anonymous") -> Dict[str, Any]:
         """
@@ -709,7 +992,7 @@ Just let me know what you need assistance with."""
 
             # Stage 4: Generate Nigerian Response
             logger.info(f"🇳🇬 Stage 4: Generating Nigerian business response")
-            query_context.response = self.generate_nigerian_response(query_context, conversation_history)
+            query_context.response = self.generate_nigerian_response(query_context, conversation_history, None)
 
             # Stage 5: Store Context
             logger.info(f"📝 Stage 5: Storing conversation context")
@@ -734,6 +1017,100 @@ Just let me know what you need assistance with."""
 
         except Exception as e:
             logger.error(f"❌ Pipeline error: {e}")
+            return {
+                'success': False,
+                'response': f"I apologize, but I encountered an error processing your request: {str(e)}. Please try again or rephrase your question.",
+                'error_message': str(e),
+                'timestamp': start_time.isoformat(),
+                'execution_time': f"{(datetime.now() - start_time).total_seconds():.2f}s"
+            }
+
+    def process_enhanced_query(self, user_query: str, session_context: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        🚀 Enhanced query processing with session context integration
+        Wrapper around process_query that integrates Flask session authentication
+        """
+
+        start_time = datetime.now()
+
+        try:
+            # Extract user_id from session context
+            user_id = session_context.get('session_id', 'anonymous') if session_context else 'anonymous'
+
+            # 🔧 ENHANCED: Check if user is authenticated and extract customer info
+            customer_id = None
+            customer_verified = False
+
+            if session_context:
+                customer_verified = session_context.get('customer_verified', False)
+                customer_id = session_context.get('customer_id')
+
+                logger.info(f"🔐 Session context - Customer ID: {customer_id}, Verified: {customer_verified}")
+
+            # Stage 0: Get Conversation History
+            logger.info(f"📚 Stage 0: Retrieving conversation history for context")
+            conversation_history = self.get_conversation_history(user_id)
+
+            # Stage 1: Intent Classification with session context
+            logger.info(f"🎯 Stage 1: Classifying query intent with session context")
+            query_type, entities = self.classify_query_intent(user_query, conversation_history)
+
+            # 🆕 ENHANCED: Inject customer_id from session into entities for authenticated queries
+            if customer_verified and customer_id and not entities.get('customer_id'):
+                entities['customer_id'] = customer_id
+                entities['customer_verified'] = True
+                logger.info(f"🔐 Injected customer_id {customer_id} from session into query entities")
+
+            # Stage 2: SQL Generation with enhanced context
+            logger.info(f"🔍 Stage 2: Generating SQL query with customer context")
+            sql_query = self.generate_sql_query(user_query, query_type, entities)
+
+            # Stage 3: Database Execution
+            logger.info(f"🗄️ Stage 3: Executing database query")
+            execution_result, error_message = self.execute_database_query(sql_query)
+
+            # Create query context
+            query_context = QueryContext(
+                query_type=query_type,
+                intent=query_type.value,
+                entities=entities,
+                sql_query=sql_query,
+                execution_result=execution_result,
+                response="",  # Will be filled next
+                timestamp=start_time,
+                user_query=user_query,
+                error_message=error_message
+            )
+
+            # Stage 4: Generate Nigerian Response
+            logger.info(f"🇳🇬 Stage 4: Generating Nigerian business response")
+            query_context.response = self.generate_nigerian_response(query_context, conversation_history, session_context)
+
+            # Stage 5: Store Context
+            logger.info(f"📝 Stage 5: Storing conversation context")
+            self.store_conversation_context(query_context, user_id)
+
+            # Calculate processing time
+            processing_time = (datetime.now() - start_time).total_seconds()
+
+            # Return comprehensive response
+            return {
+                'success': True,
+                'response': query_context.response,
+                'query_type': query_type.value,
+                'sql_query': sql_query,
+                'results_count': len(execution_result),
+                'execution_time': f"{processing_time:.2f}s",
+                'entities': entities,
+                'timestamp': start_time.isoformat(),
+                'error_message': error_message,
+                'has_results': len(execution_result) > 0,
+                'customer_authenticated': customer_verified,
+                'customer_id': customer_id
+            }
+
+        except Exception as e:
+            logger.error(f"❌ Enhanced pipeline error: {e}")
             return {
                 'success': False,
                 'response': f"I apologize, but I encountered an error processing your request: {str(e)}. Please try again or rephrase your question.",

@@ -87,7 +87,7 @@ NEW: "👋 Hello! Welcome to raqibtech.com support!
 - **Payment Methods** - Nigerian payment options
 
 ### **4. 📞 Contact Support**
-- **Phone Support**: +234 800 RAQIB (72242)
+- **Phone Support**: +234 (702) 5965-922 (72242)
 - **Email Support**: support@raqibtech.com
 - **Live AI Chat**: Available 24/7
 - **Nigerian Coverage**: All 36 states + FCT

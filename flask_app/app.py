@@ -7,7 +7,7 @@ to interact with Nigerian e-commerce customers, leveraging AI-powered chat,
 customer management, analytics, and real-time monitoring.
 
 Features:
-- AI-driven chat using Groq LLaMA 3.1 8B
+- AI-driven chat using LLaMA models via Groq API
 - Context-aware responses with Mem0 and Qdrant
 - PostgreSQL database integration
 - Nigerian market-specific configurations
@@ -21,6 +21,7 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Any
+import uuid
 
 # Flask imports
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
@@ -36,6 +37,9 @@ from mem0 import Memory
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 import numpy as np
+import warnings
+warnings.filterwarnings('ignore')
+warnings.simplefilter(action='ignore')
 
 # Local imports
 sys.path.append(str(Path(__file__).parent.parent.resolve()))
@@ -48,6 +52,9 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from src.enhanced_db_querying import EnhancedDatabaseQuerying
+
+# Add session manager import
+from src.session_manager import session_manager
 
 # Initialize loggers
 app_logger, api_logger, error_logger = setup_logging()
@@ -215,6 +222,44 @@ class APIUsageTracker:
 # Initialize usage tracker
 usage_tracker = APIUsageTracker()
 
+# Initialize API usage tracker
+api_tracker = APIUsageTracker()
+
+# Session Management Functions
+@app.before_request
+def before_request():
+    """Initialize session for each request"""
+    # Skip session handling for static files
+    if request.endpoint and request.endpoint.startswith('static'):
+        return
+
+    # Initialize session if not exists
+    if 'session_id' not in session:
+        try:
+            session_id = session_manager.create_session()
+            session['session_id'] = session_id
+            session['current_conversation_id'] = None
+            app_logger.info(f"🆕 Created new session: {session_id}")
+        except Exception as e:
+            error_logger.error(f"❌ Failed to create session: {e}")
+            # Use fallback session ID
+            session['session_id'] = f"fallback_{uuid.uuid4()}"
+            session['current_conversation_id'] = None
+    else:
+        # Update session activity if it exists in database
+        try:
+            session_manager.update_session_activity(session['session_id'])
+        except Exception as e:
+            # If session update fails, it might not exist in DB, recreate it
+            app_logger.warning(f"⚠️ Session update failed, recreating: {e}")
+            try:
+                session_id = session_manager.create_session()
+                session['session_id'] = session_id
+                session['current_conversation_id'] = None
+            except Exception as create_error:
+                error_logger.error(f"❌ Failed to recreate session: {create_error}")
+                # Keep existing session ID as fallback
+
 
 class DateTimeEncoder(json.JSONEncoder):
     """Custom JSON encoder to handle datetime objects"""
@@ -298,7 +343,7 @@ def get_embedding(text: str) -> List[float]:
 
 def get_ai_response(query: str, context: str = "", user_id: str = "anonymous") -> str:
     """
-    Generate AI response using Groq LLaMA 3.1 8B with Nigerian e-commerce context
+    Generate AI response using Llama models via Groq API with Nigerian e-commerce context
     """
     try:
         if groq_client is None:
@@ -342,7 +387,7 @@ def get_ai_response(query: str, context: str = "", user_id: str = "anonymous") -
 
         # Generate response using Groq
         completion = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="llama-3.1-8b-instant",  # Faster model for real-time customer chat
             messages=messages,
             temperature=0.3,
             max_tokens=1000,
@@ -428,47 +473,80 @@ def search_vector_database(query: str, collection_name: str = "customer_data") -
         return []
 
 
-# Initialize enhanced database querying system
-try:
-    enhanced_db_querying = EnhancedDatabaseQuerying()
-    app_logger.info("✅ Enhanced database querying initialized successfully")
-except Exception as e:
-    app_logger.warning(f"⚠️ Enhanced database querying failed to initialize: {e}")
-    enhanced_db_querying = None
+# Initialize enhanced database querying system - Now using session-aware instances
+# try:
+#     enhanced_db_querying = EnhancedDatabaseQuerying()
+#     app_logger.info("✅ Enhanced database querying initialized successfully")
+# except Exception as e:
+#     app_logger.warning(f"⚠️ Enhanced database querying failed to initialize: {e}")
+#     enhanced_db_querying = None
 
 
 # Routes
 
 @app.route('/')
 def dashboard():
-    """Main dashboard with 4 tabs"""
+    """Main dashboard with customer support interface"""
     try:
-        # Get basic analytics for dashboard
-        customer_count = len(customer_repo.search_customers("", ""))
-        order_summary = order_repo.get_order_summary()
+        # Get overview statistics
+        customers = customer_repo.get_all_customers()
+        recent_orders = order_repo.get_recent_orders(limit=10)
+        analytics_data = analytics_repo.get_overview_analytics()
 
+        # 🔧 FIX: Isolate guest sessions from authenticated user conversations
+        conversations = []
+        current_conversation_id = None
+
+        # Only load conversations for authenticated users
+        if session.get('user_authenticated', False):
+            conversations = session_manager.get_user_conversations(session['session_id'])
+
+            # Create a default conversation if none exists for authenticated users
+            if not conversations:
+                try:
+                    conversation_id = session_manager.create_conversation(session['session_id'], "New Chat")
+                    session['current_conversation_id'] = conversation_id
+                    conversations = session_manager.get_user_conversations(session['session_id'])
+                except Exception as conv_error:
+                    app_logger.warning(f"⚠️ Failed to create default conversation: {conv_error}")
+                    conversations = []
+                    session['current_conversation_id'] = None
+            else:
+                # Use the most recent conversation if no current one is set
+                if not session.get('current_conversation_id'):
+                    session['current_conversation_id'] = conversations[0].conversation_id
+
+            current_conversation_id = session.get('current_conversation_id')
+        else:
+            # 🆕 Guest users start fresh with no conversation history
+            app_logger.info("👤 Guest user - starting fresh session without conversation history")
+            session['current_conversation_id'] = None
+
+        # Calculate summary statistics
         stats = {
-            'total_customers': customer_count,
-            'total_orders': len(order_summary) if order_summary else 0,
-            'usage_stats': usage_tracker.get_usage_stats()
+            'total_customers': len(customers) if customers else 0,
+            'total_orders': len(recent_orders) if recent_orders else 0,
+            'pending_orders': len([o for o in recent_orders if o['order_status'] == 'Pending']) if recent_orders else 0,
+            'active_conversations': len(conversations)
         }
 
+        app_logger.info(f"Dashboard loaded with {stats['total_customers']} customers, {stats['total_orders']} orders, {stats['active_conversations']} conversations")
+
         return render_template('dashboard.html',
-                             states=NIGERIAN_STATES,
-                             account_tiers=ACCOUNT_TIERS,
-                             order_statuses=ORDER_STATUSES,
-                             payment_methods=PAYMENT_METHODS,
-                             stats=stats)
+                             customers=customers[:5],  # Show first 5 customers
+                             recent_orders=recent_orders[:5],  # Show first 5 orders
+                             stats=stats,
+                             conversations=conversations,
+                             current_conversation_id=current_conversation_id)
 
     except Exception as e:
-        error_logger.error(f"❌ Dashboard error: {e}")
-        flash('Error loading dashboard', 'error')
+        error_logger.error(f"Dashboard error: {e}")
         return render_template('dashboard.html',
-                             states=NIGERIAN_STATES,
-                             account_tiers=ACCOUNT_TIERS,
-                             order_statuses=ORDER_STATUSES,
-                             payment_methods=PAYMENT_METHODS,
-                             stats={})
+                             customers=[],
+                             recent_orders=[],
+                             stats={'total_customers': 0, 'total_orders': 0, 'pending_orders': 0, 'active_conversations': 0},
+                             conversations=[],
+                             current_conversation_id=None)
 
 
 # API Routes
@@ -611,48 +689,48 @@ def api_chat():
             return jsonify({'success': False, 'message': 'Message is required'}), 400
 
         # 🚀 NEW: Use enhanced database querying system for sophisticated analysis
-        if enhanced_db_querying is not None:
-            enhanced_result = enhanced_db_querying.process_query(query, user_id)
-
-            if enhanced_result['success'] and enhanced_result.get('has_results', False):
-                # Use the sophisticated pipeline result
-                ai_response = enhanced_result['response']
-
-                # Generate quick action buttons based on query type
-                quick_actions = []
-                query_type = enhanced_result.get('query_type', '')
-
-                if query_type == 'customer_analysis':
-                    quick_actions.extend([
-                        {'text': 'View Customer Details', 'action': 'view_customer_details'},
-                        {'text': 'Customer Distribution by State', 'action': 'customer_distribution'}
-                    ])
-                elif query_type == 'order_analytics':
-                    quick_actions.extend([
-                        {'text': 'Track Order Status', 'action': 'track_order'},
-                        {'text': 'Payment Analysis', 'action': 'payment_analysis'}
-                    ])
-                elif query_type == 'revenue_insights':
-                    quick_actions.extend([
-                        {'text': 'Revenue Breakdown', 'action': 'revenue_breakdown'},
-                        {'text': 'State Performance', 'action': 'state_performance'}
-                    ])
-                elif query_type == 'geographic_analysis':
-                    quick_actions.extend([
-                        {'text': 'Regional Analytics', 'action': 'regional_analytics'},
-                        {'text': 'Delivery Insights', 'action': 'delivery_insights'}
-                    ])
-
-                return jsonify({
-                    'success': True,
-                    'response': ai_response,
-                    'quick_actions': quick_actions,
-                    'query_type': query_type,
-                    'results_count': enhanced_result.get('results_count', 0),
-                    'execution_time': enhanced_result.get('execution_time', ''),
-                    'timestamp': datetime.now().isoformat(),
-                    'enhanced': True  # Flag to indicate enhanced processing
-                })
+        # if enhanced_db_querying is not None:
+        #     enhanced_result = enhanced_db_querying.process_query(query, user_id)
+        #
+        #     if enhanced_result['success'] and enhanced_result.get('has_results', False):
+        #         # Use the sophisticated pipeline result
+        #         ai_response = enhanced_result['response']
+        #
+        #         # Generate quick action buttons based on query type
+        #         quick_actions = []
+        #         query_type = enhanced_result.get('query_type', '')
+        #
+        #         if query_type == 'customer_analysis':
+        #             quick_actions.extend([
+        #                 {'text': 'View Customer Details', 'action': 'view_customer_details'},
+        #                 {'text': 'Customer Distribution by State', 'action': 'customer_distribution'}
+        #             ])
+        #         elif query_type == 'order_analytics':
+        #             quick_actions.extend([
+        #                 {'text': 'Track Order Status', 'action': 'track_order'},
+        #                 {'text': 'Payment Analysis', 'action': 'payment_analysis'}
+        #             ])
+        #         elif query_type == 'revenue_insights':
+        #             quick_actions.extend([
+        #                 {'text': 'Revenue Breakdown', 'action': 'revenue_breakdown'},
+        #                 {'text': 'State Performance', 'action': 'state_performance'}
+        #             ])
+        #         elif query_type == 'geographic_analysis':
+        #             quick_actions.extend([
+        #                 {'text': 'Regional Analytics', 'action': 'regional_analytics'},
+        #                 {'text': 'Delivery Insights', 'action': 'delivery_insights'}
+        #             ])
+        #
+        #         return jsonify({
+        #             'success': True,
+        #             'response': ai_response,
+        #             'quick_actions': quick_actions,
+        #             'query_type': query_type,
+        #             'results_count': enhanced_result.get('results_count', 0),
+        #             'execution_time': enhanced_result.get('execution_time', ''),
+        #             'timestamp': datetime.now().isoformat(),
+        #             'enhanced': True  # Flag to indicate enhanced processing
+        #         })
 
         # Fallback to original logic for non-database queries or errors
         context = ""
@@ -747,55 +825,138 @@ def api_quick_action():
 
 @app.route('/api/enhanced-query', methods=['POST'])
 def api_enhanced_query():
-    """🇳🇬 Advanced Database Querying API endpoint for Nigerian E-commerce"""
+    """Enhanced query API with advanced database querying and AI responses"""
     try:
-        if enhanced_db_querying is None:
+        data = request.get_json()
+        user_query = data.get('query', '').strip()
+        include_sql = data.get('include_sql', False)
+
+        if not user_query:
             return jsonify({
                 'success': False,
-                'message': 'Enhanced querying service is not available. Please check system configuration.',
-                'error': 'Service not initialized'
-            }), 503
+                'message': 'Query is required'
+            }), 400
 
-        data = request.json
-        query = data.get('query', '').strip()
-        user_id = data.get('user_id', session.get('user_id', 'anonymous'))
-        include_sql = data.get('include_sql', False)  # Whether to return SQL query
+        # Get session context for AI
+        session_context = session_manager.get_session_context_for_ai(session['session_id'])
 
-        if not query:
-            return jsonify({'success': False, 'message': 'Query is required'}), 400
+        # 🔧 FIX: Add Flask session authentication data to context
+        if session.get('user_authenticated') and session.get('user_email'):
+            session_context.update({
+                'user_authenticated': True,
+                'user_email': session['user_email'],
+                'customer_id': session.get('customer_id'),
+                'customer_verified': True  # If they logged in successfully, they're verified
+            })
 
-        # Process query through enhanced pipeline
-        result = enhanced_db_querying.process_query(query, user_id)
+            # Also update the session manager with the email
+            try:
+                with session_manager.get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            UPDATE user_sessions
+                            SET user_identifier = %s
+                            WHERE session_id = %s
+                        """, (session['user_email'], session['session_id']))
+                        conn.commit()
+            except Exception as session_update_error:
+                app_logger.warning(f"⚠️ Failed to update session with email: {session_update_error}")
 
-        # Prepare response
-        response_data = {
-            'success': result['success'],
-            'response': result['response'],
+        # Get or create conversation
+        conversation_id = session.get('current_conversation_id')
+        if not conversation_id:
+            try:
+                conversation_id = session_manager.create_conversation(session['session_id'], "New Chat")
+                session['current_conversation_id'] = conversation_id
+            except Exception as conv_error:
+                app_logger.warning(f"⚠️ Failed to create conversation: {conv_error}")
+                conversation_id = None
+        else:
+            # Verify conversation exists
+            try:
+                conversations = session_manager.get_user_conversations(session['session_id'])
+                if not any(conv.conversation_id == conversation_id for conv in conversations):
+                    # Conversation doesn't exist, create a new one
+                    conversation_id = session_manager.create_conversation(session['session_id'], "New Chat")
+                    session['current_conversation_id'] = conversation_id
+            except Exception as verify_error:
+                app_logger.warning(f"⚠️ Failed to verify conversation: {verify_error}")
+                conversation_id = None
+
+        # Add user message to conversation (if conversation exists)
+        message_added = False
+        if conversation_id:
+            try:
+                session_manager.add_message(conversation_id, 'user', user_query)
+                message_added = True
+            except Exception as msg_error:
+                app_logger.warning(f"⚠️ Failed to add user message: {msg_error}")
+
+        # Initialize enhanced query engine
+        enhanced_querying = EnhancedDatabaseQuerying()
+
+        # 🔄 Use the enhanced process_enhanced_query method with session context
+        result = enhanced_querying.process_enhanced_query(user_query, session_context)
+
+        # Add AI response to conversation (if conversation exists)
+        if conversation_id and message_added:
+            try:
+                ai_metadata = {
+                    'query_type': result.get('query_type'),
+                    'execution_time': result.get('execution_time'),
+                    'results_count': result.get('results_count')
+                }
+                session_manager.add_message(conversation_id, 'ai', result['response'], ai_metadata)
+            except Exception as ai_msg_error:
+                app_logger.warning(f"⚠️ Failed to add AI message: {ai_msg_error}")
+
+        # Auto-generate conversation title from first user message (if conversation exists)
+        if conversation_id:
+            try:
+                conversations = session_manager.get_user_conversations(session['session_id'])
+                current_conv = next((c for c in conversations if c.conversation_id == conversation_id), None)
+                if current_conv and current_conv.conversation_title == "New Chat" and current_conv.message_count >= 2:
+                    # Generate title from first 5 words of user query
+                    title_words = user_query.split()[:5]
+                    title = ' '.join(title_words) + ('...' if len(title_words) == 5 else '')
+                    session_manager.update_conversation_title(conversation_id, title)
+            except Exception as title_error:
+                app_logger.warning(f"⚠️ Failed to update conversation title: {title_error}")
+
+        # Include SQL in response if requested
+        if include_sql:
+            result['sql_query'] = result.get('sql_query', '')
+
+        api_logger.info(f"Enhanced query processed: {result.get('query_type', 'unknown')} - {result.get('execution_time', 'N/A')}")
+
+        # Return enhanced response with full pipeline details
+        return jsonify({
+            'success': result.get('success', True),
+            'response': result.get('response', 'No response generated'),
             'query_type': result.get('query_type', 'unknown'),
+            'sql_query': result.get('sql_query', '') if include_sql else '',
             'results_count': result.get('results_count', 0),
-            'execution_time': result.get('execution_time', ''),
+            'execution_time': result.get('execution_time', 'N/A'),
             'entities': result.get('entities', {}),
-            'timestamp': result.get('timestamp', ''),
             'has_results': result.get('has_results', False),
-            'user_id': user_id
-        }
-
-        # Include SQL query if requested (for debugging/transparency)
-        if include_sql and result.get('sql_query'):
-            response_data['sql_query'] = result['sql_query']
-
-        # Include error message if present
-        if result.get('error_message'):
-            response_data['error_message'] = result['error_message']
-
-        return jsonify(response_data)
+            'timestamp': result.get('timestamp', datetime.now().isoformat()),
+            'session_authenticated': session.get('user_authenticated', False),
+            'session_user': session.get('user_email', 'guest'),
+            'conversation_id': conversation_id,
+            'message_added': message_added,
+            'pipeline_stages': {
+                'intent_classification': f"Query Type: {result.get('query_type', 'unknown')}",
+                'sql_generation': 'SQL query generated' if result.get('sql_query') else 'No SQL needed',
+                'database_execution': f"Found {result.get('results_count', 0)} results",
+                'response_generation': 'AI response generated successfully'
+            }
+        })
 
     except Exception as e:
-        error_logger.error(f"❌ Enhanced query API error: {e}")
+        error_logger.error(f"Enhanced query API error: {e}")
         return jsonify({
             'success': False,
-            'message': 'Enhanced query service temporarily unavailable',
-            'error': str(e)
+            'message': f'An error occurred: {str(e)}'
         }), 500
 
 
@@ -803,33 +964,45 @@ def api_enhanced_query():
 def api_conversation_history():
     """🗂️ Get conversation history for a user"""
     try:
-        if enhanced_db_querying is None:
-            return jsonify({
-                'success': False,
-                'message': 'Conversation history service is not available',
-                'history': [],
-                'count': 0
-            })
+        # if enhanced_db_querying is None:
+        #     return jsonify({
+        #         'success': False,
+        #         'message': 'Conversation history service is not available',
+        #         'history': [],
+        #         'count': 0
+        #     })
 
         user_id = request.args.get('user_id', session.get('user_id', 'anonymous'))
         limit = int(request.args.get('limit', 10))
 
-        # Get conversation history
-        history = enhanced_db_querying.get_conversation_history(user_id, limit)
+        # Use session manager to get conversation history
+        conversations = session_manager.get_user_conversations(session['session_id'])
+
+        # Format conversations for response
+        formatted_history = []
+        for conv in conversations[:limit]:
+            formatted_history.append({
+                'conversation_id': conv.conversation_id,
+                'title': conv.conversation_title,
+                'created_at': conv.created_at.isoformat(),
+                'updated_at': conv.updated_at.isoformat(),
+                'message_count': conv.message_count
+            })
 
         return jsonify({
             'success': True,
-            'history': history,
-            'count': len(history),
+            'history': formatted_history,
+            'count': len(formatted_history),
             'user_id': user_id
         })
 
     except Exception as e:
-        error_logger.error(f"❌ Conversation history API error: {e}")
+        error_logger.error(f"❌ Conversation history error: {e}")
         return jsonify({
             'success': False,
-            'message': 'Conversation history service unavailable',
-            'error': str(e)
+            'message': 'Failed to retrieve conversation history',
+            'history': [],
+            'count': 0
         }), 500
 
 
@@ -959,17 +1132,217 @@ def api_business_intelligence():
         }), 500
 
 
+@app.route('/api/conversations', methods=['GET'])
+def get_conversations():
+    """Get user conversations"""
+    try:
+        # 🔧 FIX: Only authenticated users can access conversations
+        if not session.get('user_authenticated', False):
+            return jsonify({
+                'success': True,
+                'conversations': [],
+                'message': 'Please log in to access conversation history'
+            })
+
+        conversations = session_manager.get_user_conversations(session['session_id'])
+
+        # Convert to serializable format
+        conversation_list = []
+        for conv in conversations:
+            conversation_list.append({
+                'conversation_id': conv.conversation_id,
+                'title': conv.conversation_title,
+                'message_count': conv.message_count,
+                'updated_at': conv.updated_at.isoformat(),
+                'is_active': conv.is_active
+            })
+
+        return jsonify({
+            'success': True,
+            'conversations': conversation_list
+        })
+
+    except Exception as e:
+        app_logger.error(f"❌ Error getting conversations: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/conversations/<conversation_id>/messages', methods=['GET'])
+def get_conversation_messages(conversation_id):
+    """Get messages for a specific conversation"""
+    try:
+        # 🔧 FIX: Only authenticated users can access conversation messages
+        if not session.get('user_authenticated', False):
+            return jsonify({
+                'success': False,
+                'message': 'Please log in to access conversation messages'
+            }), 401
+
+        messages = session_manager.get_conversation_messages(conversation_id)
+
+        message_list = []
+        for msg in messages:
+            message_list.append({
+                'message_id': msg.message_id,
+                'sender_type': msg.sender_type,
+                'content': msg.message_content,
+                'metadata': msg.metadata,
+                'timestamp': msg.created_at.isoformat()
+            })
+
+        return jsonify({
+            'success': True,
+            'messages': message_list
+        })
+
+    except Exception as e:
+        app_logger.error(f"❌ Error getting conversation messages: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/conversations/new', methods=['POST'])
+def create_new_conversation():
+    """Create a new conversation"""
+    try:
+        # 🔧 FIX: Only authenticated users can create conversations
+        if not session.get('user_authenticated', False):
+            return jsonify({
+                'success': False,
+                'message': 'Please log in to create conversation history'
+            }), 401
+
+        conversation_id = session_manager.create_conversation(session['session_id'])
+        session['current_conversation_id'] = conversation_id
+
+        return jsonify({
+            'success': True,
+            'conversation_id': conversation_id
+        })
+
+    except Exception as e:
+        app_logger.error(f"❌ Error creating conversation: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/conversations/<conversation_id>/switch', methods=['POST'])
+def switch_conversation(conversation_id):
+    """Switch to a different conversation"""
+    try:
+        # 🔧 FIX: Only authenticated users can switch conversations
+        if not session.get('user_authenticated', False):
+            return jsonify({
+                'success': False,
+                'message': 'Please log in to access conversation history'
+            }), 401
+
+        session['current_conversation_id'] = conversation_id
+
+        return jsonify({
+            'success': True,
+            'conversation_id': conversation_id
+        })
+
+    except Exception as e:
+        app_logger.error(f"❌ Error switching conversation: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/login')
+def login_page():
+    """Simple login page"""
+    # Provide default stats to prevent template errors
+    default_stats = {'total_customers': 0, 'total_orders': 0, 'pending_orders': 0, 'active_conversations': 0}
+    return render_template('login.html', stats=default_stats)
+
+
+@app.route('/api/login', methods=['POST'])
+def login_api():
+    """Simple login API - only allows existing customers"""
+    try:
+        data = request.get_json()
+        email = data.get('email', '').strip().lower()
+
+        if not email:
+            return jsonify({'success': False, 'message': 'Email is required'}), 400
+
+        # Check if customer exists in database
+        try:
+            customer = customer_repo.get_customer_by_email(email)
+            if not customer:
+                return jsonify({
+                    'success': False,
+                    'message': 'Customer not found. Please make sure you\'re using the email address associated with your raqibtech.com orders.'
+                }), 404
+        except Exception as db_error:
+            error_logger.error(f"Database error during customer lookup: {db_error}")
+            return jsonify({'success': False, 'message': 'Database connection issue. Please try again.'}), 500
+
+        # Update session with user identifier
+        session_id = session['session_id']
+        try:
+            with session_manager.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        UPDATE user_sessions
+                        SET user_identifier = %s
+                        WHERE session_id = %s
+                    """, (email, session_id))
+                    conn.commit()
+        except Exception as session_error:
+            error_logger.error(f"Session update error: {session_error}")
+            # Continue with login even if session update fails
+            app_logger.warning("Session update failed but continuing with login")
+
+        session['user_email'] = email
+        session['user_authenticated'] = True
+        session['customer_id'] = customer['customer_id']  # Store customer ID for queries
+
+        return jsonify({
+            'success': True,
+            'message': f'Welcome back, {customer["name"]}!',
+            'user_email': email,
+            'customer_name': customer['name']
+        })
+
+    except Exception as e:
+        error_logger.error(f"Login error: {e}")
+        return jsonify({'success': False, 'message': f'Login failed: {str(e)}'}), 500
+
+
+@app.route('/logout')
+def logout():
+    """Logout user"""
+    session.pop('user_email', None)
+    session.pop('user_authenticated', None)
+    return redirect(url_for('dashboard'))
+
+
+# Health check endpoint
+@app.route('/health')
+def health_check():
+    """Health check endpoint"""
+    return jsonify({
+        'status': 'healthy',
+        'timestamp': datetime.now().isoformat(),
+        'session_id': session.get('session_id', 'none')
+    })
+
+
 @app.errorhandler(404)
 def not_found(error):
     """Handle 404 errors"""
-    return render_template('404.html'), 404
+    # Provide default stats to prevent template errors
+    default_stats = {'total_customers': 0, 'total_orders': 0, 'pending_orders': 0, 'active_conversations': 0}
+    return render_template('404.html', stats=default_stats), 404
 
 
 @app.errorhandler(500)
 def internal_error(error):
     """Handle 500 errors"""
     error_logger.error(f"❌ Internal server error: {error}")
-    return render_template('500.html'), 500
+    # Provide default stats to prevent template errors
+    default_stats = {'total_customers': 0, 'total_orders': 0, 'pending_orders': 0, 'active_conversations': 0}
+    return render_template('500.html', stats=default_stats), 500
 
 
 if __name__ == '__main__':
