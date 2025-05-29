@@ -43,6 +43,12 @@ from config.database_config import DatabaseManager, CustomerRepository, OrderRep
 from config.appconfig import QDRANT_URL_CLOUD, QDRANT_API_KEY, GROQ_API_KEY, GOOGLE_API_KEY
 from config.logging_config import setup_logging
 
+# Add enhanced database querying import
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from src.enhanced_db_querying import EnhancedDatabaseQuerying
+
 # Initialize loggers
 app_logger, api_logger, error_logger = setup_logging()
 
@@ -93,12 +99,13 @@ try:
                 }
             },
             "llm": {
-                "provider": "openai",
+                "provider": "litellm",
                 "config": {
-                    "model": "gpt-3.5-turbo",
-                    "temperature": 0.1
+                    "model": "gemini/gemini-2.0-flash",
+                    "temperature": 0.2,
+                    "max_tokens": 1500,
                 }
-            }
+            },
         }
         memory = Memory.from_config(mem0_config)
         app_logger.info("✅ Mem0 memory initialized successfully")
@@ -232,6 +239,19 @@ def safe_json_dumps(obj):
 def get_embedding(text: str) -> List[float]:
     """Generate embeddings using Google Text-Embedding-004"""
     try:
+        # Check if Google AI is configured
+        if not GOOGLE_API_KEY or GOOGLE_API_KEY == 'your-google-api-key-here':
+            app_logger.warning("⚠️ Google API key not configured, using fallback embedding")
+            # Create a simple hash-based embedding as fallback
+            import hashlib
+            text_hash = hashlib.md5(text.encode()).hexdigest()
+            # Convert hash to a list of floats (384 dimensions for compatibility)
+            fallback_embedding = [float(int(text_hash[i:i+2], 16)) / 255.0 for i in range(0, min(len(text_hash), 32), 2)]
+            # Pad to 384 dimensions
+            while len(fallback_embedding) < 384:
+                fallback_embedding.append(0.0)
+            return fallback_embedding[:384]  # Ensure exactly 384 dimensions
+
         # Check cache first
         cache_key = f"embedding:{hash(text)}"
         if redis_client:
@@ -277,103 +297,75 @@ def get_embedding(text: str) -> List[float]:
 
 
 def get_ai_response(query: str, context: str = "", user_id: str = "anonymous") -> str:
-    """Generate AI response using Groq LLaMA 3.1 8B"""
+    """
+    Generate AI response using Groq LLaMA 3.1 8B with Nigerian e-commerce context
+    """
     try:
-        # Check cache first
-        cache_key = f"ai_response:{hash(query + context)}"
-        if redis_client:
-            cached = redis_client.get(cache_key)
-            if cached:
-                return cached
+        if groq_client is None:
+            return "I'm currently operating in limited mode. AI chat functionality requires API configuration. However, I can still help you with basic customer support tasks and database queries."
 
-        # Prepare system prompt for Nigerian e-commerce context
+        # Nigerian e-commerce context
         system_prompt = """You are an AI customer support agent for a Nigerian e-commerce platform.
+        You help with customer inquiries, order tracking, payment issues, and business analytics.
 
-        Key guidelines:
-        1. Use Nigerian English and be culturally aware
-        2. Reference Nigerian states, payment methods (Pay on Delivery, RaqibTechPay, etc.)
-        3. Format currency in Naira (₦)
-        4. Be helpful, professional, and empathetic
-        5. Provide specific, actionable solutions
-        6. If you need database information, clearly state what data is needed
+        Key context:
+        - You serve customers across all 36 Nigerian states + FCT
+        - Payment methods: Pay on Delivery, Bank Transfer, Card, RaqibTechPay
+        - Currency: Nigerian Naira (₦)
+        - Business hours: 8 AM - 8 PM WAT (West Africa Time)
+        - You understand Nigerian English, pidgin, and cultural context
 
-        Context: {context}
+        Be helpful, professional, and culturally aware. Use Nigerian context in your responses.
+        """
 
-        Respond professionally and helpfully to the user's query."""
-
-        # Prepare messages
+        # Prepare the conversation
         messages = [
-            {"role": "system", "content": system_prompt.format(context=context)},
-            {"role": "user", "content": query}
+            {"role": "system", "content": system_prompt},
         ]
 
-        # Add conversation memory if available
-        if memory:
-            try:
-                memory_context = memory.get(user_id)
-                if memory_context:
-                    # Take only the last 3 memories to keep context manageable
-                    recent_memories = memory_context[-3:] if len(memory_context) > 3 else memory_context
-                    memory_text = "\n".join([str(m) for m in recent_memories])
-                    messages.insert(1, {"role": "system", "content": f"Previous conversation context: {memory_text}"})
-                    app_logger.info(f"📚 Added {len(recent_memories)} memories to context")
-            except Exception as e:
-                app_logger.warning(f"⚠️ Memory retrieval failed: {e}")
-        else:
-            # Fallback: Use Redis for simple conversation history
-            if redis_client:
-                try:
-                    history_key = f"chat_history:{user_id}"
-                    history = redis_client.lrange(history_key, -6, -1)  # Last 3 exchanges (6 messages)
-                    if history:
-                        history_text = "\n".join(history)
-                        messages.insert(1, {"role": "system", "content": f"Recent conversation: {history_text}"})
-                        app_logger.info(f"📚 Added Redis chat history to context")
-                except Exception as e:
-                    app_logger.warning(f"⚠️ Redis history retrieval failed: {e}")
+        # Add context if provided
+        if context:
+            messages.append({
+                "role": "system",
+                "content": f"Relevant data context: {context}"
+            })
 
-        # Generate response
-        response = groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+        # Add user query
+        messages.append({"role": "user", "content": query})
+
+        # Generate response using Groq
+        completion = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
             messages=messages,
-            max_tokens=1024,
-            temperature=0.7
+            temperature=0.3,
+            max_tokens=1000,
+            top_p=0.9,
+            stream=False
         )
 
-        ai_response = response.choices[0].message.content
+        response = completion.choices[0].message.content
 
-        # Track usage
-        usage_tracker.track_groq_request(response.usage.total_tokens)
+        # Track API usage
+        usage_tracker.track_groq_request(completion.usage.total_tokens if completion.usage else 0)
 
-        # Store in memory
+        # Store conversation in memory if available
         if memory:
             try:
-                memory.add(f"User: {query}\nAI: {ai_response}", user_id=user_id)
-                app_logger.info("💾 Stored conversation in Mem0")
-            except Exception as e:
-                app_logger.warning(f"⚠️ Memory storage failed: {e}")
-        else:
-            # Fallback: Store in Redis
-            if redis_client:
-                try:
-                    history_key = f"chat_history:{user_id}"
-                    redis_client.lpush(history_key, f"User: {query}")
-                    redis_client.lpush(history_key, f"AI: {ai_response}")
-                    redis_client.ltrim(history_key, 0, 19)  # Keep last 20 messages
-                    redis_client.expire(history_key, 86400)  # Expire after 24 hours
-                    app_logger.info("💾 Stored conversation in Redis")
-                except Exception as e:
-                    app_logger.warning(f"⚠️ Redis storage failed: {e}")
+                memory.add(
+                    messages=[
+                        {"role": "user", "content": query},
+                        {"role": "assistant", "content": response}
+                    ],
+                    user_id=user_id
+                )
+            except Exception as mem_error:
+                app_logger.warning(f"Memory storage failed: {mem_error}")
 
-        # Cache the response
-        if redis_client:
-            redis_client.setex(cache_key, 1800, ai_response)  # Cache for 30 minutes
-
-        return ai_response
+        return response
 
     except Exception as e:
         error_logger.error(f"❌ AI response generation failed: {e}")
-        return "I apologize, but I'm experiencing technical difficulties. Please try again in a moment or contact our technical support team."
+        return "I apologize, but I'm experiencing technical difficulties. Please try again or contact support for assistance."
 
 
 def format_currency(amount: float) -> str:
@@ -427,6 +419,15 @@ def search_vector_database(query: str, collection_name: str = "customer_data") -
     except Exception as e:
         error_logger.error(f"❌ Vector search failed: {e}")
         return []
+
+
+# Initialize enhanced database querying system
+try:
+    enhanced_db_querying = EnhancedDatabaseQuerying()
+    app_logger.info("✅ Enhanced database querying initialized successfully")
+except Exception as e:
+    app_logger.warning(f"⚠️ Enhanced database querying failed to initialize: {e}")
+    enhanced_db_querying = None
 
 
 # Routes
@@ -593,7 +594,7 @@ def api_analytics():
 
 @app.route('/api/chat', methods=['POST'])
 def api_chat():
-    """AI Chat API endpoint"""
+    """🇳🇬 Enhanced AI Chat API endpoint with sophisticated database querying"""
     try:
         data = request.json
         query = data.get('message', '').strip()
@@ -602,10 +603,54 @@ def api_chat():
         if not query:
             return jsonify({'success': False, 'message': 'Message is required'}), 400
 
-        # Check for database queries and gather context
+        # 🚀 NEW: Use enhanced database querying system for sophisticated analysis
+        if enhanced_db_querying is not None:
+            enhanced_result = enhanced_db_querying.process_query(query, user_id)
+
+            if enhanced_result['success'] and enhanced_result.get('has_results', False):
+                # Use the sophisticated pipeline result
+                ai_response = enhanced_result['response']
+
+                # Generate quick action buttons based on query type
+                quick_actions = []
+                query_type = enhanced_result.get('query_type', '')
+
+                if query_type == 'customer_analysis':
+                    quick_actions.extend([
+                        {'text': 'View Customer Details', 'action': 'view_customer_details'},
+                        {'text': 'Customer Distribution by State', 'action': 'customer_distribution'}
+                    ])
+                elif query_type == 'order_analytics':
+                    quick_actions.extend([
+                        {'text': 'Track Order Status', 'action': 'track_order'},
+                        {'text': 'Payment Analysis', 'action': 'payment_analysis'}
+                    ])
+                elif query_type == 'revenue_insights':
+                    quick_actions.extend([
+                        {'text': 'Revenue Breakdown', 'action': 'revenue_breakdown'},
+                        {'text': 'State Performance', 'action': 'state_performance'}
+                    ])
+                elif query_type == 'geographic_analysis':
+                    quick_actions.extend([
+                        {'text': 'Regional Analytics', 'action': 'regional_analytics'},
+                        {'text': 'Delivery Insights', 'action': 'delivery_insights'}
+                    ])
+
+                return jsonify({
+                    'success': True,
+                    'response': ai_response,
+                    'quick_actions': quick_actions,
+                    'query_type': query_type,
+                    'results_count': enhanced_result.get('results_count', 0),
+                    'execution_time': enhanced_result.get('execution_time', ''),
+                    'timestamp': datetime.now().isoformat(),
+                    'enhanced': True  # Flag to indicate enhanced processing
+                })
+
+        # Fallback to original logic for non-database queries or errors
         context = ""
 
-        # Extract context based on query intent
+        # Extract context based on query intent (original logic)
         if any(word in query.lower() for word in ['customer', 'customers', 'profile']):
             # If asking about customers, get relevant customer data
             search_term = ""
@@ -651,7 +696,8 @@ def api_chat():
             'success': True,
             'response': ai_response,
             'quick_actions': quick_actions,
-            'timestamp': datetime.now().isoformat()
+            'timestamp': datetime.now().isoformat(),
+            'enhanced': False  # Flag to indicate fallback processing
         })
 
     except Exception as e:
@@ -690,6 +736,220 @@ def api_quick_action():
     except Exception as e:
         error_logger.error(f"❌ Quick action error: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/api/enhanced-query', methods=['POST'])
+def api_enhanced_query():
+    """🇳🇬 Advanced Database Querying API endpoint for Nigerian E-commerce"""
+    try:
+        if enhanced_db_querying is None:
+            return jsonify({
+                'success': False,
+                'message': 'Enhanced querying service is not available. Please check system configuration.',
+                'error': 'Service not initialized'
+            }), 503
+
+        data = request.json
+        query = data.get('query', '').strip()
+        user_id = data.get('user_id', session.get('user_id', 'anonymous'))
+        include_sql = data.get('include_sql', False)  # Whether to return SQL query
+
+        if not query:
+            return jsonify({'success': False, 'message': 'Query is required'}), 400
+
+        # Process query through enhanced pipeline
+        result = enhanced_db_querying.process_query(query, user_id)
+
+        # Prepare response
+        response_data = {
+            'success': result['success'],
+            'response': result['response'],
+            'query_type': result.get('query_type', 'unknown'),
+            'results_count': result.get('results_count', 0),
+            'execution_time': result.get('execution_time', ''),
+            'entities': result.get('entities', {}),
+            'timestamp': result.get('timestamp', ''),
+            'has_results': result.get('has_results', False),
+            'user_id': user_id
+        }
+
+        # Include SQL query if requested (for debugging/transparency)
+        if include_sql and result.get('sql_query'):
+            response_data['sql_query'] = result['sql_query']
+
+        # Include error message if present
+        if result.get('error_message'):
+            response_data['error_message'] = result['error_message']
+
+        return jsonify(response_data)
+
+    except Exception as e:
+        error_logger.error(f"❌ Enhanced query API error: {e}")
+        return jsonify({
+            'success': False,
+            'message': 'Enhanced query service temporarily unavailable',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/conversation-history', methods=['GET'])
+def api_conversation_history():
+    """🗂️ Get conversation history for a user"""
+    try:
+        if enhanced_db_querying is None:
+            return jsonify({
+                'success': False,
+                'message': 'Conversation history service is not available',
+                'history': [],
+                'count': 0
+            })
+
+        user_id = request.args.get('user_id', session.get('user_id', 'anonymous'))
+        limit = int(request.args.get('limit', 10))
+
+        # Get conversation history
+        history = enhanced_db_querying.get_conversation_history(user_id, limit)
+
+        return jsonify({
+            'success': True,
+            'history': history,
+            'count': len(history),
+            'user_id': user_id
+        })
+
+    except Exception as e:
+        error_logger.error(f"❌ Conversation history API error: {e}")
+        return jsonify({
+            'success': False,
+            'message': 'Conversation history service unavailable',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/query-suggestions', methods=['GET'])
+def api_query_suggestions():
+    """💡 Get suggested queries based on Nigerian e-commerce context"""
+    try:
+        category = request.args.get('category', 'general')
+
+        suggestions = {
+            'customer_analysis': [
+                "Show me customers from Lagos state",
+                "How many customers do we have in each Nigerian state?",
+                "Which customers have Gold or Platinum account tiers?",
+                "Show customer distribution by account tier",
+                "Find customers who joined this month"
+            ],
+            'order_analytics': [
+                "What's our total number of orders this month?",
+                "Show orders with 'Pay on Delivery' payment method",
+                "Which orders are still pending delivery?",
+                "Compare order volumes by payment method",
+                "Show recent orders from Rivers state"
+            ],
+            'revenue_insights': [
+                "What's our total revenue this month?",
+                "Show revenue breakdown by Nigerian states",
+                "Compare revenue between Bank Transfer and Card payments",
+                "Which state generates the most revenue?",
+                "Show monthly revenue trends for this year"
+            ],
+            'geographic_analysis': [
+                "Which Nigerian state has the most customers?",
+                "Show order distribution across Nigerian states",
+                "Compare customer growth in Northern vs Southern Nigeria",
+                "Which LGAs have the highest order values?",
+                "Show delivery performance by state"
+            ],
+            'general': [
+                "Show me a summary of our business performance",
+                "What are our top-performing regions?",
+                "How is our customer base distributed?",
+                "Show recent business trends",
+                "Give me insights about our Nigerian market"
+            ]
+        }
+
+        return jsonify({
+            'success': True,
+            'suggestions': suggestions.get(category, suggestions['general']),
+            'category': category,
+            'available_categories': list(suggestions.keys())
+        })
+
+    except Exception as e:
+        error_logger.error(f"❌ Query suggestions API error: {e}")
+        return jsonify({
+            'success': False,
+            'message': 'Query suggestions service unavailable'
+        }), 500
+
+
+@app.route('/api/business-intelligence', methods=['GET'])
+def api_business_intelligence():
+    """📊 Advanced Business Intelligence Dashboard API"""
+    try:
+        # Get comprehensive business intelligence data
+        intelligence_data = {}
+
+        # Customer Intelligence
+        try:
+            customer_dist = customer_repo.get_customer_distribution()
+            intelligence_data['customer_distribution'] = customer_dist
+        except Exception as e:
+            error_logger.warning(f"Customer distribution error: {e}")
+            intelligence_data['customer_distribution'] = []
+
+        # Revenue Intelligence
+        try:
+            revenue_data = order_repo.get_revenue_by_state()
+            # Format revenue in Naira
+            for item in revenue_data:
+                if 'total_revenue' in item and item['total_revenue']:
+                    from src.enhanced_db_querying import NigerianBusinessIntelligence
+                    ni_intel = NigerianBusinessIntelligence()
+                    item['formatted_revenue'] = ni_intel.format_naira(float(item['total_revenue']))
+
+            intelligence_data['revenue_by_state'] = revenue_data
+        except Exception as e:
+            error_logger.warning(f"Revenue data error: {e}")
+            intelligence_data['revenue_by_state'] = []
+
+        # Order Intelligence
+        try:
+            order_summary = order_repo.get_order_summary()[:20]  # Last 20 orders
+            intelligence_data['recent_orders'] = order_summary
+        except Exception as e:
+            error_logger.warning(f"Order summary error: {e}")
+            intelligence_data['recent_orders'] = []
+
+        # Nigerian Business Context
+        from src.enhanced_db_querying import NigerianBusinessIntelligence
+        ni_intel = NigerianBusinessIntelligence()
+        intelligence_data['nigerian_context'] = {
+            'timezone_info': ni_intel.get_nigerian_timezone_context(),
+            'supported_states': NIGERIAN_STATES,
+            'payment_methods': ['Pay on Delivery', 'Bank Transfer', 'Card', 'RaqibTechPay']
+        }
+
+        return jsonify({
+            'success': True,
+            'data': intelligence_data,
+            'timestamp': datetime.now().isoformat(),
+            'summary': {
+                'total_states_covered': len(set([item.get('state') for item in intelligence_data.get('customer_distribution', []) if item.get('state')])),
+                'total_customers': sum([item.get('customer_count', 0) for item in intelligence_data.get('customer_distribution', [])]),
+                'total_revenue': sum([float(item.get('total_revenue', 0)) for item in intelligence_data.get('revenue_by_state', []) if item.get('total_revenue')])
+            }
+        })
+
+    except Exception as e:
+        error_logger.error(f"❌ Business intelligence API error: {e}")
+        return jsonify({
+            'success': False,
+            'message': 'Business intelligence service temporarily unavailable',
+            'error': str(e)
+        }), 500
 
 
 @app.errorhandler(404)

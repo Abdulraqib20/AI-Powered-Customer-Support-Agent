@@ -46,7 +46,7 @@
         <ul class="nav nav-tabs" id="dashboardTabs" role="tablist">
             <li class="nav-item" role="presentation">
                 <button class="nav-link active" id="support-tab" data-bs-toggle="tab" data-bs-target="#support" type="button" role="tab">
-                    <i class="bi bi-chat-dots-fill me-2"></i>Unified Support
+                    <i class="bi bi-chat-dots-fill me-2"></i>🇳🇬 AI Customer Support
                 </button>
             </li>
             <li class="nav-item" role="presentation">
@@ -73,7 +73,7 @@
             <div class="tab-pane fade show active" id="support" role="tabpanel">
                 <h4 class="mb-4">
                     <i class="bi bi-chat-dots-fill text-primary me-2"></i>
-                    AI-Powered Customer Support Chat
+                    🇳🇬 AI-Powered Nigerian E-commerce Customer Support Agent
                 </h4>
 
                 <div class="row">
@@ -82,19 +82,22 @@
                         <div class="chat-container">
                             <div class="chat-messages" id="chatMessages">
                                 <div class="message ai">
-                                    <strong>🤖 AI Support Agent</strong><br>
-                                    Hello! I'm your AI-powered customer support assistant for Nigerian e-commerce.
-                                    I can help you with customer queries, order tracking, payment issues, and analytics.
-                                    How can I assist you today?
+                                    <strong>🤖 Nigerian E-commerce AI Support Agent</strong><br>
+                                    Sannu! Welcome to your AI-powered customer support assistant for Nigerian e-commerce.
+                                    I can help you with customer queries, order tracking, payment issues, analytics, and database insights.
+                                    Ask me anything about your business data!
                                     <div class="quick-actions">
-                                        <button class="quick-action-btn" onclick="sendQuickMessage('Show customers from Lagos')">
+                                        <button class="quick-action-btn" onclick="sendQuickMessage('Show customers from Lagos state')">
                                             Lagos Customers
                                         </button>
-                                        <button class="quick-action-btn" onclick="sendQuickMessage('Show pending orders')">
+                                        <button class="quick-action-btn" onclick="sendQuickMessage('Show orders with status Pending')">
                                             Pending Orders
                                         </button>
-                                        <button class="quick-action-btn" onclick="sendQuickMessage('Show revenue analytics')">
+                                        <button class="quick-action-btn" onclick="sendQuickMessage('What is our total revenue this month?')">
                                             Revenue Analytics
+                                        </button>
+                                        <button class="quick-action-btn" onclick="sendQuickMessage('Which Nigerian state has the most customers?')">
+                                            Geographic Analysis
                                         </button>
                                     </div>
                                 </div>
@@ -102,67 +105,100 @@
                             <div class="chat-input-area p-3 border-top">
                                 <div class="input-group">
                                     <input type="text" class="form-control" id="chatInput"
-                                           placeholder="Type your query here... (e.g., 'Show customers from Lagos with pending orders')"
+                                           placeholder="Ask me anything... (e.g., 'Show customers from Rivers state with Card payments')"
                                            onkeypress="handleChatKeyPress(event)">
                                     <button class="btn btn-primary" type="button" onclick="sendChatMessage()">
                                         <i class="bi bi-send-fill"></i>
                                     </button>
                                 </div>
+                                <div class="form-check mt-2">
+                                    <input class="form-check-input" type="checkbox" id="showSqlQueries" checked>
+                                    <label class="form-check-label" for="showSqlQueries">
+                                        <small class="text-muted">
+                                            <i class="bi bi-database me-1"></i>Show SQL queries for validation
+                                        </small>
+                                    </label>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Quick Actions Panel -->
+                    <!-- Enhanced Right Panel -->
                     <div class="col-lg-4">
-                        <div class="card">
-                            <div class="card-header">
+                        <!-- Quick Query Categories -->
+                        <div class="card border-primary mb-3">
+                            <div class="card-header bg-gradient-primary text-white">
                                 <h6 class="mb-0">
-                                    <i class="bi bi-lightning-fill text-warning me-1"></i>
-                                    Quick Actions
+                                    <i class="bi bi-lightning-fill me-1"></i>
+                                    Query Categories
                                 </h6>
                             </div>
                             <div class="card-body">
                                 <div class="d-grid gap-2">
-                                    <button class="btn btn-outline-primary btn-sm" onclick="sendQuickMessage('Show customers with payment issues')">
-                                        <i class="bi bi-credit-card me-1"></i>Payment Issues
+                                    <button type="button" class="btn btn-outline-primary btn-sm query-category" data-category="customer_analysis">
+                                        <i class="bi bi-people me-1"></i> Customer Analytics
                                     </button>
-                                    <button class="btn btn-outline-success btn-sm" onclick="sendQuickMessage('Show delivery status updates')">
-                                        <i class="bi bi-truck me-1"></i>Delivery Status
+                                    <button type="button" class="btn btn-outline-success btn-sm query-category" data-category="order_analytics">
+                                        <i class="bi bi-cart me-1"></i> Order Analysis
                                     </button>
-                                    <button class="btn btn-outline-info btn-sm" onclick="sendQuickMessage('Show top customers by state')">
-                                        <i class="bi bi-star me-1"></i>Top Customers
+                                    <button type="button" class="btn btn-outline-warning btn-sm query-category" data-category="revenue_insights">
+                                        <i class="bi bi-currency-dollar me-1"></i> Revenue Insights
                                     </button>
-                                    <button class="btn btn-outline-warning btn-sm" onclick="sendQuickMessage('Show order trends this month')">
-                                        <i class="bi bi-graph-up me-1"></i>Order Trends
+                                    <button type="button" class="btn btn-outline-info btn-sm query-category" data-category="geographic_analysis">
+                                        <i class="bi bi-geo-alt me-1"></i> Geographic Analysis
                                     </button>
+                                </div>
+
+                                <!-- Query Suggestions -->
+                                <div id="querySuggestions" class="mt-3" style="display: none;">
+                                    <small class="text-muted"><strong>Suggested queries:</strong></small>
+                                    <div id="suggestionsContainer" class="mt-1"></div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Context Information -->
-                        <div class="card mt-3">
-                            <div class="card-header">
+                        <!-- System Status & Chat History -->
+                        <div class="card border-info">
+                            <div class="card-header bg-gradient-info text-white">
                                 <h6 class="mb-0">
-                                    <i class="bi bi-info-circle text-info me-1"></i>
-                                    System Status
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    System Status & History
                                 </h6>
                             </div>
                             <div class="card-body">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <small>AI Services</small>
-                                    <span class="badge bg-success">Online</span>
+                                <!-- System Status -->
+                                <div class="mb-3">
+                                    <small class="text-muted"><strong>System Status:</strong></small>
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <small>AI Services</small>
+                                        <span class="badge bg-success">Online</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <small>Database</small>
+                                        <span class="badge bg-success">Connected</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <small>Enhanced Pipeline</small>
+                                        <span class="badge bg-success">Active</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <small>Memory Store</small>
+                                        <span class="badge bg-success">Available</span>
+                                    </div>
                                 </div>
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <small>Database</small>
-                                    <span class="badge bg-success">Connected</span>
+
+                                <!-- Recent Queries -->
+                                <div id="conversationHistory" style="max-height: 200px; overflow-y: auto;">
+                                    <small class="text-muted"><strong>Recent Queries:</strong></small>
+                                    <div class="text-center text-muted mt-2">
+                                        <i class="bi bi-chat-text fa-2x mb-2"></i>
+                                        <p>No queries yet.<br>Start asking questions!</p>
+                                    </div>
                                 </div>
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <small>Groq API</small>
-                                    <span class="badge bg-success">Available</span>
-                                </div>
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <small>Memory Store</small>
-                                    <span class="badge bg-success">Active</span>
+                                <div class="mt-2 d-grid gap-1">
+                                    <button class="btn btn-sm btn-outline-info" id="loadHistoryBtn">
+                                        <i class="bi bi-arrow-clockwise me-1"></i>Refresh History
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -461,63 +497,449 @@
         </div>
     </div>
 </div>
-{% endblock %}
 
-{% block scripts %}
+<!-- Enhanced JavaScript for Integrated Customer Support Agent -->
 <script>
-// Initialize dashboard when page loads
-document.addEventListener('DOMContentLoaded', function() {
-    // Load initial data
-    loadCustomers();
-    loadUsageAnalytics();
-    loadBusinessAnalytics();
+// Integrated Nigerian E-commerce Customer Support Agent
+class IntegratedCustomerSupportAgent {
+    constructor() {
+        console.log('🇳🇬 Initializing Integrated Nigerian E-commerce Customer Support Agent...');
+        this.initializeEventListeners();
+        this.loadQuerySuggestions();
+        this.loadConversationHistory();
+    }
 
-    // Set up auto-refresh for real-time data
-    setInterval(updateRealTimeMetrics, 30000); // Update every 30 seconds
-});
+    initializeEventListeners() {
+        // Query category buttons
+        document.querySelectorAll('.query-category').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                this.showSuggestions(e.target.dataset.category);
+            });
+        });
 
-// Chat functionality
-function sendChatMessage() {
-    const input = document.getElementById('chatInput');
-    const message = input.value.trim();
-
-    if (!message) return;
-
-    // Add user message to chat
-    addMessageToChat(message, 'user');
-    input.value = '';
-
-    // Show typing indicator
-    showTypingIndicator();
-
-    // Send to API
-    fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            message: message
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        hideTypingIndicator();
-        if (data.success) {
-            addMessageToChat(data.response, 'ai', data.quick_actions);
-        } else {
-            addMessageToChat('Sorry, I encountered an error. Please try again.', 'ai');
+        // History management
+        const loadHistoryBtn = document.getElementById('loadHistoryBtn');
+        if (loadHistoryBtn) {
+            loadHistoryBtn.addEventListener('click', () => {
+                this.loadConversationHistory();
+            });
         }
-    })
-    .catch(error => {
-        hideTypingIndicator();
-        addMessageToChat('Connection error. Please check your internet connection.', 'ai');
-    });
+    }
+
+    async sendChatMessage(message = null) {
+        const chatInput = document.getElementById('chatInput');
+        if (!chatInput) return;
+
+        const userMessage = message || chatInput.value.trim();
+        if (!userMessage) return;
+
+        // Clear input
+        if (!message) chatInput.value = '';
+
+        // Add user message to chat
+        this.addMessageToChat(userMessage, 'user');
+
+        // Show typing indicator
+        this.showTypingIndicator();
+
+        try {
+            // Send to enhanced API
+            const response = await fetch('/api/enhanced-query', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    query: userMessage,
+                    include_sql: true
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            this.removeTypingIndicator();
+
+            if (data.success) {
+                this.addEnhancedResponseToChat(data);
+                // Refresh conversation history
+                setTimeout(() => {
+                    this.loadConversationHistory();
+                }, 1000);
+            } else {
+                this.addMessageToChat(data.message || 'Query failed', 'ai', true);
+            }
+
+        } catch (error) {
+            this.removeTypingIndicator();
+            console.error('❌ Chat error:', error);
+            this.addMessageToChat('I apologize, but I encountered a technical issue. Please try again.', 'ai', true);
+        }
+    }
+
+    addMessageToChat(message, sender, isError = false) {
+        const chatMessages = document.getElementById('chatMessages');
+        if (!chatMessages) return;
+
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${sender}`;
+
+        if (isError) {
+            messageDiv.classList.add('error');
+        }
+
+        const timestamp = new Date().toLocaleTimeString();
+        const senderName = sender === 'user' ? 'You' : '🤖 AI Support Agent';
+
+        messageDiv.innerHTML = `
+            <div class="d-flex justify-content-between">
+                <strong>${senderName}</strong>
+                <small class="text-muted">${timestamp}</small>
+            </div>
+            <div class="mt-1">${message}</div>
+        `;
+
+        chatMessages.appendChild(messageDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    addEnhancedResponseToChat(data) {
+        const chatMessages = document.getElementById('chatMessages');
+        if (!chatMessages) return;
+
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message ai enhanced';
+
+        const timestamp = new Date().toLocaleTimeString();
+        const showSql = document.getElementById('showSqlQueries')?.checked || false;
+
+        // Create message content
+        let messageContent = `
+            <div class="d-flex justify-content-between align-items-center">
+                <strong>🤖 Nigerian E-commerce AI Agent</strong>
+                <div>
+                    <span class="badge bg-info me-1">${data.query_type || 'Analysis'}</span>
+                    <small class="text-muted">${timestamp}</small>
+                </div>
+            </div>
+            <div class="mt-2">${data.response}</div>
+        `;
+
+        // Add execution metrics
+        if (data.results_count !== undefined || data.execution_time) {
+            messageContent += `
+                <div class="mt-2">
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Found ${data.results_count || 0} records • Processed in ${data.execution_time || 'N/A'}
+                    </small>
+                </div>
+            `;
+        }
+
+        // Add SQL query section if enabled
+        if (showSql && data.sql_query) {
+            messageContent += `
+                <div class="mt-3">
+                    <button class="btn btn-sm btn-outline-secondary" type="button"
+                            data-bs-toggle="collapse" data-bs-target="#sqlQuery_${Date.now()}"
+                            aria-expanded="false">
+                        <i class="bi bi-database me-1"></i>View SQL Query
+                    </button>
+                    <div class="collapse mt-2" id="sqlQuery_${Date.now()}">
+                        <div class="card bg-dark text-light">
+                            <div class="card-header d-flex justify-content-between">
+                                <small>Generated SQL Query</small>
+                                <button class="btn btn-sm btn-outline-light" onclick="copyToClipboard('${data.sql_query.replace(/'/g, "\\'")}')">
+                                    <i class="bi bi-clipboard"></i>
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <pre class="mb-0"><code>${this.formatSqlQuery(data.sql_query)}</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Add quick actions if available
+        if (data.query_type) {
+            const quickActions = this.getQuickActionsForQueryType(data.query_type);
+            if (quickActions.length > 0) {
+                messageContent += `
+                    <div class="mt-2">
+                        <small class="text-muted d-block mb-1">Quick follow-up actions:</small>
+                        <div class="quick-actions">
+                            ${quickActions.map(action =>
+                                `<button class="quick-action-btn" onclick="sendQuickMessage('${action}')">${action}</button>`
+                            ).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        messageDiv.innerHTML = messageContent;
+        chatMessages.appendChild(messageDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    formatSqlQuery(sql) {
+        // Basic SQL formatting for better readability
+        return sql
+            .replace(/SELECT/gi, '\nSELECT')
+            .replace(/FROM/gi, '\nFROM')
+            .replace(/WHERE/gi, '\nWHERE')
+            .replace(/GROUP BY/gi, '\nGROUP BY')
+            .replace(/ORDER BY/gi, '\nORDER BY')
+            .replace(/LIMIT/gi, '\nLIMIT')
+            .trim();
+    }
+
+    getQuickActionsForQueryType(queryType) {
+        const actions = {
+            'customer_analysis': [
+                'Show customer distribution by account tier',
+                'Find customers from other states'
+            ],
+            'order_analytics': [
+                'Show order trends this month',
+                'Check payment method distribution'
+            ],
+            'revenue_insights': [
+                'Compare revenue by states',
+                'Show monthly revenue trends'
+            ],
+            'geographic_analysis': [
+                'Show top performing regions',
+                'Compare Northern vs Southern Nigeria'
+            ]
+        };
+
+        return actions[queryType] || [];
+    }
+
+    showTypingIndicator() {
+        const chatMessages = document.getElementById('chatMessages');
+        if (!chatMessages) return;
+
+        const typingDiv = document.createElement('div');
+        typingDiv.className = 'message ai typing';
+        typingDiv.id = 'typingIndicator';
+        typingDiv.innerHTML = `
+            <strong>🤖 AI Support Agent</strong><br>
+            <div class="typing-dots">
+                <span></span><span></span><span></span>
+            </div>
+        `;
+
+        chatMessages.appendChild(typingDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    removeTypingIndicator() {
+        const typingIndicator = document.getElementById('typingIndicator');
+        if (typingIndicator) {
+            typingIndicator.remove();
+        }
+    }
+
+    async showSuggestions(category) {
+        try {
+            const response = await fetch(`/api/query-suggestions?category=${category}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            if (data.success) {
+                const container = document.getElementById('suggestionsContainer');
+                if (container) {
+                    container.innerHTML = '';
+
+                    data.suggestions.forEach(suggestion => {
+                        const btn = document.createElement('button');
+                        btn.className = 'btn btn-sm btn-outline-secondary me-1 mb-1';
+                        btn.textContent = suggestion;
+                        btn.onclick = () => {
+                            this.sendChatMessage(suggestion);
+                            this.hideSuggestions();
+                        };
+                        container.appendChild(btn);
+                    });
+
+                    const suggestionsEl = document.getElementById('querySuggestions');
+                    if (suggestionsEl) {
+                        suggestionsEl.style.display = 'block';
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('❌ Suggestions error:', error);
+        }
+    }
+
+    hideSuggestions() {
+        const suggestionsEl = document.getElementById('querySuggestions');
+        if (suggestionsEl) {
+            suggestionsEl.style.display = 'none';
+        }
+    }
+
+    async loadConversationHistory() {
+        try {
+            const response = await fetch('/api/conversation-history?limit=5');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            if (data.success && data.history.length > 0) {
+                this.displayConversationHistory(data.history);
+            } else {
+                this.displayEmptyHistory();
+            }
+        } catch (error) {
+            console.error('❌ History loading error:', error);
+            this.displayEmptyHistory();
+        }
+    }
+
+    displayConversationHistory(history) {
+        const container = document.getElementById('conversationHistory');
+        if (!container) return;
+
+        container.innerHTML = '<small class="text-muted"><strong>Recent Queries:</strong></small>';
+
+        history.forEach((entry) => {
+            const historyItem = document.createElement('div');
+            historyItem.className = 'border-bottom pb-1 mb-1';
+
+            const timestamp = new Date(entry.timestamp).toLocaleTimeString();
+
+            historyItem.innerHTML = `
+                <div class="d-flex justify-content-between">
+                    <small class="text-primary">${entry.query_type || 'Query'}</small>
+                    <small class="text-muted">${timestamp}</small>
+                </div>
+                <div class="small">${entry.user_query.substring(0, 50)}...</div>
+                <button class="btn btn-xs btn-outline-primary mt-1" onclick="supportAgent.sendChatMessage('${entry.user_query.replace(/'/g, "\\'")}')">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Replay
+                </button>
+            `;
+
+            container.appendChild(historyItem);
+        });
+    }
+
+    displayEmptyHistory() {
+        const container = document.getElementById('conversationHistory');
+        if (container) {
+            container.innerHTML = `
+                <small class="text-muted"><strong>Recent Queries:</strong></small>
+                <div class="text-center text-muted mt-2">
+                    <i class="bi bi-chat-text fa-2x mb-2"></i>
+                    <p>No queries yet.<br>Start asking questions!</p>
+                </div>
+            `;
+        }
+    }
+
+    copyToClipboard(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            // Show temporary success message
+            const toast = document.createElement('div');
+            toast.className = 'alert alert-success position-fixed';
+            toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; opacity: 0.9;';
+            toast.innerHTML = '<i class="bi bi-check-circle me-1"></i>SQL query copied to clipboard!';
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                document.body.removeChild(toast);
+            }, 3000);
+        }).catch(err => {
+            console.error('Failed to copy text: ', err);
+            alert('Failed to copy to clipboard. Please copy manually.');
+        });
+    }
+
+    loadQuerySuggestions() {
+        console.log('✅ Integrated Nigerian E-commerce Customer Support Agent initialized');
+    }
+}
+
+// Global functions for compatibility
+function sendChatMessage() {
+    console.log('📤 sendChatMessage called');
+    if (window.supportAgent) {
+        window.supportAgent.sendChatMessage();
+    } else {
+        console.error('❌ supportAgent not initialized yet');
+        // Try to initialize if not ready
+        if (typeof IntegratedCustomerSupportAgent !== 'undefined') {
+            window.supportAgent = new IntegratedCustomerSupportAgent();
+            window.supportAgent.sendChatMessage();
+        }
+    }
 }
 
 function sendQuickMessage(message) {
-    document.getElementById('chatInput').value = message;
-    sendChatMessage();
+    console.log('🚀 sendQuickMessage called with:', message);
+
+    // Add visual feedback - find and highlight the clicked button
+    const buttons = document.querySelectorAll('.quick-action-btn');
+    buttons.forEach(btn => {
+        if (btn.onclick?.toString().includes(message)) {
+            btn.style.transform = 'scale(0.95)';
+            btn.style.opacity = '0.7';
+            btn.style.backgroundColor = '#007bff';
+            btn.style.color = 'white';
+            setTimeout(() => {
+                btn.style.transform = '';
+                btn.style.opacity = '';
+                btn.style.backgroundColor = '';
+                btn.style.color = '';
+            }, 300);
+        }
+    });
+
+    if (window.supportAgent) {
+        window.supportAgent.sendChatMessage(message);
+    } else {
+        console.error('❌ supportAgent not initialized for quick message');
+
+        // Show user-friendly message
+        const chatMessages = document.getElementById('chatMessages');
+        if (chatMessages) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message ai';
+            messageDiv.innerHTML = `
+                <strong>🤖 AI Support Agent</strong><br>
+                <div class="mt-1">I'm still initializing... Please wait a moment and try again, or type your message in the input box below.</div>
+            `;
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Try to initialize if not ready
+        if (typeof IntegratedCustomerSupportAgent !== 'undefined') {
+            console.log('🔄 Initializing supportAgent...');
+            window.supportAgent = new IntegratedCustomerSupportAgent();
+            // Wait a moment then send the message
+            setTimeout(() => {
+                if (window.supportAgent) {
+                    window.supportAgent.sendChatMessage(message);
+                }
+            }, 100);
+        } else {
+            console.error('❌ IntegratedCustomerSupportAgent class not available');
+        }
+    }
 }
 
 function handleChatKeyPress(event) {
@@ -526,353 +948,428 @@ function handleChatKeyPress(event) {
     }
 }
 
-function addMessageToChat(message, type, quickActions = []) {
-    const messagesContainer = document.getElementById('chatMessages');
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${type}`;
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        // Show temporary success message
+        const toast = document.createElement('div');
+        toast.className = 'alert alert-success position-fixed';
+        toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; opacity: 0.9;';
+        toast.innerHTML = '<i class="bi bi-check-circle me-1"></i>SQL query copied to clipboard!';
+        document.body.appendChild(toast);
 
-    let messageContent = '';
-    if (type === 'ai') {
-        messageContent = `<strong>🤖 AI Support Agent</strong><br>`;
-    } else {
-        messageContent = `<strong>👤 You</strong><br>`;
+        setTimeout(() => {
+            document.body.removeChild(toast);
+        }, 3000);
+    }).catch(err => {
+        console.error('Failed to copy text: ', err);
+        alert('Failed to copy to clipboard. Please copy manually.');
+    });
+}
+
+// Initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 DOM Content Loaded - Initializing Customer Support Agent');
+
+    // Function to initialize the support agent
+    function initializeSupportAgent() {
+        try {
+            if (typeof IntegratedCustomerSupportAgent !== 'undefined') {
+                window.supportAgent = new IntegratedCustomerSupportAgent();
+                console.log('✅ Integrated customer support system initialized successfully');
+                return true;
+            } else {
+                console.warn('⚠️ IntegratedCustomerSupportAgent class not yet available');
+                return false;
+            }
+        } catch (error) {
+            console.error('❌ Error initializing support system:', error);
+            return false;
+        }
     }
 
-    messageContent += message;
-
-    if (quickActions && quickActions.length > 0) {
-        messageContent += '<div class="quick-actions">';
-        quickActions.forEach(action => {
-            messageContent += `<button class="quick-action-btn" onclick="handleQuickAction('${action.action}', '${action.text}')">${action.text}</button>`;
-        });
-        messageContent += '</div>';
+    // Try immediate initialization
+    if (!initializeSupportAgent()) {
+        // If failed, try again after a short delay
+        setTimeout(() => {
+            if (!initializeSupportAgent()) {
+                // If still failed, try one more time with longer delay
+                setTimeout(() => {
+                    initializeSupportAgent();
+                }, 1000);
+            }
+        }, 500);
     }
 
-    messageDiv.innerHTML = messageContent;
-    messagesContainer.appendChild(messageDiv);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    // Also try when the page is fully loaded
+    window.addEventListener('load', function() {
+        if (!window.supportAgent) {
+            console.log('🔄 Page fully loaded, trying to initialize support agent again...');
+            initializeSupportAgent();
+        }
+    });
+});
+
+// Enhanced CSS Styles for the integrated interface
+const enhancedStyles = `
+<style>
+/* Chat Messages Styling */
+.chat-container {
+    background: #f8f9fa;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
-function showTypingIndicator() {
-    const indicator = document.createElement('div');
-    indicator.className = 'message ai typing-indicator';
-    indicator.innerHTML = '<strong>🤖 AI Support Agent</strong><br>Typing...';
-    indicator.id = 'typingIndicator';
-    document.getElementById('chatMessages').appendChild(indicator);
-    document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+.chat-messages {
+    max-height: 500px;
+    overflow-y: auto;
+    padding: 20px;
+    background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%);
 }
 
-function hideTypingIndicator() {
-    const indicator = document.getElementById('typingIndicator');
-    if (indicator) {
-        indicator.remove();
+.message {
+    margin-bottom: 15px;
+    padding: 15px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.message.user {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    color: white;
+    margin-left: 50px;
+    border-bottom-right-radius: 4px;
+}
+
+.message.ai {
+    background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+    color: white;
+    margin-right: 50px;
+    border-bottom-left-radius: 4px;
+}
+
+.message.enhanced {
+    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+    color: white;
+    margin-right: 30px;
+    border-left: 5px solid #ffc107;
+    box-shadow: 0 4px 15px rgba(23, 162, 184, 0.3);
+}
+
+.message.error {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
+    border-left: 5px solid #ffc107;
+}
+
+.message.typing {
+    background: linear-gradient(135deg, #6c757d 0%, #545b62 100%);
+    color: white;
+    margin-right: 50px;
+}
+
+/* SQL Query Card Styling */
+.card.bg-dark {
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%) !important;
+    border: 2px solid #3498db;
+    box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+}
+
+.card.bg-dark .card-header {
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%) !important;
+    color: white !important;
+    border-bottom: 1px solid #5dade2;
+}
+
+.card.bg-dark .card-body {
+    background: #2c3e50 !important;
+}
+
+.card.bg-dark pre {
+    background: #1a252f !important;
+    color: #00ff88 !important;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #3498db;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    overflow-x: auto;
+}
+
+.card.bg-dark code {
+    color: #00ff88 !important;
+    text-shadow: 0 0 5px rgba(0, 255, 136, 0.3);
+}
+
+/* Button Styling */
+.btn-outline-light {
+    border-color: #ffc107 !important;
+    color: #ffc107 !important;
+}
+
+.btn-outline-light:hover {
+    background-color: #ffc107 !important;
+    color: #000 !important;
+}
+
+/* Badge Styling */
+.badge.bg-info {
+    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%) !important;
+    color: white !important;
+    border: 1px solid rgba(255,255,255,0.3);
+}
+
+/* Typing Animation */
+.typing-dots {
+    display: inline-flex;
+    gap: 5px;
+    align-items: center;
+}
+
+.typing-dots span {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #ffc107;
+    animation: typing 1.4s infinite ease-in-out both;
+    box-shadow: 0 0 5px rgba(255, 193, 7, 0.5);
+}
+
+.typing-dots span:nth-child(1) { animation-delay: -0.32s; }
+.typing-dots span:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes typing {
+    0%, 80%, 100% {
+        transform: scale(0.8);
+        opacity: 0.5;
     }
-}
-
-function handleQuickAction(action, text) {
-    fetch('/api/quick-action', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            action: action,
-            context: { text: text }
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            addMessageToChat(data.response, 'ai');
-        }
-    });
-}
-
-// Customer management functions
-function loadCustomers() {
-    const loading = document.getElementById('customersLoading');
-    const search = document.getElementById('customerSearch').value;
-    const state = document.getElementById('stateFilter').value;
-    const tier = document.getElementById('tierFilter').value;
-
-    loading.style.display = 'block';
-
-    const params = new URLSearchParams();
-    if (search) params.append('search', search);
-    if (state !== 'all') params.append('state', state);
-    if (tier !== 'all') params.append('tier', tier);
-
-    fetch(`/api/customers?${params}`)
-    .then(response => response.json())
-    .then(data => {
-        loading.style.display = 'none';
-        if (data.success) {
-            displayCustomers(data.data);
-        }
-    })
-    .catch(error => {
-        loading.style.display = 'none';
-        console.error('Error loading customers:', error);
-    });
-}
-
-function displayCustomers(customers) {
-    const tbody = document.getElementById('customersTableBody');
-    tbody.innerHTML = '';
-
-    customers.forEach(customer => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${customer.customer_id}</td>
-            <td>${customer.name}</td>
-            <td>${customer.email}</td>
-            <td>${customer.state}</td>
-            <td>${customer.lga}</td>
-            <td><span class="badge bg-${getTierColor(customer.account_tier)}">${customer.account_tier}</span></td>
-            <td>${customer.phone}</td>
-            <td>
-                <button class="btn btn-sm btn-outline-primary" onclick="viewCustomerDetails(${customer.customer_id})">
-                    <i class="bi bi-eye"></i>
-                </button>
-                <button class="btn btn-sm btn-outline-success" onclick="editCustomer(${customer.customer_id})">
-                    <i class="bi bi-pencil"></i>
-                </button>
-            </td>
-        `;
-        tbody.appendChild(row);
-    });
-}
-
-function getTierColor(tier) {
-    const colors = {
-        'Bronze': 'secondary',
-        'Silver': 'info',
-        'Gold': 'warning',
-        'Platinum': 'success'
-    };
-    return colors[tier] || 'secondary';
-}
-
-function viewCustomerDetails(customerId) {
-    // Implementation for viewing customer details
-    alert(`View customer details for ID: ${customerId}`);
-}
-
-function editCustomer(customerId) {
-    // Implementation for editing customer
-    alert(`Edit customer for ID: ${customerId}`);
-}
-
-// Analytics functions
-function loadUsageAnalytics() {
-    fetch('/api/analytics?type=usage')
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            updateUsageMetrics(data.data);
-            createUsageCharts(data.data);
-        }
-    });
-}
-
-function loadBusinessAnalytics() {
-    fetch('/api/analytics?type=summary')
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            createBusinessCharts(data.data);
-            updateBusinessMetrics(data.data);
-        }
-    });
-}
-
-function updateUsageMetrics(data) {
-    const groqData = data.groq_api || {};
-    document.getElementById('requestsToday').textContent = groqData.requests_today || 0;
-    document.getElementById('tokensToday').textContent = (groqData.tokens_today || 0).toLocaleString();
-    document.getElementById('groqRpm').textContent = groqData.requests_this_minute || 0;
-    document.getElementById('groqTpm').textContent = (groqData.tokens_this_minute || 0).toLocaleString();
-
-    // Update progress bars
-    const rpmPercent = ((groqData.requests_this_minute || 0) / 30) * 100;
-    const tpmPercent = ((groqData.tokens_this_minute || 0) / 100000) * 100;
-
-    document.getElementById('groqRpmProgress').style.width = `${Math.min(rpmPercent, 100)}%`;
-    document.getElementById('groqTpmProgress').style.width = `${Math.min(tpmPercent, 100)}%`;
-}
-
-function createUsageCharts(data) {
-    // Groq Usage Chart
-    const groqCtx = document.getElementById('groqUsageChart').getContext('2d');
-    new Chart(groqCtx, {
-        type: 'line',
-        data: {
-            labels: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '24:00'],
-            datasets: [{
-                label: 'Requests',
-                data: [5, 12, 8, 15, 22, 18, 10],
-                borderColor: 'rgb(75, 192, 192)',
-                tension: 0.1
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                y: {
-                    beginAtZero: true
-                }
-            }
-        }
-    });
-
-    // Response Time Chart
-    const responseCtx = document.getElementById('responseTimeChart').getContext('2d');
-    new Chart(responseCtx, {
-        type: 'bar',
-        data: {
-            labels: ['< 100ms', '100-200ms', '200-500ms', '500ms+'],
-            datasets: [{
-                label: 'Response Count',
-                data: [45, 32, 18, 5],
-                backgroundColor: ['#198754', '#ffc107', '#fd7e14', '#dc3545']
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                y: {
-                    beginAtZero: true
-                }
-            }
-        }
-    });
-}
-
-function createBusinessCharts(data) {
-    // Customer Distribution Chart
-    if (data.customer_distribution) {
-        const customerCtx = document.getElementById('customerDistributionChart').getContext('2d');
-        const stateLabels = data.customer_distribution.map(item => item.state);
-        const customerCounts = data.customer_distribution.map(item => item.customer_count);
-
-        new Chart(customerCtx, {
-            type: 'doughnut',
-            data: {
-                labels: stateLabels.slice(0, 10), // Top 10 states
-                datasets: [{
-                    data: customerCounts.slice(0, 10),
-                    backgroundColor: [
-                        '#ff6384', '#36a2eb', '#cc65fe', '#ffce56', '#4bc0c0',
-                        '#9966ff', '#ff9f40', '#ff6384', '#c9cbcf', '#4bc0c0'
-                    ]
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: {
-                        position: 'bottom'
-                    }
-                }
-            }
-        });
-    }
-
-    // Revenue Chart
-    if (data.revenue_by_state) {
-        const revenueCtx = document.getElementById('revenueChart').getContext('2d');
-        const revenueLabels = data.revenue_by_state.map(item => item.state);
-        const revenueAmounts = data.revenue_by_state.map(item => parseFloat(item.total_revenue));
-
-        new Chart(revenueCtx, {
-            type: 'bar',
-            data: {
-                labels: revenueLabels.slice(0, 10),
-                datasets: [{
-                    label: 'Revenue (₦)',
-                    data: revenueAmounts.slice(0, 10),
-                    backgroundColor: '#198754'
-                }]
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            callback: function(value) {
-                                return '₦' + value.toLocaleString();
-                            }
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-    // Order Status Chart
-    const orderStatusCtx = document.getElementById('orderStatusChart').getContext('2d');
-    new Chart(orderStatusCtx, {
-        type: 'pie',
-        data: {
-            labels: ['Delivered', 'Processing', 'Pending', 'Returned'],
-            datasets: [{
-                data: [65, 20, 10, 5],
-                backgroundColor: ['#198754', '#ffc107', '#0dcaf0', '#dc3545']
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: {
-                    position: 'bottom'
-                }
-            }
-        }
-    });
-
-    // Payment Methods Chart
-    const paymentCtx = document.getElementById('paymentMethodsChart').getContext('2d');
-    new Chart(paymentCtx, {
-        type: 'doughnut',
-        data: {
-            labels: ['Pay on Delivery', 'Bank Transfer', 'Card', 'RaqibTechPay'],
-            datasets: [{
-                data: [45, 25, 20, 10],
-                backgroundColor: ['#0dcaf0', '#198754', '#ffc107', '#6f42c1']
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: {
-                    position: 'bottom'
-                }
-            }
-        }
-    });
-}
-
-function updateBusinessMetrics(data) {
-    // Update KPI values
-    if (data.revenue_by_state && data.revenue_by_state.length > 0) {
-        const totalRevenue = data.revenue_by_state.reduce((sum, item) =>
-            sum + parseFloat(item.total_revenue), 0);
-        document.getElementById('totalRevenue').textContent = '₦' + totalRevenue.toLocaleString();
-
-        const topState = data.revenue_by_state[0];
-        if (topState) {
-            document.getElementById('topState').textContent = topState.state;
-        }
+    40% {
+        transform: scale(1.2);
+        opacity: 1;
     }
 }
 
-function updateRealTimeMetrics() {
-    // Update usage analytics
-    loadUsageAnalytics();
-
-    // Update chat indicators if needed
-    // This function runs every 30 seconds to keep data fresh
+/* Quick Actions Styling */
+.quick-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
 }
+
+.quick-action-btn {
+    padding: 6px 12px;
+    background: linear-gradient(135deg, #ffffff 0%, #e3f2fd 100%);
+    border: 2px solid #2196f3;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    color: #1976d2;
+    box-shadow: 0 2px 5px rgba(33, 150, 243, 0.2);
+}
+
+.quick-action-btn:hover {
+    background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(33, 150, 243, 0.4);
+}
+
+/* Query Category Buttons */
+.query-category {
+    transition: all 0.3s ease;
+    border-width: 2px;
+    font-weight: 500;
+}
+
+.query-category:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 15px rgba(0,0,0,0.15);
+}
+
+.btn-outline-primary:hover {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    border-color: #007bff;
+}
+
+.btn-outline-success:hover {
+    background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+    border-color: #28a745;
+}
+
+.btn-outline-warning:hover {
+    background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%);
+    border-color: #ffc107;
+    color: #000;
+}
+
+.btn-outline-info:hover {
+    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+    border-color: #17a2b8;
+}
+
+/* Card Styling */
+.card.border-primary {
+    border-color: #007bff !important;
+    border-width: 2px;
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15);
+}
+
+.card.border-info {
+    border-color: #17a2b8 !important;
+    border-width: 2px;
+    box-shadow: 0 4px 12px rgba(23, 162, 184, 0.15);
+}
+
+.bg-gradient-primary {
+    background: linear-gradient(135deg, #007bff 0%, #6610f2 100%) !important;
+}
+
+.bg-gradient-info {
+    background: linear-gradient(135deg, #17a2b8 0%, #6f42c1 100%) !important;
+}
+
+/* Input Styling */
+.chat-input-area {
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+    border-top: 2px solid #dee2e6;
+}
+
+.form-control:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 10px rgba(0, 123, 255, 0.25);
+}
+
+/* System Status Badges */
+.badge.bg-success {
+    background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%) !important;
+    color: white !important;
+    box-shadow: 0 2px 5px rgba(40, 167, 69, 0.3);
+}
+
+/* Conversation History */
+.border-bottom {
+    border-bottom: 2px solid #e9ecef !important;
+    margin-bottom: 8px !important;
+    padding-bottom: 8px !important;
+}
+
+.text-primary {
+    color: #007bff !important;
+    font-weight: 600;
+}
+
+/* Button Extra Small */
+.btn-xs {
+    padding: 0.2rem 0.5rem;
+    font-size: 0.75rem;
+    border-radius: 15px;
+    font-weight: 500;
+}
+
+/* Scrollbar Styling */
+.chat-messages::-webkit-scrollbar,
+#conversationHistory::-webkit-scrollbar {
+    width: 8px;
+}
+
+.chat-messages::-webkit-scrollbar-track,
+#conversationHistory::-webkit-scrollbar-track {
+    background: linear-gradient(135deg, #f1f1f1 0%, #e9ecef 100%);
+    border-radius: 10px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb,
+#conversationHistory::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    border-radius: 10px;
+    border: 2px solid #f1f1f1;
+}
+
+.chat-messages::-webkit-scrollbar-thumb:hover,
+#conversationHistory::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+}
+
+/* Toast Notification */
+.alert.alert-success.position-fixed {
+    background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 10px !important;
+    box-shadow: 0 4px 15px rgba(40, 167, 69, 0.4) !important;
+    font-weight: 500;
+}
+
+/* Stats Cards */
+.stats-card {
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    border-left: 5px solid #007bff;
+    transition: all 0.3s ease;
+}
+
+.stats-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+
+.stats-card.bg-success {
+    border-left-color: #28a745;
+}
+
+.stats-card.bg-warning {
+    border-left-color: #ffc107;
+}
+
+.stats-card.bg-info {
+    border-left-color: #17a2b8;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .message.user {
+        margin-left: 20px;
+    }
+
+    .message.ai,
+    .message.enhanced {
+        margin-right: 20px;
+    }
+
+    .quick-actions {
+        flex-direction: column;
+    }
+
+    .quick-action-btn {
+        width: 100%;
+        margin-bottom: 5px;
+    }
+}
+
+/* Nigerian Flag Colors Accent */
+.nigeria-accent {
+    border-left: 5px solid #008751;
+    border-right: 2px solid #ffffff;
+    border-bottom: 2px solid #008751;
+}
+
+/* Enhanced Collapse Animation */
+.collapse {
+    transition: all 0.4s ease;
+}
+
+.collapsing {
+    transition: height 0.4s ease;
+}
+</style>
+`;
+
+// Add styles to head
+document.head.insertAdjacentHTML('beforeend', enhancedStyles);
 </script>
 {% endblock %}

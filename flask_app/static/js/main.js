@@ -1,13 +1,11 @@
 /**
  * Nigerian E-commerce Customer Support Agent
  * Main JavaScript file for dynamic functionality
- * Includes real-time updates, chat, analytics, and Nigerian market features
+ * Includes real-time updates, analytics, and Nigerian market features
  */
 
 // Global variables
-let chatHistory = [];
 let currentUser = 'anonymous';
-let isTyping = false;
 let refreshInterval = null;
 let chartInstances = {};
 
@@ -67,13 +65,6 @@ function initializeApp() {
  * Set up event listeners
  */
 function setupEventListeners() {
-    // Chat input handling
-    const chatInput = document.getElementById('chatInput');
-    if (chatInput) {
-        chatInput.addEventListener('keypress', handleChatKeyPress);
-        chatInput.addEventListener('input', handleTypingIndicator);
-    }
-
     // Tab switching
     const tabButtons = document.querySelectorAll('[data-bs-toggle="tab"]');
     tabButtons.forEach(button => {
@@ -136,178 +127,6 @@ function loadInitialData() {
 
     // Initialize charts
     setTimeout(initializeCharts, 1000);
-}
-
-/**
- * Chat functionality
- */
-function sendChatMessage() {
-    const input = document.getElementById('chatInput');
-    const message = input.value.trim();
-
-    if (!message || isTyping) return;
-
-    // Add user message to chat
-    addMessageToChat(message, 'user');
-    input.value = '';
-
-    // Add to chat history
-    chatHistory.push({ type: 'user', message: message, timestamp: new Date() });
-
-    // Show typing indicator
-    showTypingIndicator();
-    isTyping = true;
-
-    // Send to API with error handling and retry logic
-    sendMessageToAPI(message)
-        .then(data => {
-            hideTypingIndicator();
-            isTyping = false;
-
-            if (data.success) {
-                addMessageToChat(data.response, 'ai', data.quick_actions);
-                chatHistory.push({
-                    type: 'ai',
-                    message: data.response,
-                    timestamp: new Date(),
-                    quick_actions: data.quick_actions
-                });
-            } else {
-                addMessageToChat('I apologize, but I encountered an error. Please try again.', 'ai');
-            }
-        })
-        .catch(error => {
-            hideTypingIndicator();
-            isTyping = false;
-            console.error('Chat error:', error);
-            addMessageToChat('Connection error. Please check your internet connection and try again.', 'ai');
-        });
-}
-
-/**
- * Send message to API with retry logic
- */
-async function sendMessageToAPI(message, retries = 3) {
-    for (let i = 0; i < retries; i++) {
-        try {
-            const response = await fetch('/api/chat', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    message: message,
-                    user_id: currentUser
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-
-            return await response.json();
-        } catch (error) {
-            console.log(`Attempt ${i + 1} failed:`, error);
-            if (i === retries - 1) throw error;
-            await sleep(1000 * (i + 1)); // Exponential backoff
-        }
-    }
-}
-
-/**
- * Add message to chat with animations
- */
-function addMessageToChat(message, type, quickActions = []) {
-    const messagesContainer = document.getElementById('chatMessages');
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${type}`;
-
-    // Format message content
-    let messageContent = formatChatMessage(message, type);
-
-    // Add quick actions if available
-    if (quickActions && quickActions.length > 0) {
-        messageContent += '<div class="quick-actions mt-2">';
-        quickActions.forEach(action => {
-            messageContent += `
-                <button class="quick-action-btn me-1 mb-1"
-                        onclick="handleQuickAction('${action.action}', '${escapeHtml(action.text)}')"
-                        title="${escapeHtml(action.text)}">
-                    ${escapeHtml(action.text)}
-                </button>
-            `;
-        });
-        messageContent += '</div>';
-    }
-
-    messageDiv.innerHTML = messageContent;
-
-    // Add Nigerian flag for AI messages
-    if (type === 'ai') {
-        messageDiv.classList.add('ai-message-nigeria');
-    }
-
-    messagesContainer.appendChild(messageDiv);
-
-    // Animate scroll to bottom
-    scrollChatToBottom(true);
-
-    // Add fade-in animation
-    setTimeout(() => {
-        messageDiv.classList.add('message-visible');
-    }, 50);
-}
-
-/**
- * Format chat message with Nigerian context
- */
-function formatChatMessage(message, type) {
-    let formattedMessage = '';
-
-    if (type === 'ai') {
-        formattedMessage = `
-            <div class="d-flex align-items-center mb-2">
-                <span class="me-2">🤖</span>
-                <strong class="text-success">Nigerian AI Support Agent</strong>
-                <span class="ms-auto">
-                    <small class="text-muted">${formatTime(new Date())}</small>
-                </span>
-            </div>
-        `;
-    } else {
-        formattedMessage = `
-            <div class="d-flex align-items-center mb-2">
-                <span class="me-2">👤</span>
-                <strong>You</strong>
-                <span class="ms-auto">
-                    <small class="text-muted">${formatTime(new Date())}</small>
-                </span>
-            </div>
-        `;
-    }
-
-    // Format currency mentions
-    let processedMessage = message.replace(/₦([\d,]+)/g, '<span class="naira">₦$1</span>');
-
-    // Highlight Nigerian states
-    NIGERIAN_STATES.forEach(state => {
-        const regex = new RegExp(`\\b${state}\\b`, 'gi');
-        processedMessage = processedMessage.replace(regex, `<strong class="text-info">${state}</strong>`);
-    });
-
-    // Format order statuses
-    Object.keys(ORDER_STATUSES).forEach(status => {
-        const regex = new RegExp(`\\b${status}\\b`, 'gi');
-        processedMessage = processedMessage.replace(regex,
-            `<span class="badge" style="background-color: ${ORDER_STATUSES[status].color}">
-                ${ORDER_STATUSES[status].icon} ${status}
-            </span>`
-        );
-    });
-
-    formattedMessage += `<div class="message-content">${processedMessage}</div>`;
-
-    return formattedMessage;
 }
 
 /**
@@ -675,36 +494,18 @@ function getTierBadge(tier) {
 }
 
 // Export functions for global access
-window.sendChatMessage = sendChatMessage;
 window.sendQuickMessage = function (message) {
     document.getElementById('chatInput').value = message;
-    sendChatMessage();
 };
 window.handleChatKeyPress = function (event) {
     if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault();
-        sendChatMessage();
     }
 };
 window.loadCustomers = loadCustomers;
 window.viewCustomerDetails = function (customerId) {
-    sendQuickMessage(`Show detailed profile for customer ${customerId}`);
-};
-window.editCustomer = function (customerId) {
-    alert(`Edit functionality for customer ${customerId} will be implemented in the next version.`);
-};
-window.handleQuickAction = function (action, text) {
-    fetch('/api/quick-action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: action, context: { text: text } })
-    })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                addMessageToChat(data.response, 'ai');
-            }
-        });
+    console.log(`Viewing customer details for ID: ${customerId}`);
+    // Customer details viewing will be handled by the integrated system
 };
 
 console.log('🇳🇬 Nigerian Customer Support Agent - JavaScript loaded successfully');
