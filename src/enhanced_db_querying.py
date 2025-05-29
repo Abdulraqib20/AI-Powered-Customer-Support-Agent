@@ -195,9 +195,10 @@ class EnhancedDatabaseQuerying:
         # Nigerian business intelligence helper
         self.ni_intelligence = NigerianBusinessIntelligence()
 
-    def classify_query_intent(self, user_query: str) -> Tuple[QueryType, Dict[str, Any]]:
+    def classify_query_intent(self, user_query: str, conversation_history: List[Dict] = None) -> Tuple[QueryType, Dict[str, Any]]:
         """
         🎯 Classify user query intent using Nigerian business context
+        Enhanced with conversation history for context inheritance
         """
         query_lower = user_query.lower()
         entities = {
@@ -206,7 +207,8 @@ class EnhancedDatabaseQuerying:
             'time_period': None,
             'amount_range': None,
             'product_categories': [],
-            'order_id': None
+            'order_id': None,
+            'customer_id': None  # Added customer_id for context inheritance
         }
 
         # Extract Nigerian states
@@ -242,6 +244,33 @@ class EnhancedDatabaseQuerying:
             entities['order_id'] = order_id_match.group(1)
             logger.info(f"Extracted order_id: {entities['order_id']}")
 
+        # 🆕 CONTEXT INHERITANCE: If no explicit entities found, check conversation history
+        if conversation_history and not entities['order_id'] and not entities['customer_id']:
+            # Look for order_id or customer_id from recent conversation
+            for conversation in conversation_history[:3]:  # Check last 3 conversations
+                if 'entities' in conversation:
+                    conv_entities = conversation['entities']
+
+                    # Inherit order_id if available
+                    if conv_entities.get('order_id') and not entities['order_id']:
+                        entities['order_id'] = conv_entities['order_id']
+                        logger.info(f"🔄 Inherited order_id from conversation history: {entities['order_id']}")
+
+                    # Try to extract customer_id from execution results if order was queried
+                    if conversation.get('execution_result'):
+                        for result in conversation['execution_result']:
+                            if 'customer_id' in result and not entities['customer_id']:
+                                entities['customer_id'] = str(result['customer_id'])
+                                logger.info(f"🔄 Inherited customer_id from conversation history: {entities['customer_id']}")
+                                break
+
+        # 🆕 ADDITIONAL CONTEXT: If we have order_id from history but need customer_id for order history
+        if entities.get('order_id') and not entities.get('customer_id') and 'history' in query_lower:
+            # For order history queries, we need the customer_id associated with the order_id
+            # This will be handled in SQL generation or we can mark this as needing a lookup
+            entities['needs_customer_lookup'] = True
+            logger.info(f"🔍 Order history query detected - will lookup customer_id for order_id: {entities['order_id']}")
+
         # Classify query type based on keywords
         if any(keyword in query_lower for keyword in ['customer', 'customers', 'profile', 'account']):
             if any(keyword in query_lower for keyword in ['where', 'from', 'in', 'state', 'location']):
@@ -249,7 +278,7 @@ class EnhancedDatabaseQuerying:
             else:
                 return QueryType.CUSTOMER_ANALYSIS, entities
 
-        elif any(keyword in query_lower for keyword in ['order', 'orders', 'purchase', 'transaction']):
+        elif any(keyword in query_lower for keyword in ['order', 'orders', 'purchase', 'transaction', 'history']):
             return QueryType.ORDER_ANALYTICS, entities
 
         elif any(keyword in query_lower for keyword in ['revenue', 'sales', 'money', 'naira', '₦', 'income']):
@@ -307,14 +336,17 @@ NIGERIAN BUSINESS CONTEXT:
 QUERY GENERATION RULES:
 1. Always use proper PostgreSQL syntax
 2. Include appropriate WHERE clauses for Nigerian context. If 'order_id' is present in EXTRACTED ENTITIES, prioritize filtering by `orders.order_id`.
-3. Use date functions for time-based queries (e.g., CURRENT_DATE, DATE_TRUNC)
-4. Format monetary values appropriately
-5. Consider Nigerian geographic divisions (states, LGAs)
-6. Handle partitioned tables correctly (orders table is partitioned by created_at). If querying by a specific 'order_id', a broad or no filter on `created_at` might be appropriate, as `order_id` should be unique.
-7. Use proper JOINs when needed
-8. Limit results appropriately (usually 10-50 rows unless a specific ID is queried)
-9. Order results logically
-10. Handle NULL values gracefully
+3. If 'customer_id' is present in EXTRACTED ENTITIES (from conversation history), use it to filter customer-related queries.
+4. For "order history" queries with customer_id: SELECT o.*, c.name FROM orders o JOIN customers c ON o.customer_id = c.customer_id WHERE o.customer_id = [customer_id]
+5. If 'needs_customer_lookup' is true and order_id is available: First get customer_id from the order, then get all orders for that customer
+6. Use date functions for time-based queries (e.g., CURRENT_DATE, DATE_TRUNC)
+7. Format monetary values appropriately
+8. Consider Nigerian geographic divisions (states, LGAs)
+9. Handle partitioned tables correctly (orders table is partitioned by created_at). If querying by a specific 'order_id', a broad or no filter on `created_at` might be appropriate, as `order_id` should be unique.
+10. Use proper JOINs when needed
+11. Limit results appropriately (usually 10-50 rows unless a specific ID is queried)
+12. Order results logically
+13. Handle NULL values gracefully
 
 USER QUERY: "{user_query}"
 QUERY TYPE: {query_type.value}
@@ -357,6 +389,41 @@ Generate ONLY the SQL query, no explanations or markdown formatting.
             return "SELECT * FROM customers ORDER BY created_at DESC LIMIT 10;"
 
         elif query_type == QueryType.ORDER_ANALYTICS:
+            # If we have customer_id from conversation history, use it for order history
+            if entities.get('customer_id'):
+                customer_id = entities['customer_id']
+                return f"""
+                SELECT o.order_id, o.order_status, o.payment_method, o.total_amount,
+                       o.delivery_date, o.created_at, c.name as customer_name
+                FROM orders o
+                JOIN customers c ON o.customer_id = c.customer_id
+                WHERE o.customer_id = {customer_id}
+                ORDER BY o.created_at DESC
+                LIMIT 20;
+                """
+            # If we need to lookup customer from order_id for order history
+            elif entities.get('needs_customer_lookup') and entities.get('order_id'):
+                order_id = entities['order_id']
+                return f"""
+                SELECT o2.order_id, o2.order_status, o2.payment_method, o2.total_amount,
+                       o2.delivery_date, o2.created_at, c.name as customer_name
+                FROM orders o1
+                JOIN customers c ON o1.customer_id = c.customer_id
+                JOIN orders o2 ON c.customer_id = o2.customer_id
+                WHERE o1.order_id = {order_id}
+                ORDER BY o2.created_at DESC
+                LIMIT 20;
+                """
+            # If we have order_id, get specific order
+            elif entities.get('order_id'):
+                order_id = entities['order_id']
+                return f"""
+                SELECT o.*, c.name as customer_name, c.email
+                FROM orders o
+                JOIN customers c ON o.customer_id = c.customer_id
+                WHERE o.order_id = {order_id};
+                """
+            # Default fallback
             return "SELECT * FROM orders ORDER BY created_at DESC LIMIT 10;"
 
         elif query_type == QueryType.REVENUE_INSIGHTS:
@@ -611,9 +678,13 @@ Just let me know what you need assistance with."""
         start_time = datetime.now()
 
         try:
-            # Stage 1: Intent Classification
+            # Stage 0: Get Conversation History (moved earlier for context inheritance)
+            logger.info(f"📚 Stage 0: Retrieving conversation history for context")
+            conversation_history = self.get_conversation_history(user_id)
+
+            # Stage 1: Intent Classification (now with conversation history)
             logger.info(f"🎯 Stage 1: Classifying query intent")
-            query_type, entities = self.classify_query_intent(user_query)
+            query_type, entities = self.classify_query_intent(user_query, conversation_history)
 
             # Stage 2: SQL Generation
             logger.info(f"🔍 Stage 2: Generating SQL query")
@@ -622,10 +693,6 @@ Just let me know what you need assistance with."""
             # Stage 3: Database Execution
             logger.info(f"🗄️ Stage 3: Executing database query")
             execution_result, error_message = self.execute_database_query(sql_query)
-
-            # Stage 4: Get Conversation History
-            logger.info(f"📚 Stage 4: Retrieving conversation history")
-            conversation_history = self.get_conversation_history(user_id)
 
             # Create query context
             query_context = QueryContext(
@@ -640,12 +707,12 @@ Just let me know what you need assistance with."""
                 error_message=error_message
             )
 
-            # Stage 5: Generate Nigerian Response
-            logger.info(f"🇳🇬 Stage 5: Generating Nigerian business response")
+            # Stage 4: Generate Nigerian Response
+            logger.info(f"🇳🇬 Stage 4: Generating Nigerian business response")
             query_context.response = self.generate_nigerian_response(query_context, conversation_history)
 
-            # Stage 6: Store Context
-            logger.info(f"📝 Stage 6: Storing conversation context")
+            # Stage 5: Store Context
+            logger.info(f"📝 Stage 5: Storing conversation context")
             self.store_conversation_context(query_context, user_id)
 
             # Calculate processing time
