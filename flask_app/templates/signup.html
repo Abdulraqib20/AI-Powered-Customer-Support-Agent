@@ -1,0 +1,327 @@
+{% extends "base.html" %}
+
+{% block title %}Sign Up - raqibtech.com Customer Support{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card shadow">
+                <div class="card-header bg-success text-white text-center">
+                    <h4 class="mb-0">
+                        <i class="bi bi-person-plus me-2"></i>
+                        Create Your Account
+                    </h4>
+                </div>
+                <div class="card-body p-4">
+                    <div class="text-center mb-4">
+                        <p class="text-muted">
+                            Join raqibtech.com to enjoy personalized shopping, order tracking, and exclusive benefits across Nigeria.
+                        </p>
+                    </div>
+
+                    <form id="signupForm">
+                        <!-- Personal Information -->
+                        <div class="row">
+                            <div class="col-12 mb-3">
+                                <label for="fullName" class="form-label">Full Name <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="fullName" required
+                                       placeholder="Enter your full name (e.g., Abdulraqib Omotosho)">
+                                <div class="form-text">Enter your complete name as it should appear on deliveries</div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="email" class="form-label">Email Address <span class="text-danger">*</span></label>
+                                <input type="email" class="form-control" id="email" required
+                                       placeholder="raqibcodes@example.com">
+                                <div class="form-text">We'll use this for order updates and account access</div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="phone" class="form-label">Phone Number <span class="text-danger">*</span></label>
+                                <input type="tel" class="form-control" id="phone" required
+                                       placeholder="07025965922">
+                                <div class="form-text">Nigerian phone number for delivery coordination</div>
+                            </div>
+                        </div>
+
+                        <!-- Location Information -->
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="state" class="form-label">State <span class="text-danger">*</span></label>
+                                <select class="form-select" id="state" required>
+                                    <option value="">Select your state</option>
+                                    <option value="Abia">Abia</option>
+                                    <option value="Adamawa">Adamawa</option>
+                                    <option value="Akwa Ibom">Akwa Ibom</option>
+                                    <option value="Anambra">Anambra</option>
+                                    <option value="Bauchi">Bauchi</option>
+                                    <option value="Bayelsa">Bayelsa</option>
+                                    <option value="Benue">Benue</option>
+                                    <option value="Borno">Borno</option>
+                                    <option value="Cross River">Cross River</option>
+                                    <option value="Delta">Delta</option>
+                                    <option value="Ebonyi">Ebonyi</option>
+                                    <option value="Edo">Edo</option>
+                                    <option value="Ekiti">Ekiti</option>
+                                    <option value="Enugu">Enugu</option>
+                                    <option value="FCT">Federal Capital Territory (Abuja)</option>
+                                    <option value="Gombe">Gombe</option>
+                                    <option value="Imo">Imo</option>
+                                    <option value="Jigawa">Jigawa</option>
+                                    <option value="Kaduna">Kaduna</option>
+                                    <option value="Kano">Kano</option>
+                                    <option value="Katsina">Katsina</option>
+                                    <option value="Kebbi">Kebbi</option>
+                                    <option value="Kogi">Kogi</option>
+                                    <option value="Kwara">Kwara</option>
+                                    <option value="Lagos">Lagos</option>
+                                    <option value="Nasarawa">Nasarawa</option>
+                                    <option value="Niger">Niger</option>
+                                    <option value="Ogun">Ogun</option>
+                                    <option value="Ondo">Ondo</option>
+                                    <option value="Osun">Osun</option>
+                                    <option value="Oyo">Oyo</option>
+                                    <option value="Plateau">Plateau</option>
+                                    <option value="Rivers">Rivers</option>
+                                    <option value="Sokoto">Sokoto</option>
+                                    <option value="Taraba">Taraba</option>
+                                    <option value="Yobe">Yobe</option>
+                                    <option value="Zamfara">Zamfara</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="lga" class="form-label">Local Government Area <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="lga" required
+                                       placeholder="Enter your LGA (e.g., Ikeja, Wuse II)">
+                                <div class="form-text">Local Government Area for precise delivery location</div>
+                            </div>
+                        </div>
+
+                        <!-- Address -->
+                        <div class="mb-3">
+                            <label for="address" class="form-label">Full Address <span class="text-danger">*</span></label>
+                            <textarea class="form-control" id="address" rows="3" required
+                                      placeholder="Enter your complete address including street name, area, and landmark if any"></textarea>
+                            <div class="form-text">Provide detailed address for accurate delivery</div>
+                        </div>
+
+                        <!-- Preferences (Optional) -->
+                        <div class="mb-3">
+                            <label class="form-label">Preferred Product Categories (Optional)</label>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="electronics" value="electronics">
+                                        <label class="form-check-label" for="electronics">📱 Electronics</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="fashion" value="fashion">
+                                        <label class="form-check-label" for="fashion">👗 Fashion</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="beauty" value="beauty">
+                                        <label class="form-check-label" for="beauty">💄 Beauty</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="computing" value="computing">
+                                        <label class="form-check-label" for="computing">💻 Computing</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="automotive" value="automotive">
+                                        <label class="form-check-label" for="automotive">🚗 Automotive</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="books" value="books">
+                                        <label class="form-check-label" for="books">📚 Books</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-success" id="signupBtn">
+                                <i class="bi bi-person-plus me-2"></i>
+                                Create My Account
+                            </button>
+                        </div>
+                    </form>
+
+                    <div class="text-center mt-4">
+                        <hr>
+                        <p class="text-muted small">
+                            Already have an account?
+                            <a href="/login" class="text-decoration-none">
+                                <i class="bi bi-box-arrow-in-right me-1"></i>
+                                Sign In Here
+                            </a>
+                        </p>
+                        <a href="/" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-chat-dots me-1"></i>
+                            Continue as Guest
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Benefits Card -->
+            <div class="card mt-4">
+                <div class="card-body">
+                    <h6 class="card-title">
+                        <i class="bi bi-gift-fill text-success me-2"></i>
+                        Membership Benefits
+                    </h6>
+                    <ul class="list-unstyled small">
+                        <li class="mb-1">
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            Personalized product recommendations
+                        </li>
+                        <li class="mb-1">
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            Exclusive member-only deals and discounts
+                        </li>
+                        <li class="mb-1">
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            Priority customer support and delivery
+                        </li>
+                        <li class="mb-1">
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            Account tier progression (Bronze → Silver → Gold → Platinum)
+                        </li>
+                        <li class="mb-1">
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            Order history and easy reordering
+                        </li>
+                        <li class="mb-1">
+                            <i class="bi bi-check-circle text-success me-2"></i>
+                            Saved addresses and payment methods
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const signupForm = document.getElementById('signupForm');
+    const signupBtn = document.getElementById('signupBtn');
+    const requiredFields = ['fullName', 'email', 'phone', 'state', 'lga', 'address'];
+
+    // Phone number formatting
+    const phoneInput = document.getElementById('phone');
+    phoneInput.addEventListener('input', function(e) {
+        let value = e.target.value.replace(/\D/g, '');
+
+        // Handle Nigerian phone formats
+        if (value.startsWith('234')) {
+            // +234 format
+            value = '+' + value.substring(0, 14);
+        } else if (value.startsWith('0')) {
+            // 080x format
+            value = value.substring(0, 11);
+        }
+
+        e.target.value = value;
+    });
+
+    signupForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        // Validate required fields
+        let hasErrors = false;
+        const formData = {};
+
+        requiredFields.forEach(fieldId => {
+            const field = document.getElementById(fieldId);
+            const value = field.value.trim();
+
+            if (!value) {
+                field.classList.add('is-invalid');
+                hasErrors = true;
+            } else {
+                field.classList.remove('is-invalid');
+                formData[fieldId] = value;
+            }
+        });
+
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (formData.email && !emailRegex.test(formData.email)) {
+            document.getElementById('email').classList.add('is-invalid');
+            hasErrors = true;
+        }
+
+        // Validate phone format
+        const phoneRegex = /^(\+234|0)[7-9][0-1]\d{8}$/;
+        if (formData.phone && !phoneRegex.test(formData.phone.replace(/\s/g, ''))) {
+            document.getElementById('phone').classList.add('is-invalid');
+            hasErrors = true;
+        }
+
+        if (hasErrors) {
+            alert('Please fill in all required fields correctly.');
+            return;
+        }
+
+        // Collect preferences
+        const preferences = [];
+        document.querySelectorAll('input[type="checkbox"]:checked').forEach(checkbox => {
+            preferences.push(checkbox.value);
+        });
+
+        formData.preferences = preferences;
+
+        // Disable button and show loading
+        signupBtn.disabled = true;
+        signupBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating Account...';
+
+        try {
+            const response = await fetch('/api/signup', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(formData)
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                // Show success message
+                signupBtn.innerHTML = '<i class="bi bi-check-circle me-2"></i>Account Created!';
+                signupBtn.classList.remove('btn-success');
+                signupBtn.classList.add('btn-primary');
+
+                // Show success message
+                alert(`Welcome to raqibtech.com! Your Customer ID is: ${result.customer_id}\n\nYou are now logged in and can start shopping!`);
+
+                // Redirect to dashboard after short delay
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 2000);
+            } else {
+                throw new Error(result.message || 'Registration failed');
+            }
+
+        } catch (error) {
+            console.error('Signup error:', error);
+            alert('Registration failed: ' + error.message);
+
+            // Reset button
+            signupBtn.disabled = false;
+            signupBtn.innerHTML = '<i class="bi bi-person-plus me-2"></i>Create My Account';
+        }
+    });
+
+    // Focus first input
+    document.getElementById('fullName').focus();
+});
+</script>
+{% endblock %}
