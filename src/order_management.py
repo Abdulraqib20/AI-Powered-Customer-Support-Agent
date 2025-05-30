@@ -46,8 +46,8 @@ class OrderStatus(Enum):
     PROCESSING = "Processing"
     SHIPPED = "Shipped"
     DELIVERED = "Delivered"
-    CANCELLED = "Cancelled"
     RETURNED = "Returned"
+    CANCELLED = "Returned"
 
 class PaymentMethod(Enum):
     """Nigerian payment methods"""
@@ -276,7 +276,7 @@ class OrderManagementSystem:
             # Calculate item subtotals
             order_items = []
             subtotal = Decimal('0.00')
-            total_weight = 0.0
+            total_weight = Decimal('0.00')  # 🔧 Fix: Use Decimal for consistency
 
             for item in items:
                 product_check = self.check_product_availability(
@@ -288,7 +288,7 @@ class OrderManagementSystem:
 
                 product_info = product_check['product_info']
                 item_price = Decimal(str(product_info['price']))
-                quantity = item['quantity']
+                quantity = Decimal(str(item['quantity']))  # 🔧 Fix: Convert to Decimal
                 item_subtotal = item_price * quantity
 
                 order_items.append(OrderItem(
@@ -297,17 +297,19 @@ class OrderManagementSystem:
                     category=product_info['category'],
                     brand=product_info['brand'],
                     price=float(item_price),
-                    quantity=quantity,
+                    quantity=int(quantity),  # Keep as int for OrderItem
                     subtotal=float(item_subtotal),
                     availability_status="Available"
                 ))
 
                 subtotal += item_subtotal
-                total_weight += (product_info.get('weight_kg', 1.0) * quantity)
+                # 🔧 Fix: Ensure weight calculation uses Decimal
+                weight_per_item = Decimal(str(product_info.get('weight_kg', 1.0)))
+                total_weight += (weight_per_item * quantity)
 
             # Calculate delivery fee
             delivery_fee, delivery_days, delivery_zone = self.delivery_calculator.calculate_delivery_fee(
-                delivery_state, total_weight, float(subtotal)
+                delivery_state, float(total_weight), float(subtotal)
             )
 
             # Calculate tier discount
@@ -332,7 +334,7 @@ class OrderManagementSystem:
                 "tier_discount_rate": tier_discount_rate,
                 "tax_amount": float(tax_amount),
                 "total_amount": float(total_amount),
-                "total_weight_kg": total_weight,
+                "total_weight_kg": float(total_weight),  # 🔧 Fix: Convert back to float for return
                 "customer_tier": customer['account_tier']
             }
 
@@ -347,10 +349,7 @@ class OrderManagementSystem:
                     delivery_address: Dict, payment_method: str) -> Dict[str, Any]:
         """🛒 Create a new order with comprehensive validation"""
         try:
-            # Generate unique order ID
-            order_id = f"RQB{datetime.now().strftime('%Y%m%d')}{str(uuid.uuid4())[:8].upper()}"
-
-            # Calculate order totals
+            # Calculate order totals first
             order_calc = self.calculate_order_totals(
                 items, customer_id, delivery_address['state']
             )
@@ -383,9 +382,32 @@ class OrderManagementSystem:
                     """, (customer_id,))
                     customer_info = cursor.fetchone()
 
+                    # 🔧 FIX: Insert order and get the auto-generated integer order_id
+                    cursor.execute("""
+                        INSERT INTO orders (
+                            customer_id, order_status, payment_method,
+                            total_amount, delivery_date, product_category, product_id,
+                            created_at, updated_at
+                        ) VALUES (
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        ) RETURNING order_id
+                    """, (
+                        customer_id, OrderStatus.PENDING.value, payment_method,
+                        order_calc['total_amount'], estimated_delivery,
+                        order_calc['order_items'][0].category,  # Primary category
+                        order_calc['order_items'][0].product_id,  # Primary product
+                        datetime.now(), datetime.now()
+                    ))
+
+                    # Get the auto-generated order_id
+                    order_id = cursor.fetchone()['order_id']
+
+                    # Create formatted order reference for display
+                    formatted_order_id = f"RQB{datetime.now().strftime('%Y%m%d')}{order_id:08d}"
+
                     # Create order summary
                     order_summary = OrderSummary(
-                        order_id=order_id,
+                        order_id=formatted_order_id,  # Use formatted ID for display
                         customer_id=customer_id,
                         customer_name=customer_info['name'],
                         items=order_calc['order_items'],
@@ -400,23 +422,6 @@ class OrderManagementSystem:
                         created_at=datetime.now(),
                         estimated_delivery=estimated_delivery
                     )
-
-                    # Insert main order record
-                    cursor.execute("""
-                        INSERT INTO orders (
-                            order_id, customer_id, order_status, payment_method,
-                            total_amount, delivery_date, product_category, product_id,
-                            created_at, updated_at
-                        ) VALUES (
-                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                        )
-                    """, (
-                        order_id, customer_id, OrderStatus.PENDING.value, payment_method,
-                        order_calc['total_amount'], estimated_delivery,
-                        order_calc['order_items'][0].category,  # Primary category
-                        order_calc['order_items'][0].product_id,  # Primary product
-                        datetime.now(), datetime.now()
-                    ))
 
                     # Update product stock quantities
                     for item in order_calc['order_items']:
@@ -440,21 +445,22 @@ class OrderManagementSystem:
                     # Commit transaction
                     conn.commit()
 
-                    logger.info(f"✅ Order {order_id} created successfully for customer {customer_id}")
+                    logger.info(f"✅ Order {formatted_order_id} (ID: {order_id}) created successfully for customer {customer_id}")
 
                     # Cache order for quick retrieval
                     if self.redis_client:
                         self.redis_client.setex(
-                            f"order:{order_id}",
+                            f"order:{formatted_order_id}",
                             3600,  # 1 hour cache
                             json.dumps(asdict(order_summary), default=str)
                         )
 
                     return {
                         "success": True,
-                        "order_id": order_id,
+                        "order_id": formatted_order_id,  # Return formatted ID
+                        "database_order_id": order_id,  # Also return DB ID for reference
                         "order_summary": order_summary,
-                        "message": f"Order {order_id} created successfully! You'll receive confirmation via SMS/email."
+                        "message": f"Order {formatted_order_id} created successfully! You'll receive confirmation via SMS/email."
                     }
 
         except Exception as e:
@@ -585,7 +591,7 @@ class OrderManagementSystem:
                             "error": "Order not found"
                         }
 
-                    if order_info['order_status'] in ['Delivered', 'Cancelled']:
+                    if order_info['order_status'] in ['Delivered', 'Returned']:
                         return {
                             "success": False,
                             "error": f"Cannot cancel order with status: {order_info['order_status']}"
@@ -596,7 +602,7 @@ class OrderManagementSystem:
                         UPDATE orders
                         SET order_status = %s, updated_at = CURRENT_TIMESTAMP
                         WHERE order_id = %s
-                    """, (OrderStatus.CANCELLED.value, order_id))
+                    """, (OrderStatus.RETURNED.value, order_id))
 
                     # Restore product stock (simplified - assumes 1 quantity)
                     cursor.execute("""
@@ -676,7 +682,7 @@ class OrderManagementSystem:
             SELECT SUM(total_amount) as total_spent, account_tier
             FROM orders o
             JOIN customers c ON o.customer_id = c.customer_id
-            WHERE o.customer_id = %s AND o.order_status != 'Cancelled'
+            WHERE o.customer_id = %s AND o.order_status != 'Returned'
             GROUP BY c.account_tier
         """, (customer_id,))
 
@@ -721,7 +727,7 @@ class OrderManagementSystem:
                             AVG(total_amount) as avg_order_value,
                             COUNT(CASE WHEN order_status = 'Delivered' THEN 1 END) as delivered_orders,
                             COUNT(CASE WHEN order_status = 'Pending' THEN 1 END) as pending_orders,
-                            COUNT(CASE WHEN order_status = 'Cancelled' THEN 1 END) as cancelled_orders
+                            COUNT(CASE WHEN order_status = 'Returned' THEN 1 END) as returned_orders
                         FROM orders
                     """
 

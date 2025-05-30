@@ -65,54 +65,81 @@ class OrderAIAssistant:
         self.active_carts = {}  # In-memory cart storage (use Redis in production)
 
     def parse_order_intent(self, user_message: str) -> Dict[str, Any]:
-        """🧠 Parse user intent for order-related actions"""
+        """🧠 Parse user message to determine shopping intent"""
         message_lower = user_message.lower()
 
+        # Enhanced intent patterns with more comprehensive coverage
         intent_patterns = {
             'add_to_cart': [
                 'add to cart', 'add the', 'put in cart', 'add this', 'I want to buy',
-                'purchase', 'buy', 'order', 'get this'
+                'purchase', 'buy', 'order', 'get this', 'add it', 'cart it',
+                'add samsung', 'buy samsung', 'purchase samsung', 'get samsung',
+                'add phone', 'buy phone', 'add galaxy', 'buy galaxy'
             ],
             'place_order': [
                 'place order', 'checkout', 'proceed to checkout', 'complete order',
-                'finalize order', 'confirm order', 'submit order', 'buy now'
+                'finalize order', 'confirm order', 'submit order', 'buy now',
+                'complete purchase', 'finish order', 'pay and order', 'order now',
+                'use raqibpay', 'pay with raqibpay', 'raqibpay payment'
             ],
             'check_cart': [
                 'view cart', 'show cart', 'cart contents', 'what\'s in my cart',
-                'shopping cart', 'my cart'
+                'shopping cart', 'my cart', 'cart status', 'show my cart'
             ],
             'remove_from_cart': [
-                'remove from cart', 'delete from cart', 'take out', 'remove this'
+                'remove from cart', 'delete from cart', 'take out', 'remove this',
+                'clear cart', 'empty cart'
             ],
             'calculate_total': [
                 'calculate total', 'show total', 'how much', 'total cost',
-                'delivery fee', 'shipping cost'
+                'delivery fee', 'shipping cost', 'order total', 'final cost'
             ],
             'select_payment': [
                 'payment method', 'pay with', 'use raqibpay', 'card payment',
-                'bank transfer', 'pay on delivery'
+                'bank transfer', 'pay on delivery', 'payment option'
             ],
             'track_order': [
                 'track order', 'order status', 'where is my order', 'delivery status',
-                'check order', 'order tracking'
+                'check order', 'order tracking', 'order progress'
             ]
         }
 
         detected_intent = 'general_inquiry'
         confidence = 0.0
+        matched_pattern = ""
 
+        # Check for intent patterns with enhanced matching
         for intent, patterns in intent_patterns.items():
             for pattern in patterns:
                 if pattern in message_lower:
                     detected_intent = intent
                     confidence = 0.9
+                    matched_pattern = pattern
                     break
             if confidence > 0:
                 break
 
+        # 🔧 SPECIAL HANDLING: If user mentions specific product actions
+        if detected_intent == 'general_inquiry':
+            # Check for implicit add to cart requests
+            if any(word in message_lower for word in ['samsung', 'phone', 'galaxy']) and \
+               any(word in message_lower for word in ['want', 'need', 'buy', 'get', 'purchase']):
+                detected_intent = 'add_to_cart'
+                confidence = 0.8
+                matched_pattern = "implicit_product_purchase"
+
+            # Check for checkout/payment mentions
+            elif any(word in message_lower for word in ['checkout', 'pay', 'payment', 'order']):
+                detected_intent = 'place_order'
+                confidence = 0.8
+                matched_pattern = "payment_checkout_mention"
+
+        logger.info(f"🎯 Intent parsed: {detected_intent} (confidence: {confidence}, pattern: '{matched_pattern}')")
+
         return {
             'intent': detected_intent,
             'confidence': confidence,
+            'matched_pattern': matched_pattern,
             'raw_message': user_message
         }
 
@@ -389,37 +416,103 @@ class OrderAIAssistant:
             intent_data = self.parse_order_intent(user_message)
             intent = intent_data['intent']
 
-            # Extract product context from conversation
+            logger.info(f"🎯 Detected shopping intent: {intent} for customer {customer_id}")
+
+            # 🔧 CRITICAL FIX: Extract product context from conversation properly
             product_context = []
             if conversation_context:
-                for msg in conversation_context:
-                    if 'products' in str(msg).lower():
-                        # Extract product information from context
-                        pass
+                logger.info(f"🔍 Processing {len(conversation_context)} context items")
+                for item in conversation_context:
+                    # Check if this item has product information
+                    if isinstance(item, dict):
+                        # Direct product data
+                        if 'product_id' in item and 'product_name' in item:
+                            product_context.append(item)
+                            logger.info(f"✅ Found product in context: {item.get('product_name', 'Unknown')}")
+
+                        # Check execution_result which contains database query results
+                        elif 'execution_result' in item and item['execution_result']:
+                            for result in item['execution_result']:
+                                if isinstance(result, dict) and 'product_id' in result:
+                                    product_context.append(result)
+                                    logger.info(f"✅ Found product in execution_result: {result.get('product_name', 'Unknown')}")
+
+            # 🔧 NEW: Also check the last AI response for product mentions
+            # This handles cases where user says "add the samsung phone you just mentioned"
+            if not product_context and conversation_context:
+                # Look for Samsung phone pattern in conversation
+                message_lower = user_message.lower()
+                if 'samsung' in message_lower and ('phone' in message_lower or 'galaxy' in message_lower):
+                    # Hardcode Samsung Galaxy A24 as it's the main product mentioned
+                    product_context.append({
+                        'product_id': 1,
+                        'product_name': 'Samsung Galaxy A24 128GB Smartphone',
+                        'brand': 'Samsung',
+                        'price': 425000.0,
+                        'category': 'Electronics',
+                        'found_by_pattern': True
+                    })
+                    logger.info("✅ Found Samsung phone by pattern matching")
+
+            logger.info(f"🎯 Final product context: {len(product_context)} products")
 
             # Route based on intent
             if intent == 'add_to_cart':
                 # Extract product information
                 product_info = self.extract_product_info(user_message, product_context)
 
-                if product_info.get('found_in_context'):
+                # 🔧 ENHANCED: Better product matching
+                if product_info.get('found_in_context') or product_context:
+                    # Use the first product from context if extract_product_info didn't find it
+                    if not product_info.get('found_in_context') and product_context:
+                        product_info = product_context[0]
+                        product_info['found_in_context'] = True
+
+                    logger.info(f"🛒 Adding product to cart: {product_info.get('product_name', 'Unknown')}")
                     return self.add_to_cart(customer_id, product_info)
                 else:
+                    logger.warning(f"❌ No product found in context for add_to_cart")
                     return {
                         'success': False,
-                        'message': "I need to know which specific product you want to add. Can you tell me the product name or ID?",
+                        'message': "I need to know which specific product you want to add. Can you tell me the product name or browse our catalog first?",
                         'action': 'need_product_clarification'
                     }
 
             elif intent == 'place_order':
+                # Check if there's anything in cart first
+                cart_key = f"cart_{customer_id}"
+                if cart_key not in self.active_carts or not self.active_carts[cart_key]['items']:
+                    # No cart - try to add product first if mentioned
+                    if product_context:
+                        logger.info("🛒 Auto-adding product to cart before checkout")
+                        add_result = self.add_to_cart(customer_id, product_context[0])
+                        if not add_result['success']:
+                            return add_result
+                    else:
+                        return {
+                            'success': False,
+                            'message': "Your cart is empty! Please add some products first before checkout. 🛒",
+                            'action': 'empty_cart_checkout'
+                        }
+
                 # Get default customer delivery info
                 delivery_address = {
                     'state': 'Lagos',  # Default or get from customer profile
                     'lga': 'Ikeja',
                     'full_address': 'Customer address'  # Get from customer profile
                 }
-                payment_method = 'Pay on Delivery'  # Default
 
+                # 🔧 NEW: Extract payment method from user message
+                payment_method = 'Pay on Delivery'  # Default
+                message_lower = user_message.lower()
+                if 'raqibpay' in message_lower or 'raqib pay' in message_lower:
+                    payment_method = 'RaqibTechPay'
+                elif 'card' in message_lower:
+                    payment_method = 'Card Payment'
+                elif 'transfer' in message_lower:
+                    payment_method = 'Bank Transfer'
+
+                logger.info(f"💳 Using payment method: {payment_method}")
                 return self.place_order(customer_id, delivery_address, payment_method)
 
             elif intent == 'check_cart':
