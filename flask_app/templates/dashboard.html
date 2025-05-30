@@ -216,6 +216,88 @@
     gap: 16px;
 }
 
+/* ===== WELCOME PAGE STYLES ===== */
+.welcome-page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 20px;
+    height: 100%;
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.welcome-page .brand-logo-large {
+    width: 64px;
+    height: 64px;
+    background: linear-gradient(135deg, #18bc9c, #16a085);
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    color: white;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 12px rgba(24, 188, 156, 0.3);
+}
+
+.welcome-page h2 {
+    font-size: 22px;
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 8px;
+}
+
+.welcome-page p {
+    font-size: 14px;
+    color: #576574;
+    margin-bottom: 24px;
+    line-height: 1.6;
+    max-width: 300px;
+}
+
+.welcome-quick-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    max-width: 280px;
+}
+
+.welcome-quick-actions .quick-action-btn {
+    background: #ffffff;
+    color: #2c3e50;
+    border: 1px solid #e0e0e0;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.welcome-quick-actions .quick-action-btn:hover {
+    background: #f8f9fa;
+    border-color: #ced4da;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.welcome-quick-actions .quick-action-btn i {
+    color: #18bc9c;
+    font-size: 16px;
+}
+
 /* Message Bubbles - Microsoft Fluent Style */
 .message {
     display: flex;
@@ -795,7 +877,7 @@
 }
 
 .showcase-card {
-    padding: 16px;
+        padding: 16px;
     background: linear-gradient(135deg, #f8f9fa, #e9ecef);
     border-radius: 12px;
     border: 1px solid #dee2e6;
@@ -1821,10 +1903,10 @@ class CustomerSupportPortal {
         const observer = new MutationObserver((mutations) => {
             mutations.forEach((mutation) => {
                 if (mutation.attributeName === 'class' && this.chatModal.classList.contains('active')) {
-                    setTimeout(() => {
-                        const chatInput = document.getElementById('chatInput');
-                        if (chatInput) {
-                            chatInput.focus();
+        setTimeout(() => {
+            const chatInput = document.getElementById('chatInput');
+            if (chatInput) {
+                chatInput.focus();
                             console.log('✅ Chat input focused');
                         }
                     }, 400); // Wait for animation
@@ -2028,16 +2110,16 @@ class CustomerSupportPortal {
                                 this.createAuthenticatedWelcome() :
                                 this.createGuestWelcome()
                             }
-                        </div>
-                    </div>
+                                    </div>
+                                </div>
                     <div class="message-meta">
                         <span class="welcome-timestamp">${new Date().toLocaleTimeString()}</span>
                         <span class="response-time">${this.userAuthenticated ?
                             "🌟 Your Personal AI Assistant" :
                             "🎯 Ready to Help You Explore"
                         }</span>
-                    </div>
-                </div>
+                                    </div>
+                                </div>
             </div>
         `;
     }
@@ -2050,14 +2132,14 @@ class CustomerSupportPortal {
                     <div class="brand-text">
                         <h5 class="brand-title">raqibtech<span class="domain">.com</span></h5>
                         <p class="brand-subtitle">Your Personal AI Support Assistant</p>
+                        </div>
                     </div>
-                </div>
-            </div>
+                    </div>
 
             <div class="welcome-greeting">
                 <h6 class="greeting-text">🌟 Welcome back! Ready to supercharge your experience?</h6>
                 <p class="greeting-subtitle">I'm your dedicated AI assistant, powered by advanced technology to make your shopping and support experience seamless! ✨</p>
-            </div>
+                </div>
 
             <div class="capabilities-grid">
                 <div class="capability-card primary">
@@ -2773,7 +2855,7 @@ function sendQuickMessage(message) {
         }
         // Wait for modal to open before sending message
         setTimeout(() => {
-            window.customerPortal.sendCustomerMessage(message);
+        window.customerPortal.sendCustomerMessage(message);
         }, 400);
     } else {
         console.error('❌ CustomerPortal not initialized');
@@ -2838,10 +2920,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add small delay to ensure all elements are ready
     setTimeout(() => {
         try {
-            window.customerPortal = new CustomerSupportPortal();
+    window.customerPortal = new CustomerSupportPortal();
 
-            const isAuthenticated = {{ 'true' if session.get('user_authenticated') else 'false' }};
-            const currentConversationId = '{{ current_conversation_id if current_conversation_id else '' }}';
+    const isAuthenticated = {{ 'true' if session.get('user_authenticated') else 'false' }};
+    const currentConversationId = '{{ current_conversation_id if current_conversation_id else '' }}';
 
             console.log(`🔍 Auth: ${isAuthenticated}, ConvID: ${currentConversationId}`);
             console.log('✅ Floating modal chat system ready!');

@@ -1632,9 +1632,6 @@ How can I help you with your raqibtech.com experience today? 🌟"""
         """
         start_time = time.time()
 
-        # 🆕 LOG USER MESSAGE TO TERMINAL
-        logger.info(f"👤 USER: {user_query}")
-
         try:
             # 🎯 STEP 1: Check if query is within customer support scope FIRST
             if not self.is_query_within_scope(user_query):
@@ -1651,81 +1648,24 @@ How can I help you with your raqibtech.com experience today? 🌟"""
 
             # 🆕 STEP 1.5: Check if this is a SHOPPING/ORDER ACTION that needs execution
             try:
-                from order_ai_assistant import order_ai_assistant
+                from .order_ai_assistant import order_ai_assistant
                 order_ai_available = True
             except ImportError:
-                try:
-                    from .order_ai_assistant import order_ai_assistant
-                    order_ai_available = True
-                except ImportError:
-                    order_ai_available = False
-
-            logger.info(f"🔍 Shopping check: order_ai_available={order_ai_available}, session_context={bool(session_context)}, user_authenticated={session_context.get('user_authenticated') if session_context else False}")
+                order_ai_available = False
 
             if order_ai_available and session_context and session_context.get('user_authenticated'):
-                logger.info("✅ All shopping prerequisites met - checking keywords...")
                 customer_id = session_context.get('customer_id')
                 if customer_id:
                     # Check for order-related intents
                     shopping_keywords = [
-                        # 🆕 ADD TO CART PATTERNS (MOST IMPORTANT)
-                        'add', 'add samsung', 'add galaxy', 'add phone', 'add to my cart',
-                        'buy', 'buy samsung', 'buy phone', 'get samsung', 'get phone',
-                        'order samsung', 'order phone', 'want samsung', 'want phone',
-
-                        # Original order patterns
                         'add to cart', 'place order', 'checkout', 'proceed to checkout',
                         'buy now', 'purchase', 'place the order', 'complete order',
-                        'use raqibpay', 'pay with', 'payment method',
-
-                        # 🆕 DELIVERY ADDRESS PATTERNS - Auto-trigger checkout
-                        'delivery address is', 'my address is', 'deliver to',
-                        'shipping address', 'send to', 'address:', 'deliver at',
-                        'my delivery address', 'ship to', 'delivery location',
-
-                        # 🆕 PAYMENT METHOD PATTERNS - Auto-trigger checkout
-                        'payment method is', 'pay with', 'use raqibpay',
-                        'payment option', 'i want to pay', 'payment preference',
-                        'method i want', 'raqibpay', 'pay on delivery',
-                        'want to use', 'i want to use raqibpay',
-
-                        # 🆕 COMPLETE CHECKOUT PATTERNS - Auto-place order
-                        'address is', 'method is', 'payment method i want',
-                        'delivery address', 'using raqibpay', 'pay with raqibpay',
-                        'lugbe', 'abuja', 'lagos', # Common Nigerian locations
-                        'raqibtech pay', 'raqib tech pay', 'confirm order', 'confirm'
+                        'use raqibpay', 'pay with', 'payment method'
                     ]
 
                     user_query_lower = user_query.lower()
-                    matched_keywords = [keyword for keyword in shopping_keywords if keyword in user_query_lower]
-                    logger.info(f"🔍 Shopping keyword check: query='{user_query[:50]}...', matched={matched_keywords}")
-
                     if any(keyword in user_query_lower for keyword in shopping_keywords):
-                        logger.info(f"🎯 SHOPPING ACTION TRIGGERED! Keywords matched: {matched_keywords}")
-                        # 🆕 DIRECT ORDER PLACEMENT: When user says "place order for X", auto-extract product and place order
-                        direct_order_patterns = ['place order for', 'order for', 'place the order for', 'buy the', 'purchase the']
-                        is_direct_order = any(pattern in user_query_lower for pattern in direct_order_patterns)
-
-                        if is_direct_order:
-                            logger.info(f"🎯 DIRECT ORDER DETECTED: {user_query[:100]}...")
-                            # Auto-set delivery and payment for direct orders
-                            user_query = f"{user_query} delivery_address:Lagos payment_method:RaqibTechPay"
-                            logger.info("🚀 Auto-adding default delivery and payment for direct order")
                         logger.info(f"🛒 Shopping action detected: {user_query[:50]}...")
-
-                        # 🆕 ENHANCED CHECKOUT DETECTION: Auto-detect complete checkout attempts
-                        has_delivery_info = any(keyword in user_query_lower for keyword in [
-                            'address is', 'delivery address', 'lugbe', 'abuja', 'lagos', 'address:'
-                        ])
-                        has_payment_info = any(keyword in user_query_lower for keyword in [
-                            'raqibpay', 'pay with', 'payment method', 'pay on delivery', 'card'
-                        ])
-
-                        # If user provides both delivery and payment info, force order placement
-                        if has_delivery_info and has_payment_info:
-                            logger.info("🎯 COMPLETE CHECKOUT DETECTED: User provided delivery + payment info")
-                            # Override user query to trigger order placement
-                            user_query = f"place order with delivery and payment: {user_query}"
 
                         # Get conversation history for context
                         user_id = session_context.get('user_id', 'anonymous')
@@ -1734,49 +1674,18 @@ How can I help you with your raqibtech.com experience today? 🌟"""
                         # 🔧 BULLETPROOF: Extract product context from multiple sources
                         product_context = []
 
-# 1.5. SPECIFIC SAMSUNG GALAXY A24 DETECTION
-                        if 'samsung galaxy a24' in user_query_lower or ('samsung' in user_query_lower and 'galaxy' in user_query_lower and 'a24' in user_query_lower):
-                            try:
-                                samsung_a24_sql = """
-                                SELECT product_id, product_name, category, brand, description, price, currency, in_stock, stock_quantity
-                                FROM products WHERE product_name ILIKE '%Samsung Galaxy A24%' AND in_stock = TRUE
-                                ORDER BY price ASC LIMIT 1
-                                """
-                                success, samsung_a24_results, _ = self.execute_sql_query(samsung_a24_sql)
-                                if success and samsung_a24_results:
-                                    product_context.extend(samsung_a24_results)
-                                    logger.info(f"✅ Found Samsung Galaxy A24 by specific query: {samsung_a24_results[0].get('product_name', 'Unknown')}")
-                            except Exception as e:
-                                logger.warning(f"⚠️ Could not query Samsung Galaxy A24: {e}")
+                        # 1. Extract from recent conversation history
+                        for msg in conversation_history:
+                            if isinstance(msg, dict):
+                                # Check execution_result field for product data
+                                if 'execution_result' in msg and msg['execution_result']:
+                                    for result in msg['execution_result']:
+                                        if isinstance(result, dict) and 'product_id' in result:
+                                            product_context.append(result)
+                                            logger.info(f"✅ Found product from history: {result.get('product_name', 'Unknown')}")
 
-                        
-
-# 1. NEW PRIORITY: Handle specific product names in order requests
-                        #    Example: "place the order for the Samsung Galaxy A24 128GB for me"
-                        order_keywords = ['order for', 'place order for', 'buy the', 'purchase the']
-                        if any(keyword in user_query_lower for keyword in order_keywords) and                            ('samsung galaxy a24' in user_query_lower or 'iphone 14 pro max' in user_query_lower): # Add more products as needed
-
-                            extracted_product_name = None
-                            if 'samsung galaxy a24' in user_query_lower:
-                                extracted_product_name = "Samsung Galaxy A24 128GB Smartphone"
-                            elif 'iphone 14 pro max' in user_query_lower:
-                                extracted_product_name = "iPhone 14 Pro Max 256GB"
-                            # Add more specific product name extractions here
-
-                            if extracted_product_name:
-                                try:
-                                    product_sql = f"SELECT product_id, product_name, category, brand, description, price, currency, in_stock, stock_quantity FROM products WHERE product_name ILIKE '%{extracted_product_name}%' AND in_stock = TRUE ORDER BY price ASC LIMIT 1"
-                                    success, product_results, _ = self.execute_sql_query(product_sql)
-                                    if success and product_results:
-                                        product_context.extend(product_results)
-                                        logger.info(f"✅ Found specific product for order: {product_results[0].get('product_name', 'Unknown')}")
-                                except Exception as e:
-                                    logger.warning(f"⚠️ Could not query specific product for order: {e}")
-
-
-
-                        # 2. ENHANCED SAMSUNG DETECTION: Handle Samsung Galaxy A24 and other Samsung products
-                        if ('samsung' in user_query_lower and ('phone' in user_query_lower or 'galaxy' in user_query_lower or 'a24' in user_query_lower)):
+                        # 2. Special Samsung phone handling (based on conversation)
+                        if not product_context and 'samsung' in user_query_lower and 'phone' in user_query_lower:
                             try:
                                 samsung_sql = """
                                 SELECT product_id, product_name, category, brand, description, price, currency, in_stock, stock_quantity
@@ -1790,39 +1699,7 @@ How can I help you with your raqibtech.com experience today? 🌟"""
                             except Exception as e:
                                 logger.warning(f"⚠️ Could not query Samsung phone: {e}")
 
-                        # 3. ONLY for contextual references: Extract from conversation history
-                        contextual_words = ['add it', 'buy it', 'get it', 'order it', 'take it', 'add this', 'buy this']
-                        is_contextual_reference = any(word in user_query_lower for word in contextual_words)
-
-                        if not product_context and is_contextual_reference:
-                            for msg in conversation_history:
-                                if isinstance(msg, dict):
-                                    # Check execution_result field for product data
-                                    if 'execution_result' in msg and msg['execution_result']:
-                                        for result in msg['execution_result']:
-                                            if isinstance(result, dict) and 'product_id' in result:
-                                                product_context.append(result)
-                                                logger.info(f"✅ Found product from history: {result.get('product_name', 'Unknown')}")
-                                                break  # Only take first product for contextual reference
-                                        if product_context:  # Stop once we find a product
-                                            break
-
-                        # 4. ENHANCED FALLBACK: Samsung product handling (fallback if not found above)
-                        if not product_context and ('samsung' in user_query_lower and ('phone' in user_query_lower or 'galaxy' in user_query_lower or 'a24' in user_query_lower)):
-                            try:
-                                samsung_sql = """
-                                SELECT product_id, product_name, category, brand, description, price, currency, in_stock, stock_quantity
-                                FROM products WHERE brand ILIKE '%Samsung%' AND product_name ILIKE '%phone%' AND in_stock = TRUE
-                                ORDER BY price ASC LIMIT 1
-                                """
-                                success, samsung_results, _ = self.execute_sql_query(samsung_sql)
-                                if success and samsung_results:
-                                    product_context.extend(samsung_results)
-                                    logger.info(f"✅ Found Samsung phone by direct query: {samsung_results[0].get('product_name', 'Unknown')}")
-                            except Exception as e:
-                                logger.warning(f"⚠️ Could not query Samsung phone: {e}")
-
-                        # 5. FALLBACK: Try to extract from current conversation context if needed
+                        # 3. Try to extract from current conversation context if needed
                         if not product_context:
                             # Run a quick product search based on the query
                             try:
