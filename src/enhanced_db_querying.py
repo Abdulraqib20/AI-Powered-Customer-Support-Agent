@@ -1,21 +1,16 @@
 """
-  Enhanced Database Querying System for Nigerian E-commerce Customer Support Agent
-===================================================================================
+🚀 Advanced Database Querying and Nigerian Customer Support System
+================================================================================
 
-Multi-Stage Pipeline Architecture:
-1. Intent Classification & Query Processing
-2. Nigerian Context-Aware SQL Generation
-3. Database Execution with Comprehensive Error Handling
-4. Context Storage & Memory Management
-5. Natural Language Response Generation
-
-Features:
-- Nigerian states, LGAs, and business context awareness
-- Naira currency formatting and Nigerian payment methods
-- Robust fallback mechanisms and error recovery
-- Conversation memory with structured "notepad" format
-- Time-aware query generation with Nigerian timezone
-- Professional business intelligence responses
+Intelligent Customer Support for Nigerian E-commerce Platform with:
+1. Natural Language Query Processing
+2. Context-Aware Conversation Management
+3. Nigerian Cultural and Regional Intelligence
+4. Emotional Intelligence and Empathy
+5. Multi-language Support (English + Nigerian Pidgin)
+6. 🆕 ACTUAL ORDER PLACEMENT AND SHOPPING ASSISTANCE
+7. Account Tier Management and Progression
+8. Real-time Analytics and Business Intelligence
 
 Author: AI Assistant for Nigerian E-commerce Excellence
 """
@@ -101,6 +96,12 @@ class QueryType(Enum):
     TEMPORAL_ANALYSIS = "temporal_analysis"
     GENERAL_CONVERSATION = "general_conversation"
     PRODUCT_INFO_GENERAL = "product_info_general"
+    SHOPPING_ASSISTANCE = "shopping_assistance"
+    ORDER_PLACEMENT = "order_placement"
+    PRODUCT_RECOMMENDATIONS = "product_recommendations"
+    PRICE_INQUIRY = "price_inquiry"
+    STOCK_CHECK = "stock_check"
+    SHOPPING_CART = "shopping_cart"
 
 @dataclass
 class QueryContext:
@@ -229,7 +230,11 @@ class EnhancedDatabaseQuerying:
             'brands': [],
             'product_keywords': [],
             'price_query': False,
-            'inventory_query': False
+            'inventory_query': False,
+            'shopping_intent': False,
+            'recommendation_intent': False,
+            'quantity': None,
+            'max_budget': None
         }
 
         # Extract Nigerian states
@@ -267,6 +272,31 @@ class EnhancedDatabaseQuerying:
         # 🆕 Extract stock/inventory terms
         if any(term in query_lower for term in ['stock', 'available', 'inventory', 'out of stock', 'in stock']):
             entities['inventory_query'] = True
+
+        # 🆕 ENHANCED SHOPPING ENTITIES
+        # Extract shopping intent terms
+        if any(term in query_lower for term in ['buy', 'purchase', 'order', 'add to cart', 'checkout', 'place order']):
+            entities['shopping_intent'] = True
+
+        # Extract recommendation intent terms
+        if any(term in query_lower for term in ['recommend', 'suggest', 'what should i buy', 'best product', 'popular', 'trending']):
+            entities['recommendation_intent'] = True
+
+        # Extract quantity if present
+        quantity_match = re.search(r'(\d+)\s*(piece|pieces|unit|units|qty|quantity)', query_lower)
+        if quantity_match:
+            entities['quantity'] = int(quantity_match.group(1))
+
+        # Extract budget/price range
+        price_match = re.search(r'(?:under|below|less than|within|budget of)\s*₦?(\d+(?:,\d+)*(?:k|K|m|M)?)', query_lower)
+        if price_match:
+            price_str = price_match.group(1).replace(',', '').lower()
+            if 'k' in price_str:
+                entities['max_budget'] = float(price_str.replace('k', '')) * 1000
+            elif 'm' in price_str:
+                entities['max_budget'] = float(price_str.replace('m', '')) * 1000000
+            else:
+                entities['max_budget'] = float(price_str)
 
         # Extract time periods
         time_indicators = {
@@ -360,12 +390,35 @@ class EnhancedDatabaseQuerying:
             entities['product_categories'].append('Books')
             return QueryType.PRODUCT_PERFORMANCE, entities
 
-        elif any(keyword in query_lower for keyword in ['car', 'auto', 'battery', 'tire', 'engine']):
+        elif any(keyword in query_lower for keyword in ['car', 'auto', 'automotive', 'battery', 'tire', 'tires', 'engine']):
             entities['product_categories'].append('Automotive')
             return QueryType.PRODUCT_PERFORMANCE, entities
 
         else:
             return QueryType.GENERAL_CONVERSATION, entities
+
+        # 🆕 ENHANCED QUERY CLASSIFICATION WITH SHOPPING CAPABILITIES
+        # Check for shopping intent first (highest priority for e-commerce)
+        if entities.get('shopping_intent') or any(keyword in query_lower for keyword in ['buy', 'purchase', 'place order', 'checkout', 'add to cart']):
+            return QueryType.ORDER_PLACEMENT, entities
+
+        # Check for recommendation requests
+        elif entities.get('recommendation_intent') or any(keyword in query_lower for keyword in ['recommend', 'suggest', 'what should i buy', 'best product', 'popular', 'trending', 'help me choose']):
+            return QueryType.PRODUCT_RECOMMENDATIONS, entities
+
+        # Check for price inquiries
+        elif entities.get('price_query') or entities.get('max_budget') or any(keyword in query_lower for keyword in ['how much', 'price of', 'cost of', 'budget']):
+            return QueryType.PRICE_INQUIRY, entities
+
+        # Check for stock/availability queries
+        elif entities.get('inventory_query') or any(keyword in query_lower for keyword in ['in stock', 'available', 'out of stock', 'availability']):
+            return QueryType.STOCK_CHECK, entities
+
+        # Check for general shopping assistance
+        elif any(keyword in query_lower for keyword in ['shopping', 'browse', 'catalog', 'categories', 'brands', 'what do you have', 'show me']):
+            return QueryType.SHOPPING_ASSISTANCE, entities
+
+        # Existing classification logic continues below...
 
     def generate_sql_query(self, user_query: str, query_type: QueryType, entities: Dict[str, Any]) -> str:
         """
@@ -472,6 +525,17 @@ QUERY GENERATION RULES:
 - Always mention Nigeria-wide delivery and multiple payment options
 - Use product database results to make personalized recommendations
 - If no specific products found: Guide to browse categories or suggest popular items
+
+🆕 SHOPPING AND ORDER ASSISTANCE:
+21. For ORDER_PLACEMENT queries: Get product details for ordering assistance
+22. For PRODUCT_RECOMMENDATIONS queries: Use collaborative filtering and popularity data
+23. For PRICE_INQUIRY queries: Focus on price comparisons and budget-friendly options
+24. For STOCK_CHECK queries: Prioritize availability status and alternative suggestions
+25. For SHOPPING_ASSISTANCE queries: Provide category browsing and general product information
+26. Include customer tier discounts and delivery information when relevant
+27. Format results to help customers make informed purchasing decisions
+28. Always check stock availability before suggesting products
+29. Include estimated delivery times and payment options in shopping assistance
 
 USER QUERY: "{user_query}"
 QUERY TYPE: {query_type.value}
@@ -669,6 +733,153 @@ Generate ONLY the SQL query, no explanations or markdown formatting.
                 WHERE p.in_stock = true
                 GROUP BY p.category
                 ORDER BY product_count DESC;
+                """
+
+        # 🆕 NEW SHOPPING-RELATED FALLBACK QUERIES
+        elif query_type == QueryType.PRODUCT_RECOMMENDATIONS:
+            # Get popular products for recommendations
+            customer_id = entities.get('customer_id')
+            if customer_id and customer_verified:
+                return f"""
+                SELECT p.product_id, p.product_name, p.category, p.brand, p.price,
+                       p.description, p.stock_quantity,
+                       CASE
+                           WHEN p.stock_quantity = 0 THEN 'Out of Stock'
+                           WHEN p.stock_quantity <= 10 THEN 'Low Stock'
+                           ELSE 'In Stock'
+                       END as stock_status,
+                       COUNT(o.order_id) as popularity_score
+                FROM products p
+                LEFT JOIN orders o ON p.product_id = o.product_id
+                WHERE p.in_stock = true AND p.stock_quantity > 0
+                AND p.product_id NOT IN (
+                    SELECT DISTINCT product_id FROM orders WHERE customer_id = {customer_id}
+                )
+                GROUP BY p.product_id, p.product_name, p.category, p.brand, p.price, p.description, p.stock_quantity
+                ORDER BY popularity_score DESC, p.price ASC
+                LIMIT 15;
+                """
+            else:
+                return """
+                SELECT p.product_id, p.product_name, p.category, p.brand, p.price,
+                       p.description, p.stock_quantity,
+                       CASE
+                           WHEN p.stock_quantity = 0 THEN 'Out of Stock'
+                           WHEN p.stock_quantity <= 10 THEN 'Low Stock'
+                           ELSE 'In Stock'
+                       END as stock_status,
+                       COUNT(o.order_id) as popularity_score
+                FROM products p
+                LEFT JOIN orders o ON p.product_id = o.product_id
+                WHERE p.in_stock = true AND p.stock_quantity > 0
+                GROUP BY p.product_id, p.product_name, p.category, p.brand, p.price, p.description, p.stock_quantity
+                ORDER BY popularity_score DESC, p.price ASC
+                LIMIT 15;
+                """
+
+        elif query_type == QueryType.PRICE_INQUIRY:
+            max_budget = entities.get('max_budget')
+            if max_budget:
+                return f"""
+                SELECT p.product_id, p.product_name, p.category, p.brand, p.price,
+                       p.description, p.stock_quantity,
+                       CASE
+                           WHEN p.price < 25000 THEN 'Very Affordable'
+                           WHEN p.price < 50000 THEN 'Budget-Friendly'
+                           WHEN p.price < 100000 THEN 'Mid-Range'
+                           WHEN p.price < 200000 THEN 'Premium'
+                           ELSE 'Luxury'
+                       END as price_category
+                FROM products p
+                WHERE p.price <= {max_budget} AND p.in_stock = true AND p.stock_quantity > 0
+                ORDER BY p.price ASC
+                LIMIT 20;
+                """
+            else:
+                return """
+                SELECT p.category, MIN(p.price) as min_price, MAX(p.price) as max_price,
+                       AVG(p.price) as avg_price, COUNT(*) as product_count
+                FROM products p
+                WHERE p.in_stock = true AND p.stock_quantity > 0
+                GROUP BY p.category
+                ORDER BY avg_price ASC;
+                """
+
+        elif query_type == QueryType.STOCK_CHECK:
+            if entities.get('product_categories'):
+                category = entities['product_categories'][0]
+                return f"""
+                SELECT p.product_id, p.product_name, p.brand, p.price, p.stock_quantity,
+                       CASE
+                           WHEN p.stock_quantity = 0 THEN 'Out of Stock'
+                           WHEN p.stock_quantity <= 5 THEN 'Low Stock - Hurry!'
+                           WHEN p.stock_quantity <= 15 THEN 'Limited Stock'
+                           ELSE 'In Stock'
+                       END as stock_status,
+                       p.in_stock
+                FROM products p
+                WHERE p.category = '{category}'
+                ORDER BY p.stock_quantity ASC, p.price ASC
+                LIMIT 20;
+                """
+            else:
+                return """
+                SELECT p.product_id, p.product_name, p.category, p.brand, p.price, p.stock_quantity,
+                       CASE
+                           WHEN p.stock_quantity = 0 THEN 'Out of Stock'
+                           WHEN p.stock_quantity <= 5 THEN 'Low Stock - Hurry!'
+                           WHEN p.stock_quantity <= 15 THEN 'Limited Stock'
+                           ELSE 'In Stock'
+                       END as stock_status
+                FROM products p
+                WHERE p.in_stock = true
+                ORDER BY p.stock_quantity ASC, p.category, p.price ASC
+                LIMIT 25;
+                """
+
+        elif query_type == QueryType.SHOPPING_ASSISTANCE:
+            return """
+            SELECT p.category, COUNT(*) as total_products,
+                   MIN(p.price) as min_price, MAX(p.price) as max_price,
+                   AVG(p.price) as avg_price,
+                   SUM(CASE WHEN p.stock_quantity > 0 THEN 1 ELSE 0 END) as available_products,
+                   STRING_AGG(DISTINCT p.brand, ', ') as popular_brands
+            FROM products p
+            WHERE p.in_stock = true
+            GROUP BY p.category
+            ORDER BY total_products DESC;
+            """
+
+        elif query_type == QueryType.ORDER_PLACEMENT:
+            # For order placement, get product details if specific products mentioned
+            if entities.get('product_categories'):
+                category = entities['product_categories'][0]
+                return f"""
+                SELECT p.product_id, p.product_name, p.brand, p.price, p.description,
+                       p.stock_quantity, p.weight_kg,
+                       CASE
+                           WHEN p.stock_quantity = 0 THEN 'Out of Stock'
+                           WHEN p.stock_quantity <= 5 THEN 'Low Stock'
+                           ELSE 'Available for Order'
+                       END as availability_status
+                FROM products p
+                WHERE p.category = '{category}' AND p.in_stock = true AND p.stock_quantity > 0
+                ORDER BY p.price ASC
+                LIMIT 15;
+                """
+            else:
+                return """
+                SELECT p.product_id, p.product_name, p.category, p.brand, p.price,
+                       p.description, p.stock_quantity,
+                       CASE
+                           WHEN p.stock_quantity = 0 THEN 'Out of Stock'
+                           WHEN p.stock_quantity <= 5 THEN 'Low Stock'
+                           ELSE 'Available for Order'
+                       END as availability_status
+                FROM products p
+                WHERE p.in_stock = true AND p.stock_quantity > 0
+                ORDER BY p.category, p.price ASC
+                LIMIT 20;
                 """
 
         else:
@@ -982,8 +1193,56 @@ RESPONSE STYLE:
         customer_id = session_context.get('customer_id', 'None') if session_context else 'None'
         customer_name = session_context.get('customer_name', 'valued customer') if session_context else 'valued customer'
 
+        # 🆕 NEW CUSTOMER WITH NO ORDERS HANDLING
+        if (customer_verified and
+            query_context.query_type == QueryType.ORDER_ANALYTICS and
+            (not query_context.execution_result or len(query_context.execution_result) == 0)):
+            # This is an authenticated new customer with no orders yet
+            response_prompt = f"""
+You are a helpful customer support agent for raqibtech.com. You're speaking with {customer_name} (Customer ID: {customer_id}), a newly registered customer.
+
+🎭 EMOTIONAL INTELLIGENCE CONTEXT:
+User's Current Emotion: {sentiment_data['emotion']} (Intensity: {sentiment_data['intensity']})
+Empathy Required: {sentiment_data['empathy_needed']}
+Emotional Keywords Detected: {sentiment_data['keywords']}
+
+{empathetic_style}
+
+PLATFORM: raqibtech.com (Nigerian e-commerce platform)
+CONTEXT: This is a NEW CUSTOMER who just registered and has no order history yet.
+
+CUSTOMER'S QUESTION: "{query_context.user_query}"
+
+🌟 NEW CUSTOMER WELCOME GUIDELINES:
+1. 🎭 Respond according to their emotional state with appropriate emojis
+2. 🎉 Welcome them warmly to raqibtech.com as a new member
+3. 💡 Clearly explain they have no orders yet because they just joined
+4. 🛍️ Encourage them to start shopping with these highlights:
+   - 🏪 Amazing product catalog: Electronics, Fashion, Beauty, Computing, Automotive, Books
+   - 💰 Competitive prices in Nigerian Naira (₦)
+   - 📦 Nigeria-wide delivery (all 36 states + FCT)
+   - 💳 Multiple payment options: Pay on Delivery, Bank Transfer, Card, RaqibTechPay
+   - 🏆 Account tier progression: Bronze → Silver → Gold → Platinum
+5. 🎯 Suggest popular categories based on their preferences if available
+6. ✨ Mention new member benefits and exclusive deals
+7. 🤗 Offer to help them find their first purchase
+8. 📞 Provide customer support contact for assistance
+9. 🌟 End with excitement about helping them start their shopping journey
+
+🆕 PRODUCT RECOMMENDATIONS:
+10. 📱 Electronics: Latest Samsung, Tecno, Infinix phones; LG, Sony TVs
+11. 👗 Fashion: Trendy Ankara designs, Nike, Adidas sportswear
+12. 💄 Beauty: MAC cosmetics, Nigerian shea butter, skincare essentials
+13. 💻 Computing: HP, Dell laptops, gaming accessories, monitors
+14. 🚗 Automotive: Car accessories, batteries, tires, spare parts
+15. 📚 Books: Nigerian literature, educational materials, children's books
+
+Keep response warm, encouraging, and under 120 words. Make them excited to start shopping!
+
+Respond as a welcoming, enthusiastic customer support friend:
+"""
         # 🔧 GUEST USER HANDLING: Provide different context for guest vs authenticated users
-        if not customer_verified and query_context.query_type == QueryType.ORDER_ANALYTICS:
+        elif not customer_verified and query_context.query_type == QueryType.ORDER_ANALYTICS:
             # For guest users asking about orders, provide platform information instead
             response_prompt = f"""
 You are a helpful customer support guide for raqibtech.com. You're speaking with a guest user who isn't logged in.
@@ -1106,6 +1365,17 @@ TECHNICAL RESPONSE LOGIC:
 - Always mention Nigeria-wide delivery and multiple payment options
 - Use product database results to make personalized recommendations
 - If no specific products found: Guide to browse categories or suggest popular items
+
+🆕 SHOPPING AND ORDER ASSISTANCE:
+21. For ORDER_PLACEMENT queries: Get product details for ordering assistance
+22. For PRODUCT_RECOMMENDATIONS queries: Use collaborative filtering and popularity data
+23. For PRICE_INQUIRY queries: Focus on price comparisons and budget-friendly options
+24. For STOCK_CHECK queries: Prioritize availability status and alternative suggestions
+25. For SHOPPING_ASSISTANCE queries: Provide category browsing and general product information
+26. Include customer tier discounts and delivery information when relevant
+27. Format results to help customers make informed purchasing decisions
+28. Always check stock availability before suggesting products
+29. Include estimated delivery times and payment options in shopping assistance
 
 EMOJI USAGE BY EMOTION:
 - Frustrated: 😔, 💙, 🤗, ✨ (calming, supportive)
@@ -1376,6 +1646,61 @@ How can I help you with your raqibtech.com experience today? 🌟"""
                     'results_count': 0
                 }
 
+            # 🆕 STEP 1.5: Check if this is a SHOPPING/ORDER ACTION that needs execution
+            try:
+                from .order_ai_assistant import order_ai_assistant
+                order_ai_available = True
+            except ImportError:
+                order_ai_available = False
+
+            if order_ai_available and session_context and session_context.get('user_authenticated'):
+                customer_id = session_context.get('customer_id')
+                if customer_id:
+                    # Check for order-related intents
+                    shopping_keywords = [
+                        'add to cart', 'place order', 'checkout', 'proceed to checkout',
+                        'buy now', 'purchase', 'place the order', 'complete order',
+                        'use raqibpay', 'pay with', 'payment method'
+                    ]
+
+                    user_query_lower = user_query.lower()
+                    if any(keyword in user_query_lower for keyword in shopping_keywords):
+                        logger.info(f"🛒 Shopping action detected: {user_query[:50]}...")
+
+                        # Get conversation history for context
+                        user_id = session_context.get('user_id', 'anonymous')
+                        conversation_history = self.get_conversation_history(user_id, limit=5)
+
+                        # Extract product context from recent conversation
+                        product_context = []
+                        for msg in conversation_history:
+                            if msg.get('execution_result'):
+                                for result in msg['execution_result']:
+                                    if 'product_id' in result:
+                                        product_context.append(result)
+
+                        # Process through Order AI Assistant
+                        shopping_result = order_ai_assistant.process_shopping_conversation(
+                            user_query, customer_id, product_context
+                        )
+
+                        if shopping_result['success']:
+                            # Generate enhanced response with shopping context
+                            enhanced_response = self._generate_shopping_response(shopping_result)
+
+                            return {
+                                'success': True,
+                                'response': enhanced_response,
+                                'query_type': 'shopping_action',
+                                'execution_time': f"{time.time() - start_time:.3f}s",
+                                'shopping_action': shopping_result['action'],
+                                'shopping_data': shopping_result,
+                                'results_count': 1
+                            }
+                        else:
+                            # Handle shopping error with fallback to regular processing
+                            logger.warning(f"🛒 Shopping action failed: {shopping_result.get('message', 'Unknown error')}")
+
             # Step 2: Get conversation history for context
             user_id = session_context.get('user_id', 'anonymous') if session_context else 'anonymous'
             conversation_history = self.get_conversation_history(user_id, limit=5)
@@ -1460,3 +1785,115 @@ How can I help you with your raqibtech.com experience today? 🌟"""
                 'execution_time': f"{execution_time:.3f}s",
                 'error': str(e)
             }
+
+    def _generate_shopping_response(self, shopping_result: Dict[str, Any]) -> str:
+        """🛒 Generate enhanced response for shopping actions"""
+        action = shopping_result.get('action', '')
+        message = shopping_result.get('message', '')
+
+        if action == 'add_to_cart_success':
+            cart_summary = shopping_result.get('cart_summary', {})
+            return f"""✅ {message}
+
+📋 **Cart Summary:**
+• Items: {cart_summary.get('total_items', 0)}
+• Subtotal: {cart_summary.get('subtotal_formatted', '₦0')}
+
+🎯 **What's next?**
+• View full cart details
+• Continue shopping for more products
+• Proceed to checkout
+
+Ready to place your order? Just say "checkout" or "place order"! 🚀"""
+
+        elif action == 'order_placed':
+            order_summary = shopping_result.get('order_summary', '')
+            return f"""🎉 {message}
+
+{order_summary}
+
+🎯 **What's next?**
+• Track your order status
+• Continue shopping
+• Contact support if needed
+
+Thank you for shopping with raqibtech.com! 💙"""
+
+        elif action == 'calculation_success':
+            formatted_summary = shopping_result.get('formatted_summary', '')
+            return f"""💰 {message}
+
+{formatted_summary}
+
+🎯 **Ready to complete your order?**
+• Confirm delivery address
+• Select payment method
+• Place order
+
+Just say "place order" to proceed! 🚀"""
+
+        elif action == 'cart_displayed':
+            cart_summary = shopping_result.get('cart_summary', {})
+            items_text = ""
+            for item in cart_summary.get('items', []):
+                items_text += f"• {item['product_name']} - ₦{item['price']:,.0f} x {item['quantity']} = ₦{item['subtotal']:,.0f}\n"
+
+            return f"""🛒 {message}
+
+**Your Cart:**
+{items_text}
+**Total Items:** {cart_summary.get('total_items', 0)}
+**Subtotal:** {cart_summary.get('subtotal_formatted', '₦0')}
+
+🎯 **Actions:**
+• Add more products
+• Calculate delivery costs
+• Proceed to checkout
+
+Ready to order? Say "checkout" or "place order"! 💙"""
+
+        elif action == 'orders_found':
+            orders = shopping_result.get('orders', [])
+            orders_text = ""
+            for order in orders[:3]:  # Show top 3
+                status_emoji = "📦" if order['order_status'] == 'Processing' else "✅" if order['order_status'] == 'Delivered' else "⏳"
+                orders_text += f"{status_emoji} Order #{order['order_id']} - ₦{order['total_amount']:,.0f} ({order['order_status']})\n"
+
+            return f"""📋 {message}
+
+**Recent Orders:**
+{orders_text}
+
+Need to track a specific order? Just tell me the order ID! 🔍"""
+
+        elif action == 'empty_cart':
+            return f"""🛒 {message}
+
+🎯 **Let's get you started:**
+• Browse our product catalog
+• Search for specific items
+• Check out trending products
+
+What would you like to shop for today? 😊"""
+
+        elif action == 'need_product_clarification':
+            return f"""🤔 {message}
+
+🎯 **To help you add the right product:**
+• Tell me the exact product name
+• Mention the brand or category
+• Reference a product from our recent conversation
+
+Example: "Add Samsung Galaxy A24 to cart" 📱"""
+
+        else:
+            return f"""💙 {message}
+
+Need help with shopping? I can assist you with:
+• 🛒 Adding products to cart
+• 💰 Calculating order totals
+• 📦 Placing and tracking orders
+• 💳 Payment assistance
+
+How can I help you today? 😊"""
+

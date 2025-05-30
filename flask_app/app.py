@@ -57,6 +57,13 @@ from src.enhanced_db_querying import EnhancedDatabaseQuerying
 # Add session manager import
 from src.session_manager import session_manager
 
+# Add src directory to path for imports
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+# 🆕 Import new systems
+from src.recommendation_engine import ProductRecommendationEngine
+from src.order_management import OrderManagementSystem
+
 # Initialize loggers
 app_logger, api_logger, error_logger = setup_logging()
 
@@ -486,14 +493,14 @@ def search_vector_database(query: str, collection_name: str = "customer_data") -
         return []
 
 
-# Initialize enhanced database querying system - Now using session-aware instances
-# try:
-#     enhanced_db_querying = EnhancedDatabaseQuerying()
-#     app_logger.info("✅ Enhanced database querying initialized successfully")
-# except Exception as e:
-#     app_logger.warning(f"⚠️ Enhanced database querying failed to initialize: {e}")
-#     enhanced_db_querying = None
+# Initialize Enhanced Database Querying system
+enhanced_db = EnhancedDatabaseQuerying()
+app_logger.info("Enhanced Database Querying system initialized")
 
+# 🆕 Initialize new systems
+recommendation_engine = ProductRecommendationEngine()
+order_management = OrderManagementSystem()
+app_logger.info("✅ Recommendation Engine and Order Management systems initialized")
 
 # Routes
 
@@ -901,9 +908,6 @@ def api_enhanced_query():
 
         # 🔧 DEBUG: Log session context for troubleshooting
         app_logger.info(f"🔍 Session context: user_authenticated={session_context['user_authenticated']}, customer_id={session_context['customer_id']}, user_id={session_context['user_id']}")
-
-        # Initialize enhanced database querying
-        enhanced_db = EnhancedDatabaseQuerying()
 
         # Process the query with session context
         result = enhanced_db.process_enhanced_query(user_query, session_context)
@@ -1865,6 +1869,408 @@ def signup_api():
         return jsonify({
             'success': False,
             'message': 'Registration failed. Please check your information and try again.'
+        }), 500
+
+
+# 🆕 ================================
+# SHOPPING & ORDER MANAGEMENT ENDPOINTS
+# ================================
+
+@app.route('/api/products/search', methods=['POST'])
+def search_products():
+    """🔍 Smart product search with personalization"""
+    try:
+        data = request.get_json()
+        query = data.get('query', '').strip()
+        category = data.get('category', '')
+        max_price = data.get('max_price')
+        limit = data.get('limit', 20)
+
+        # Get customer ID from session for personalization
+        customer_id = session.get('customer_id') if session.get('user_authenticated') else None
+
+        # Search products
+        products = recommendation_engine.search_products(
+            query=query,
+            customer_id=customer_id,
+            category=category if category else None,
+            max_price=max_price,
+            limit=limit
+        )
+
+        # Convert RecommendationResult objects to dict
+        products_data = []
+        for product in products:
+            products_data.append({
+                'product_id': product.product_id,
+                'product_name': product.product_name,
+                'category': product.category,
+                'brand': product.brand,
+                'price': product.price,
+                'price_formatted': product.price_formatted,
+                'description': product.description,
+                'stock_quantity': product.stock_quantity,
+                'stock_status': product.stock_status,
+                'recommendation_score': product.recommendation_score,
+                'recommendation_reason': product.recommendation_reason
+            })
+
+        return jsonify({
+            'success': True,
+            'products': products_data,
+            'total_found': len(products_data),
+            'search_query': query,
+            'personalized': customer_id is not None
+        })
+
+    except Exception as e:
+        app_logger.error(f"❌ Product search error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to search products',
+            'message': str(e)
+        }), 500
+
+
+@app.route('/api/products/recommendations', methods=['POST'])
+def get_product_recommendations():
+    """🎯 Get personalized product recommendations"""
+    try:
+        data = request.get_json()
+        customer_id = session.get('customer_id') if session.get('user_authenticated') else None
+
+        if not customer_id:
+            return jsonify({
+                'success': False,
+                'error': 'Authentication required for personalized recommendations',
+                'message': 'Please log in to get personalized recommendations'
+            }), 401
+
+        # Get comprehensive recommendations
+        recommendations = recommendation_engine.get_comprehensive_recommendations(
+            customer_id=customer_id,
+            limit=20
+        )
+
+        # Convert to JSON-serializable format
+        rec_data = {}
+        for category, products in recommendations.items():
+            rec_data[category] = []
+            for product in products:
+                rec_data[category].append({
+                    'product_id': product.product_id,
+                    'product_name': product.product_name,
+                    'category': product.category,
+                    'brand': product.brand,
+                    'price': product.price,
+                    'price_formatted': product.price_formatted,
+                    'description': product.description,
+                    'stock_quantity': product.stock_quantity,
+                    'stock_status': product.stock_status,
+                    'recommendation_score': product.recommendation_score,
+                    'recommendation_reason': product.recommendation_reason,
+                    'recommendation_type': product.recommendation_type.value,
+                    'customer_tier_discount': product.customer_tier_discount
+                })
+
+        return jsonify({
+            'success': True,
+            'recommendations': rec_data,
+            'customer_id': customer_id,
+            'generated_at': datetime.now().isoformat()
+        })
+
+    except Exception as e:
+        app_logger.error(f"❌ Recommendations error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to generate recommendations',
+            'message': str(e)
+        }), 500
+
+
+@app.route('/api/orders/calculate', methods=['POST'])
+def calculate_order_totals():
+    """💰 Calculate order totals before placement"""
+    try:
+        data = request.get_json()
+        customer_id = session.get('customer_id') if session.get('user_authenticated') else None
+
+        if not customer_id:
+            return jsonify({
+                'success': False,
+                'error': 'Authentication required for order calculation',
+                'message': 'Please log in to calculate order totals'
+            }), 401
+
+        items = data.get('items', [])
+        delivery_state = data.get('delivery_state', 'Lagos')  # Default to Lagos
+
+        if not items:
+            return jsonify({
+                'success': False,
+                'error': 'No items provided for calculation'
+            }), 400
+
+        # Calculate order totals
+        calculation = order_management.calculate_order_totals(
+            items=items,
+            customer_id=customer_id,
+            delivery_state=delivery_state
+        )
+
+        if not calculation['success']:
+            return jsonify(calculation), 400
+
+        # Convert OrderItem objects to dict for JSON serialization
+        items_data = []
+        for item in calculation['order_items']:
+            items_data.append({
+                'product_id': item.product_id,
+                'product_name': item.product_name,
+                'category': item.category,
+                'brand': item.brand,
+                'price': item.price,
+                'quantity': item.quantity,
+                'subtotal': item.subtotal,
+                'availability_status': item.availability_status
+            })
+
+        calculation['order_items'] = items_data
+
+        return jsonify(calculation)
+
+    except Exception as e:
+        app_logger.error(f"❌ Order calculation error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to calculate order totals',
+            'message': str(e)
+        }), 500
+
+
+@app.route('/api/orders/place', methods=['POST'])
+def place_order():
+    """🛒 Place a new order"""
+    try:
+        data = request.get_json()
+        customer_id = session.get('customer_id') if session.get('user_authenticated') else None
+
+        if not customer_id:
+            return jsonify({
+                'success': False,
+                'error': 'Authentication required for order placement',
+                'message': 'Please log in to place an order'
+            }), 401
+
+        # Extract order data
+        items = data.get('items', [])
+        delivery_address = data.get('delivery_address', {})
+        payment_method = data.get('payment_method', 'Pay on Delivery')
+
+        # Validate required fields
+        if not items:
+            return jsonify({
+                'success': False,
+                'error': 'No items provided for order'
+            }), 400
+
+        required_address_fields = ['state', 'lga', 'full_address']
+        for field in required_address_fields:
+            if not delivery_address.get(field):
+                return jsonify({
+                    'success': False,
+                    'error': f'Missing required address field: {field}'
+                }), 400
+
+        # Create order
+        order_result = order_management.create_order(
+            customer_id=customer_id,
+            items=items,
+            delivery_address=delivery_address,
+            payment_method=payment_method
+        )
+
+        if not order_result['success']:
+            return jsonify(order_result), 400
+
+        # Convert OrderSummary to dict for JSON serialization
+        order_summary = order_result['order_summary']
+        order_data = {
+            'order_id': order_summary.order_id,
+            'customer_id': order_summary.customer_id,
+            'customer_name': order_summary.customer_name,
+            'subtotal': order_summary.subtotal,
+            'delivery_fee': order_summary.delivery_fee,
+            'tier_discount': order_summary.tier_discount,
+            'tax_amount': order_summary.tax_amount,
+            'total_amount': order_summary.total_amount,
+            'payment_method': order_summary.payment_method.value,
+            'order_status': order_summary.order_status.value,
+            'created_at': order_summary.created_at.isoformat(),
+            'estimated_delivery': order_summary.estimated_delivery.isoformat(),
+            'delivery_info': {
+                'state': order_summary.delivery_info.state,
+                'lga': order_summary.delivery_info.lga,
+                'full_address': order_summary.delivery_info.full_address,
+                'delivery_fee': order_summary.delivery_info.delivery_fee,
+                'estimated_delivery_days': order_summary.delivery_info.estimated_delivery_days,
+                'delivery_zone': order_summary.delivery_info.delivery_zone
+            },
+            'items': []
+        }
+
+        # Add items data
+        for item in order_summary.items:
+            order_data['items'].append({
+                'product_id': item.product_id,
+                'product_name': item.product_name,
+                'category': item.category,
+                'brand': item.brand,
+                'price': item.price,
+                'quantity': item.quantity,
+                'subtotal': item.subtotal,
+                'availability_status': item.availability_status
+            })
+
+        return jsonify({
+            'success': True,
+            'order': order_data,
+            'message': order_result['message']
+        })
+
+    except Exception as e:
+        app_logger.error(f"❌ Order placement error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to place order',
+            'message': str(e)
+        }), 500
+
+
+@app.route('/api/orders/status/<order_id>', methods=['GET'])
+def get_order_status(order_id):
+    """📦 Get order status and tracking information"""
+    try:
+        customer_id = session.get('customer_id') if session.get('user_authenticated') else None
+
+        # Get order status
+        order_result = order_management.get_order_status(
+            order_id=order_id,
+            customer_id=customer_id
+        )
+
+        if not order_result['success']:
+            return jsonify(order_result), 404 if 'not found' in order_result.get('error', '').lower() else 500
+
+        return jsonify(order_result)
+
+    except Exception as e:
+        app_logger.error(f"❌ Order status error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to retrieve order status',
+            'message': str(e)
+        }), 500
+
+
+@app.route('/api/orders/my-orders', methods=['GET'])
+def get_my_orders():
+    """📋 Get customer's order history"""
+    try:
+        customer_id = session.get('customer_id') if session.get('user_authenticated') else None
+
+        if not customer_id:
+            return jsonify({
+                'success': False,
+                'error': 'Authentication required',
+                'message': 'Please log in to view your orders'
+            }), 401
+
+        limit = request.args.get('limit', 20, type=int)
+
+        # Get customer orders
+        orders_result = order_management.get_customer_orders(
+            customer_id=customer_id,
+            limit=limit
+        )
+
+        return jsonify(orders_result)
+
+    except Exception as e:
+        app_logger.error(f"❌ Customer orders error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to retrieve orders',
+            'message': str(e)
+        }), 500
+
+
+@app.route('/api/orders/cancel/<order_id>', methods=['POST'])
+def cancel_order(order_id):
+    """❌ Cancel an order"""
+    try:
+        customer_id = session.get('customer_id') if session.get('user_authenticated') else None
+
+        if not customer_id:
+            return jsonify({
+                'success': False,
+                'error': 'Authentication required',
+                'message': 'Please log in to cancel orders'
+            }), 401
+
+        data = request.get_json()
+        reason = data.get('reason', '') if data else ''
+
+        # Cancel order
+        cancel_result = order_management.cancel_order(
+            order_id=order_id,
+            customer_id=customer_id,
+            reason=reason
+        )
+
+        if not cancel_result['success']:
+            return jsonify(cancel_result), 400
+
+        return jsonify(cancel_result)
+
+    except Exception as e:
+        app_logger.error(f"❌ Order cancellation error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to cancel order',
+            'message': str(e)
+        }), 500
+
+
+@app.route('/api/products/check-availability', methods=['POST'])
+def check_product_availability():
+    """🔍 Check product availability and stock"""
+    try:
+        data = request.get_json()
+        product_id = data.get('product_id')
+        quantity = data.get('quantity', 1)
+
+        if not product_id:
+            return jsonify({
+                'success': False,
+                'error': 'Product ID is required'
+            }), 400
+
+        # Check availability
+        availability = order_management.check_product_availability(
+            product_id=product_id,
+            requested_quantity=quantity
+        )
+
+        return jsonify(availability)
+
+    except Exception as e:
+        app_logger.error(f"❌ Product availability error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to check product availability',
+            'message': str(e)
         }), 500
 
 
