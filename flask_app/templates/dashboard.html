@@ -4,24 +4,235 @@
 
 {% block content %}
 
-<!-- ChatGPT-inspired styling with Flatly Bootswatch theme -->
+<!-- Enhanced Floating Modal Chat System with Microsoft-style Design -->
 <style>
-/* Main chat container styling */
-.chat-messages {
-    background: #f8f9fa;
-    border-radius: 8px;
-    padding: 20px;
-    max-height: 600px;
-    overflow-y: auto;
-    border: 1px solid #e9ecef;
+/* ===== FLOATING CHAT MODAL SYSTEM ===== */
+/* Floating Chat Button */
+.floating-chat-btn {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 64px;
+    height: 64px;
+    background: linear-gradient(135deg, #2c3e50 0%, #18bc9c 100%);
+    border-radius: 50%;
+    box-shadow: 0 8px 32px rgba(44, 62, 80, 0.3);
+    border: none;
+    cursor: pointer;
+    z-index: 9998;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 24px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transform: scale(1);
+    pointer-events: auto;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    outline: none;
 }
 
-/* Message styling - ChatGPT inspired */
+.floating-chat-btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 12px 40px rgba(44, 62, 80, 0.4);
+    background: linear-gradient(135deg, #18bc9c 0%, #2c3e50 100%);
+}
+
+.floating-chat-btn:active {
+    transform: scale(0.95);
+}
+
+.floating-chat-btn.active {
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    transform: rotate(45deg) scale(1.1);
+}
+
+/* Chat Modal Overlay */
+.chat-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    z-index: 9999;
+    display: none;
+    opacity: 0;
+    transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+}
+
+.chat-modal-overlay.active {
+    display: flex;
+    opacity: 1;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+}
+
+/* Main Chat Modal Container */
+.chat-modal {
+    width: 400px;
+    height: 600px;
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transform: scale(0.9) translateY(50px);
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    pointer-events: auto;
+}
+
+.chat-modal-overlay.active .chat-modal {
+    transform: scale(1) translateY(0);
+}
+
+/* Modal Header */
+.chat-modal-header {
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+    color: white;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.chat-modal-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.chat-modal-title .brand-logo {
+    width: 28px;
+    height: 28px;
+    background: linear-gradient(135deg, #18bc9c, #16a085);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+}
+
+.chat-modal-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.chat-modal-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: white;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.chat-modal-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.05);
+}
+
+/* Conversation Sidebar */
+.conversation-sidebar {
+    position: absolute;
+    left: -300px;
+    top: 0;
+    width: 300px;
+    height: 100%;
+    background: #f8f9fa;
+    border-right: 1px solid #e9ecef;
+    z-index: 10;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+}
+
+.conversation-sidebar.active {
+    transform: translateX(300px);
+}
+
+.conversation-sidebar-header {
+    padding: 16px;
+    background: #ffffff;
+    border-bottom: 1px solid #e9ecef;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.conversation-sidebar-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #2c3e50;
+    margin: 0;
+}
+
+/* Sidebar overlay effect when open */
+.chat-modal.sidebar-open::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.1);
+    z-index: 5;
+    pointer-events: none;
+}
+
+.conversation-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+}
+
+/* Chat Messages Area */
+.chat-modal-messages {
+    flex: 1;
+    padding: 16px;
+    overflow-y: auto;
+    background: #f8f9fa;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* Message Bubbles - Microsoft Fluent Style */
 .message {
-    margin-bottom: 20px;
     display: flex;
     align-items: flex-start;
     gap: 12px;
+    animation: messageSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes messageSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .message.customer {
@@ -29,51 +240,53 @@
 }
 
 .message-avatar {
-    width: 32px;
-    height: 32px;
-    border-radius: 4px;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 18px;
+    font-size: 14px;
     font-weight: 600;
     flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .message.ai .message-avatar {
-    background: #2c3e50;
+    background: linear-gradient(135deg, #2c3e50, #34495e);
     color: white;
 }
 
 .message.customer .message-avatar {
-    background: #18bc9c;
+    background: linear-gradient(135deg, #18bc9c, #16a085);
     color: white;
 }
 
 .message-content {
+    max-width: 280px;
     flex: 1;
-    max-width: 75%;
 }
 
 .message-bubble {
-    background: white;
+    background: #ffffff;
     border: 1px solid #e9ecef;
     border-radius: 12px;
-    padding: 16px 20px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    font-size: 15px;
-    line-height: 1.6;
+    padding: 12px 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    font-size: 14px;
+    line-height: 1.5;
     word-wrap: break-word;
+    position: relative;
 }
 
 .message.customer .message-bubble {
-    background: #2c3e50;
+    background: linear-gradient(135deg, #2c3e50, #34495e);
     color: white;
     border-color: #2c3e50;
 }
 
 .message-meta {
-    margin-top: 6px;
+    margin-top: 4px;
     font-size: 11px;
     color: #6c757d;
     display: flex;
@@ -87,21 +300,23 @@
 
 .response-time {
     font-size: 10px;
-    color: #95a5a6;
-    font-style: italic;
+    color: #18bc9c;
+    background: rgba(24, 188, 156, 0.1);
+    padding: 2px 6px;
+    border-radius: 8px;
+    white-space: nowrap;
 }
 
-/* Welcome message special styling - Modern vibrant design */
+/* Welcome Message - Enhanced */
 .message.welcome .message-bubble {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
     color: white;
     border: none;
-    box-shadow: 0 15px 35px rgba(102, 126, 234, 0.4), 0 5px 15px rgba(0, 0, 0, 0.1);
-    border-radius: 20px;
-    padding: 28px 32px;
+    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
+    border-radius: 16px;
+    padding: 20px;
     position: relative;
     overflow: hidden;
-    backdrop-filter: blur(20px);
 }
 
 .message.welcome .message-bubble::before {
@@ -111,14 +326,14 @@
     left: -50%;
     width: 200%;
     height: 200%;
-    background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
     pointer-events: none;
-    animation: shimmer 4s ease-in-out infinite;
+    animation: shimmer 3s ease-in-out infinite;
 }
 
 @keyframes shimmer {
-    0%, 100% { opacity: 0.6; transform: rotate(0deg) scale(1); }
-    50% { opacity: 1; transform: rotate(180deg) scale(1.1); }
+    0%, 100% { opacity: 0.5; transform: rotate(0deg) scale(1); }
+    50% { opacity: 1; transform: rotate(180deg) scale(1.05); }
 }
 
 .welcome-content {
@@ -127,252 +342,64 @@
 }
 
 .welcome-content h6 {
-    font-size: 20px;
-    font-weight: 800;
+    font-size: 16px;
+    font-weight: 700;
     color: #2C3E50;
-    margin-bottom: 16px;
-    letter-spacing: 0.5px;
+    margin-bottom: 12px;
 }
 
 .welcome-content p {
-    font-size: 16px;
-    line-height: 1.7;
-    margin-bottom: 16px;
-    opacity: 0.95;
-    color: #2C3E50;
-    font-weight: 500;
-}
-
-.welcome-content ul {
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 16px;
-    padding: 20px 24px;
-    margin: 20px 0;
-    backdrop-filter: blur(15px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.welcome-content ul li {
-    font-size: 15px;
+    font-size: 14px;
     line-height: 1.6;
-    padding: 6px 0;
-    border-left: 4px solid rgba(255, 255, 255, 0.4);
-    padding-left: 16px;
-    margin-left: 12px;
-    transition: all 0.3s ease;
+    margin-bottom: 12px;
     color: #2C3E50;
     font-weight: 500;
-}
-
-.welcome-content ul li:hover {
-    border-left-color: #ffd700;
-    transform: translateX(6px);
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    padding-right: 12px;
-}
-
-.welcome-content ul li strong {
-    color: #2C3E50;
-    font-weight: 700;
 }
 
 .welcome-quick-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 12px;
-    margin-top: 24px;
-    padding: 20px;
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 16px;
-    backdrop-filter: blur(15px);
-    border: 1px solid rgba(255, 255, 255, 0.3);
+    gap: 8px;
+    margin-top: 16px;
 }
 
 .welcome-quick-action-btn {
-    background: linear-gradient(45deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.1));
+    background: rgba(255, 255, 255, 0.2);
     color: #2C3E50;
-    border: 1px solid rgba(255, 255, 255, 0.4);
-    padding: 10px 20px;
-    border-radius: 25px;
-    font-size: 14px;
-    font-weight: 600;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-size: 12px;
+    font-weight: 500;
     text-decoration: none;
-    transition: all 0.3s ease;
     cursor: pointer;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
     backdrop-filter: blur(10px);
-
 }
 
 .welcome-quick-action-btn:hover {
     background: linear-gradient(45deg, #ffd700, #ffed4e);
     color: #333;
     text-decoration: none;
-    transform: translateY(-3px) scale(1.05);
-    box-shadow: 0 8px 25px rgba(255, 215, 0, 0.4);
-    text-shadow: none;
+    transform: translateY(-2px);
     border-color: #ffd700;
 }
 
-.welcome-quick-action-btn:active {
-    transform: translateY(0);
+/* Smart Quick Actions */
+.smart-quick-actions-container {
+    margin: 12px 0;
 }
 
-/* Welcome message meta styling */
-.message.welcome .message-meta {
-    background: rgba(255, 255, 255, 0.15);
-    padding: 12px 16px;
-    border-radius: 12px;
-    margin-top: 16px;
-    backdrop-filter: blur(15px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.message.welcome .message-meta .response-time {
-    color: #2C3E50;
-    font-style: italic;
-    font-size: 13px;
-    font-weight: 500;
-}
-
-/* Chat input styling */
-.chat-input-container {
-    background: white;
+.smart-quick-actions {
+    background: #ffffff;
     border: 1px solid #e9ecef;
     border-radius: 12px;
     padding: 12px;
-    margin-top: 20px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-
-.chat-input-container .input-group {
-    border: none;
-}
-
-.chat-input-container .form-control {
-    border: none;
-    padding: 12px 16px;
-    font-size: 15px;
-    background: transparent;
-    box-shadow: none;
-}
-
-.chat-input-container .form-control:focus {
-    border: none;
-    box-shadow: none;
-    background: transparent;
-}
-
-.chat-input-container .btn {
-    border: none;
-    padding: 12px 20px;
-    background: #18bc9c;
-    color: white;
-    border-radius: 8px;
-    font-weight: 500;
-    transition: all 0.2s;
-}
-
-.chat-input-container .btn:hover {
-    background: #16a085;
-    transform: translateY(-1px);
-}
-
-/* Typing indicator */
-.typing-indicator {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 16px;
-    background: #f8f9fa;
-    border-radius: 12px;
-    margin-top: 8px;
-}
-
-.typing-dots {
-    display: flex;
-    gap: 4px;
-}
-
-.typing-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #95a5a6;
-    animation: typing 1.4s infinite;
-}
-
-.typing-dot:nth-child(2) { animation-delay: 0.2s; }
-.typing-dot:nth-child(3) { animation-delay: 0.4s; }
-
-@keyframes typing {
-    0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
-    30% { transform: translateY(-8px); opacity: 1; }
-}
-
-/* Sidebar styling */
-.conversation-item {
-    border-radius: 8px;
-    margin-bottom: 4px;
-    transition: all 0.2s;
-    cursor: pointer;
-}
-
-.conversation-item:hover {
-    background-color: #f8f9fa;
-    transform: translateX(4px);
-}
-
-.conversation-item.active {
-    background-color: #18bc9c;
-    color: white;
-}
-
-.conversation-item.active .text-muted {
-    color: rgba(255, 255, 255, 0.8) !important;
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-    .message-content {
-        max-width: 85%;
-    }
-
-    .message-avatar {
-        width: 28px;
-        height: 28px;
-        font-size: 14px;
-    }
-
-    .message-bubble {
-        padding: 12px 16px;
-        font-size: 14px;
-    }
-}
-
-/* Remove technical details completely */
-.simple-tech-details,
-.smart-quick-actions {
-    display: none !important;
-}
-
-/* Smart Quick Actions Styling */
-.smart-quick-actions-container {
-    margin: 15px 0;
-    padding: 0;
-}
-
-.smart-quick-actions {
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-    border: 1px solid #dee2e6;
-    border-radius: 12px;
-    padding: 12px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .quick-actions-header {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     color: #495057;
     margin-bottom: 8px;
@@ -390,259 +417,77 @@
     background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
     color: white;
     border: none;
-    border-radius: 20px;
-    padding: 6px 12px;
-    font-size: 11px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    white-space: nowrap;
-    box-shadow: 0 2px 4px rgba(0,123,255,0.3);
-}
-
-.smart-quick-action-btn:hover {
-    background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0,123,255,0.4);
-}
-
-.smart-quick-action-btn:active {
-    transform: translateY(0);
-    box-shadow: 0 2px 4px rgba(0,123,255,0.3);
-}
-
-/* raqibtech.com Branding Styles */
-.raqibtech-branding {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 24px;
-    border-radius: 20px;
-    box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
-    position: relative;
-    overflow: hidden;
-}
-
-.brand-title {
-    font-size: 28px;
-    font-weight: 800;
-    margin: 0;
-
-}
-
-.brand-logo {
-    font-size: 32px;
-    margin-right: 8px;
-}
-
-.brand-text {
-    color: #ffd700;
-    letter-spacing: 1px;
-}
-
-.brand-domain {
-    color: #ffffff;
-    font-weight: 600;
-}
-
-.brand-subtitle {
-    font-size: 16px;
-    margin-bottom: 16px;
-    opacity: 0.9;
-    font-weight: 500;
-}
-
-.brand-stats .badge {
-    padding: 8px 12px;
-    font-size: 12px;
-    font-weight: 600;
-}
-
-/* Account Dashboard Styles */
-.account-dashboard {
-    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
     border-radius: 16px;
-    padding: 24px;
-    border: 1px solid #dee2e6;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
-}
-
-.dashboard-actions {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 16px;
-    margin-top: 20px;
-}
-
-.dashboard-action-btn {
-    background: white;
-    border: 2px solid #e9ecef;
-    border-radius: 12px;
-    padding: 20px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    text-align: left;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-}
-
-.dashboard-action-btn:hover {
-    border-color: #18bc9c;
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(24, 188, 156, 0.2);
-    background: linear-gradient(135deg, #ffffff, #f8f9fa);
-}
-
-.action-icon {
-    font-size: 24px;
-    width: 48px;
-    height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: linear-gradient(135deg, #18bc9c, #16a085);
-    border-radius: 12px;
-    flex-shrink: 0;
-}
-
-.action-text strong {
-    display: block;
-    font-size: 14px;
-    font-weight: 600;
-    color: #2c3e50;
-    margin-bottom: 4px;
-}
-
-.action-text small {
-    font-size: 12px;
-    color: #6c757d;
-    font-weight: 500;
-}
-
-/* Responsive dashboard */
-@media (max-width: 768px) {
-    .dashboard-actions {
-        grid-template-columns: 1fr;
-    }
-
-    .dashboard-action-btn {
-        padding: 16px;
-    }
-
-    .action-icon {
-        width: 40px;
-        height: 40px;
-        font-size: 20px;
-    }
-}
-
-/* 🎨 Enhanced Quick Actions for Smart Response */
-.smart-quick-actions-container {
-    margin: 15px 0;
-    padding: 0;
-}
-
-.smart-quick-actions {
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-    border: 1px solid #dee2e6;
-    border-radius: 12px;
-    padding: 12px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.quick-actions-header {
-    font-size: 13px;
-    font-weight: 600;
-    color: #495057;
-    margin-bottom: 8px;
-    text-align: center;
-}
-
-.quick-actions-buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    justify-content: center;
-}
-
-.smart-quick-action-btn {
-    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
-    color: white;
-    border: none;
-    border-radius: 20px;
     padding: 6px 12px;
     font-size: 11px;
     font-weight: 500;
     cursor: pointer;
     transition: all 0.3s ease;
     white-space: nowrap;
-    box-shadow: 0 2px 4px rgba(0,123,255,0.3);
+    box-shadow: 0 2px 6px rgba(0,123,255,0.2);
 }
 
 .smart-quick-action-btn:hover {
     background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
     transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0,123,255,0.4);
+    box-shadow: 0 4px 12px rgba(0,123,255,0.3);
 }
 
-.smart-quick-action-btn:active {
-    transform: translateY(0);
-    box-shadow: 0 2px 4px rgba(0,123,255,0.3);
+/* Chat Input Area */
+.chat-modal-input {
+    padding: 16px;
+    background: #ffffff;
+    border-top: 1px solid #e9ecef;
 }
 
-/* 🆕 Conversation Management Styles */
-.conversation-item {
-    position: relative;
-    transition: all 0.3s ease;
-    cursor: pointer;
+.chat-input-container {
+    display: flex;
+    gap: 8px;
+    align-items: center;
 }
 
-.conversation-item:hover {
-    background-color: #f8f9fa;
-    transform: translateX(2px);
-}
-
-.conversation-item.active {
-    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
-    border-left: 4px solid #2196f3;
-}
-
-.conversation-info {
+.chat-input-container input {
     flex: 1;
-    padding: 8px 0;
+    border: 1px solid #e9ecef;
+    border-radius: 20px;
+    padding: 10px 16px;
+    font-size: 14px;
+    outline: none;
+    transition: all 0.2s ease;
 }
 
-.conversation-actions {
+.chat-input-container input:focus {
+    border-color: #18bc9c;
+    box-shadow: 0 0 0 3px rgba(24, 188, 156, 0.1);
+}
+
+.chat-send-btn {
+    background: linear-gradient(135deg, #18bc9c, #16a085);
+    border: none;
+    color: white;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 8px;
-    opacity: 0;
-    transition: opacity 0.3s ease;
+    justify-content: center;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(24, 188, 156, 0.2);
 }
 
-.conversation-item:hover .conversation-actions {
-    opacity: 1;
+.chat-send-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(24, 188, 156, 0.3);
 }
 
-.conversation-actions .btn-outline-danger {
-    border: 1px solid #dc3545;
-    color: #dc3545;
-    background: transparent;
-    transition: all 0.3s ease;
+.chat-send-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
 }
 
-.conversation-actions .btn-outline-danger:hover {
-    background-color: #dc3545;
-    color: white;
-    transform: scale(1.1);
-}
-
-.conversation-actions .btn-outline-danger:active {
-    transform: scale(0.95);
-}
-
-/* 🔧 FIX: Improved typing indicator */
+/* Typing Indicator */
 .typing-indicator {
     display: flex;
     align-items: center;
@@ -678,95 +523,111 @@
     }
 }
 
-/* 🆕 Enhanced Welcome Message Quick Actions */
-.welcome-quick-actions {
+/* Conversation List Items */
+.conversation-item {
+    background: #ffffff;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    justify-content: center;
-    margin: 15px 0;
+    justify-content: space-between;
+    align-items: flex-start;
 }
 
-.welcome-quick-action-btn {
-    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-    color: white;
-    border: none;
-    border-radius: 25px;
-    padding: 8px 16px;
-    font-size: 12px;
-    font-weight: 500;
-    text-decoration: none;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    white-space: nowrap;
-    box-shadow: 0 3px 6px rgba(40,167,69,0.3);
-    display: inline-flex;
+.conversation-item:hover {
+    background: #f8f9fa;
+    transform: translateX(4px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.conversation-item.active {
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    border-color: #2196f3;
+}
+
+.conversation-info h6 {
+    font-size: 13px;
+    font-weight: 600;
+    color: #2c3e50;
+    margin: 0 0 4px 0;
+}
+
+.conversation-info small {
+    font-size: 11px;
+    color: #6c757d;
+}
+
+.conversation-actions {
+    display: flex;
     align-items: center;
     gap: 4px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
 }
 
-.welcome-quick-action-btn:hover {
-    background: linear-gradient(135deg, #20c997 0%, #17a2b8 100%);
-    color: white;
-    text-decoration: none;
-    transform: translateY(-2px);
-    box-shadow: 0 5px 10px rgba(40,167,69,0.4);
+.conversation-item:hover .conversation-actions {
+    opacity: 1;
 }
 
-.welcome-quick-action-btn:active {
-    transform: translateY(0);
-    box-shadow: 0 3px 6px rgba(40,167,69,0.3);
+.conversation-actions .btn-sm {
+    padding: 2px 6px;
+    font-size: 10px;
+    border-radius: 4px;
 }
 
-/* 🔧 FIX: Conversation list improvements */
-#chatHistoryList .list-group-item {
-    border-left: none;
-    border-right: none;
-    border-top: 1px solid #dee2e6;
-    border-bottom: none;
-    padding: 12px 15px;
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+    .chat-modal {
+        width: 100%;
+        height: 100%;
+        border-radius: 0;
+        transform: translateY(100%);
+    }
+
+    .chat-modal-overlay.active .chat-modal {
+        transform: translateY(0);
+    }
+
+    .conversation-sidebar {
+        width: 280px;
+        left: -280px;
+    }
+
+    .conversation-sidebar.active {
+        transform: translateX(280px);
+    }
+
+    .floating-chat-btn {
+        bottom: 16px;
+        right: 16px;
+        width: 56px;
+        height: 56px;
+        font-size: 20px;
+    }
 }
 
-#chatHistoryList .list-group-item:first-child {
-    border-top: none;
-}
-
-#chatHistoryList .list-group-item:last-child {
-    border-bottom: 1px solid #dee2e6;
-}
-
-/* 🆕 Empty conversation state */
-.empty-conversations {
-    text-align: center;
-    color: #6c757d;
-    padding: 40px 20px;
-}
-
-.empty-conversations i {
-    font-size: 3rem;
-    margin-bottom: 15px;
-    opacity: 0.5;
-}
-
-/* 🔧 FIX: Loading states */
+/* Loading States */
 .loading-overlay {
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(255,255,255,0.8);
+    background: rgba(255, 255, 255, 0.9);
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    z-index: 100;
 }
 
 .loading-spinner {
     width: 32px;
     height: 32px;
     border: 3px solid #f3f3f3;
-    border-top: 3px solid #007bff;
+    border-top: 3px solid #18bc9c;
     border-radius: 50%;
     animation: spin 1s linear infinite;
 }
@@ -776,54 +637,9 @@
     100% { transform: rotate(360deg); }
 }
 
-/* 🆕 Enhanced message meta styling */
-.message-meta {
-    margin-top: 6px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 10px;
-}
-
-.message-meta span:first-child {
-    font-size: 11px;
-    color: #6c757d;
-}
-
-.response-time {
-    font-size: 10px;
-    color: #28a745;
-    background: rgba(40,167,69,0.1);
-    padding: 2px 6px;
-    border-radius: 10px;
-    white-space: nowrap;
-}
-
-/* 🔧 FIX: Responsive improvements */
-@media (max-width: 768px) {
-    .welcome-quick-actions {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .welcome-quick-action-btn {
-        justify-content: center;
-        width: 100%;
-    }
-
-    .quick-actions-buttons {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .smart-quick-action-btn {
-        justify-content: center;
-        width: 100%;
-    }
-
-    .conversation-actions {
-        opacity: 1; /* Always visible on mobile */
-    }
+/* Hide original chat tab content */
+.original-chat-content {
+    display: none;
 }
 </style>
 
@@ -859,59 +675,14 @@
     </div>
 </div>
 
-<!-- Main Chat Interface with Sidebar -->
+<!-- Simplified Dashboard without Chat Tab -->
 <div class="row">
-    <!-- Chat History Sidebar -->
-    <div class="col-lg-3 mb-4">
-        <div class="card h-100">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h6 class="mb-0">
-                    <i class="bi bi-chat-left-text me-2"></i>Chat History
-                </h6>
-                <button class="btn btn-primary btn-sm" onclick="createNewChat()">
-                    <i class="bi bi-plus-circle me-1"></i>New
-                </button>
-            </div>
-            <div class="card-body p-0">
-                <div id="chatHistoryList" class="list-group list-group-flush">
-                    {% for conv in conversations %}
-                    <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-start conversation-item"
-                         data-conversation-id="{{ conv.conversation_id }}"
-                         onclick="switchToConversation('{{ conv.conversation_id }}')">
-                        <div class="conversation-info">
-                            <h6 class="mb-1 conversation-title">{{ conv.conversation_title }}</h6>
-                            <small class="text-muted">{{ conv.message_count }} messages</small>
-                        </div>
-                        <small class="text-muted">{{ conv.updated_at.strftime('%m/%d %H:%M') }}</small>
-                    </div>
-                    {% endfor %}
-
-                    {% if not conversations %}
-                    <div class="text-center text-muted p-3">
-                        <i class="bi bi-chat-dots display-4 mb-2"></i>
-                        <p class="mb-0">No chat history yet</p>
-                        <small>Start a conversation to see it here</small>
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Main Chat Area -->
-    <div class="col-lg-9">
-        <!-- Customer Support Navigation -->
+    <div class="col-12">
         <div class="card">
-            <!-- Support Navigation Tabs -->
+            <!-- Support Navigation Tabs (without chat) -->
             <ul class="nav nav-tabs nav-fill" id="supportTabs" role="tablist">
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="chat-tab" data-bs-toggle="tab" data-bs-target="#chat" type="button" role="tab">
-                        <i class="bi bi-chat-heart-fill me-2"></i>
-                        💬 Get Help Now
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="orders-tab" data-bs-toggle="tab" data-bs-target="#orders" type="button" role="tab">
+                    <button class="nav-link active" id="orders-tab" data-bs-toggle="tab" data-bs-target="#orders" type="button" role="tab">
                         <i class="bi bi-box-seam me-2"></i>
                         📦 Track My Orders
                     </button>
@@ -932,52 +703,8 @@
 
             <!-- Tab Content -->
             <div class="tab-content" id="supportTabContent">
-
-                <!-- Get Help Now Tab (Primary Chat Interface) -->
-                <div class="tab-pane fade show active" id="chat" role="tabpanel">
-                    <div class="p-4">
-                        <div class="mb-4">
-                            <h4 class="mb-3">
-                                <i class="bi bi-robot text-primary me-2"></i>
-                                Chat with our AI Support Assistant
-                            </h4>
-                            <p class="text-muted mb-4">
-                                Ask me anything about your orders, payments, delivery, account, or shopping on raqibtech.com!
-                            </p>
-                        </div>
-
-                        <!-- Chat Messages Container -->
-                        <div class="chat-messages" id="chatMessages">
-                            <!-- Messages will be loaded dynamically -->
-                            <div id="loadingIndicator" class="text-center py-4">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="visually-hidden">Loading conversation...</span>
-                                </div>
-                                <p class="mt-2 text-muted">Loading your conversation...</p>
-                            </div>
-                        </div>
-
-                        <!-- Chat Input -->
-                        <div class="chat-input-container bg-light p-3 rounded">
-                            <div class="input-group">
-                                <input type="text" class="form-control" id="chatInput"
-                                       placeholder="Ask me anything..."
-                                       onkeypress="handleChatKeyPress(event)">
-                                <button class="btn btn-primary" type="button" onclick="sendChatMessage()">
-                                    <i class="bi bi-send-fill me-1"></i>Send
-                                </button>
-                            </div>
-                            <div class="d-flex justify-content-between align-items-center mt-2">
-                                <small class="text-muted">
-                                    <i class="bi bi-shield-check me-1"></i>Your conversations are secure and private
-                                </small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Track My Orders Tab -->
-                <div class="tab-pane fade" id="orders" role="tabpanel">
+                <div class="tab-pane fade show active" id="orders" role="tabpanel">
                     <div class="p-4">
                         <div class="mb-4">
                             <h4 class="mb-3">
@@ -986,9 +713,9 @@
                             </h4>
                             <p class="text-muted">
                                 {% if session.get('user_authenticated') %}
-                                    Your recent orders will appear here. You can also ask the AI assistant about specific orders.
+                                    Your recent orders will appear here. You can also ask our AI assistant for help.
                                 {% else %}
-                                    <a href="/login" class="text-decoration-none">Login</a> to see your order history, or ask the AI assistant for help.
+                                    <a href="/login" class="text-decoration-none">Login</a> to see your order history, or ask our AI assistant for help.
                                 {% endif %}
                             </p>
                         </div>
@@ -1231,7 +958,7 @@
                                         <p class="text-muted small">Instant help available</p>
                                         <strong class="text-danger">Available 24/7</strong>
                                         <p class="small mt-2">
-                                            <button class="btn btn-sm btn-outline-danger" onclick="document.getElementById('chat-tab').click()">
+                                            <button class="btn btn-sm btn-outline-danger" onclick="openChatModal()">
                                                 Start Chat Now
                                             </button>
                                         </p>
@@ -1264,51 +991,494 @@
     </div>
 </div>
 
+<!-- Floating Chat Button -->
+<button class="floating-chat-btn" id="floatingChatBtn">
+    <i class="bi bi-chat-heart-fill"></i>
+</button>
+
+<!-- 🔧 DEBUG: Temporary test button to verify modal functionality -->
+<div style="position: fixed; top: 10px; right: 10px; z-index: 10000;">
+    <button class="btn btn-warning btn-sm" onclick="debugTestModal()" id="debugTestBtn">
+        🔧 Test Modal
+    </button>
+</div>
+
+<!-- Chat Modal -->
+<div class="chat-modal-overlay" id="chatModalOverlay" onclick="closeChatModal(event)">
+    <div class="chat-modal" onclick="handleModalClick(event)">
+        <!-- Modal Header -->
+        <div class="chat-modal-header">
+            <h6 class="chat-modal-title">
+                <div class="brand-logo">🚀</div>
+                <span>raqibtech.com Assistant</span>
+            </h6>
+            <div class="chat-modal-actions">
+                <button class="chat-modal-btn" onclick="toggleConversationSidebar()" title="Chat History">
+                    <i class="bi bi-clock-history"></i>
+                </button>
+                <button class="chat-modal-btn" onclick="createNewChat()" title="New Chat">
+                    <i class="bi bi-plus-circle"></i>
+                </button>
+                <button class="chat-modal-btn" onclick="closeChatModal()" title="Close">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Conversation Sidebar -->
+        <div class="conversation-sidebar" id="conversationSidebar">
+            <div class="conversation-sidebar-header">
+                <h6 class="conversation-sidebar-title">Chat History</h6>
+                <button class="chat-modal-btn" onclick="toggleConversationSidebar()" title="Close History">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <div class="conversation-list" id="chatHistoryList">
+                {% for conv in conversations %}
+                <div class="conversation-item" data-conversation-id="{{ conv.conversation_id }}"
+                     onclick="switchToConversation('{{ conv.conversation_id }}')">
+                    <div class="conversation-info">
+                        <h6>{{ conv.conversation_title }}</h6>
+                        <small>{{ conv.message_count }} messages</small>
+                    </div>
+                    <div class="conversation-actions">
+                        <small class="text-muted">{{ conv.updated_at.strftime('%m/%d') }}</small>
+                        <button class="btn btn-outline-danger btn-sm" onclick="customerPortal.deleteConversation('{{ conv.conversation_id }}', event)"
+                                title="Delete conversation">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+
+                {% if not conversations %}
+                <div class="text-center text-muted p-3">
+                    <i class="bi bi-chat-dots display-6 mb-2"></i>
+                    <p class="mb-0 small">No chat history yet</p>
+                    <small>Start a conversation!</small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Messages Area -->
+        <div class="chat-modal-messages" id="chatMessages">
+            <div id="loadingIndicator" class="text-center py-4">
+                <div class="loading-spinner"></div>
+                <p class="mt-2 text-muted small">Loading conversation...</p>
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="chat-modal-input">
+            <div class="chat-input-container">
+                <input type="text" id="chatInput" placeholder="Ask me anything..."
+                       onkeypress="handleChatKeyPress(event)">
+                <button class="chat-send-btn" onclick="sendChatMessage()" id="chatSendBtn">
+                    <i class="bi bi-send-fill"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Enhanced raqibtech.com Branding Styles for Account Dashboard -->
+<style>
+.raqibtech-branding {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 24px;
+    border-radius: 20px;
+    box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+.brand-title {
+    font-size: 28px;
+    font-weight: 800;
+    margin: 0;
+}
+
+.brand-logo {
+    font-size: 32px;
+    margin-right: 8px;
+}
+
+.brand-text {
+    color: #ffd700;
+    letter-spacing: 1px;
+}
+
+.brand-domain {
+    color: #ffffff;
+    font-weight: 600;
+}
+
+.brand-subtitle {
+    font-size: 16px;
+    margin-bottom: 16px;
+    opacity: 0.9;
+    font-weight: 500;
+}
+
+.brand-stats .badge {
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* Account Dashboard Styles */
+.account-dashboard {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 16px;
+    padding: 24px;
+    border: 1px solid #dee2e6;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+}
+
+.dashboard-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-top: 20px;
+}
+
+.dashboard-action-btn {
+    background: white;
+    border: 2px solid #e9ecef;
+    border-radius: 12px;
+    padding: 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    text-align: left;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.dashboard-action-btn:hover {
+    border-color: #18bc9c;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(24, 188, 156, 0.2);
+    background: linear-gradient(135deg, #ffffff, #f8f9fa);
+}
+
+.action-icon {
+    font-size: 24px;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #18bc9c, #16a085);
+    border-radius: 12px;
+    flex-shrink: 0;
+}
+
+.action-text strong {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 4px;
+}
+
+.action-text small {
+    font-size: 12px;
+    color: #6c757d;
+    font-weight: 500;
+}
+
+/* Responsive dashboard */
+@media (max-width: 768px) {
+    .dashboard-actions {
+        grid-template-columns: 1fr;
+    }
+
+    .dashboard-action-btn {
+        padding: 16px;
+    }
+
+    .action-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 20px;
+    }
+}
+</style>
+
 <!-- Hidden data for JavaScript -->
 <script>
 window.currentConversationId = {% if current_conversation_id %}'{{ current_conversation_id }}'{% else %}null{% endif %};
 window.userAuthenticated = {{ 'true' if session.get('user_authenticated') else 'false' }};
 </script>
 
-<!-- Enhanced Customer Support JavaScript with Session Management -->
+<!-- Enhanced Customer Support JavaScript with Floating Modal Chat -->
 <script>
-// Customer-focused support system with session and chat history
+// 🔧 DEBUG: Check for JavaScript errors and conflicts
+console.log('🔍 Modal Debug: Starting initialization...');
+
+// Check for required dependencies
+if (typeof bootstrap === 'undefined') {
+    console.error('❌ Bootstrap JavaScript not loaded! Modal will not work.');
+}
+
+// Enhanced Customer-focused support system with floating modal interface
 class CustomerSupportPortal {
     constructor() {
-        console.log('🛍️ Initializing raqibtech.com Customer Support Portal with Session Management...');
+        console.log('🛍️ Initializing raqibtech.com Floating Modal Chat System...');
+
+        // Debug: Check if elements exist
+        this.debugElementExistence();
+
         this.currentConversationId = window.currentConversationId;
         this.userAuthenticated = window.userAuthenticated;
-        this.isTyping = false; // 🔧 FIX: Track typing state to prevent contamination
-        this.activeMessageRequest = null; // 🔧 FIX: Track active requests
-        this.conversationLocked = false; // 🔧 FIX: Prevent rapid conversation switching
-        this.initializeCustomerFeatures();
-        this.loadCurrentConversation();
+        this.isTyping = false;
+        this.activeMessageRequest = null;
+        this.conversationLocked = false;
+        this.modalOpen = false;
+        this.sidebarOpen = false;
+
+        // Add delay to ensure DOM is fully ready
+        setTimeout(() => {
+            this.initializeFloatingChat();
+            this.setupKeyboardShortcuts();
+            console.log('✅ Modal initialization complete');
+        }, 100);
     }
 
-    initializeCustomerFeatures() {
-        // Focus chat input when page loads
-        setTimeout(() => {
-            const chatInput = document.getElementById('chatInput');
-            if (chatInput) {
-                chatInput.focus();
+    debugElementExistence() {
+        const requiredElements = [
+            'chatModalOverlay',
+            'floatingChatBtn',
+            'conversationSidebar',
+            'chatMessages',
+            'chatInput'
+        ];
+
+        console.log('🔍 Checking required elements...');
+        requiredElements.forEach(id => {
+            const element = document.getElementById(id);
+            if (!element) {
+                console.error(`❌ Missing element: ${id}`);
+            } else {
+                console.log(`✅ Found element: ${id}`);
             }
-        }, 1000);
+        });
+    }
+
+    initializeFloatingChat() {
+        // Initialize modal state with error checking
+        this.chatModal = document.getElementById('chatModalOverlay');
+        this.chatBtn = document.getElementById('floatingChatBtn');
+        this.conversationSidebar = document.getElementById('conversationSidebar');
+
+        if (!this.chatModal) {
+            console.error('❌ Chat modal overlay not found!');
+            return;
+        }
+
+        if (!this.chatBtn) {
+            console.error('❌ Floating chat button not found!');
+            return;
+        }
+
+        console.log('✅ Modal elements found and initialized');
+
+        // Ensure proper z-index (fix from WeWeb community issue)
+        this.chatModal.style.zIndex = '9999';
+        this.chatBtn.style.zIndex = '9998';
+
+        // Load conversation when modal is opened
+        this.setupModalEventListeners();
+
+        // 🔧 FIX: Multiple event listeners for better compatibility
+        // Remove any existing listeners first
+        this.chatBtn.replaceWith(this.chatBtn.cloneNode(true));
+        this.chatBtn = document.getElementById('floatingChatBtn');
+
+        // Method 1: Click event listener
+        this.chatBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('🖱️ Floating button clicked via addEventListener');
+            this.toggleChatModal();
+        });
+
+        // Method 2: Mouse down/up for better mobile support
+        this.chatBtn.addEventListener('mousedown', (e) => {
+            console.log('🖱️ Mouse down detected on floating button');
+        });
+
+        // Method 3: Touch events for mobile
+        this.chatBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            console.log('📱 Touch start detected on floating button');
+            this.toggleChatModal();
+        }, { passive: false });
+
+        // Method 4: Pointer events (modern approach)
+        this.chatBtn.addEventListener('pointerdown', (e) => {
+            console.log('👆 Pointer down detected on floating button');
+        });
+
+        console.log('✅ Multiple event listeners attached to floating button');
+    }
+
+    setupKeyboardShortcuts() {
+        // ESC to close modal
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.modalOpen) {
+                console.log('⌨️ ESC key pressed, closing modal');
+                this.closeChatModal();
+            }
+        });
+        console.log('✅ Keyboard shortcuts configured');
+    }
+
+    setupModalEventListeners() {
+        if (!this.chatModal) return;
+
+        // Auto-focus input when modal opens
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.attributeName === 'class' && this.chatModal.classList.contains('active')) {
+                    setTimeout(() => {
+                        const chatInput = document.getElementById('chatInput');
+                        if (chatInput) {
+                            chatInput.focus();
+                            console.log('✅ Chat input focused');
+                        }
+                    }, 400); // Wait for animation
+                }
+            });
+        });
+        observer.observe(this.chatModal, { attributes: true });
+        console.log('✅ Modal event listeners configured');
+    }
+
+    toggleChatModal() {
+        console.log(`🔄 Toggle modal - Current state: ${this.modalOpen ? 'open' : 'closed'}`);
+        if (this.modalOpen) {
+            this.closeChatModal();
+        } else {
+            this.openChatModal();
+        }
+    }
+
+    openChatModal() {
+        console.log('📂 Opening chat modal...');
+
+        if (!this.chatModal || !this.chatBtn) {
+            console.error('❌ Cannot open modal - elements missing');
+            return;
+        }
+
+        this.modalOpen = true;
+        this.chatModal.classList.add('active');
+        this.chatBtn.classList.add('active');
+        this.chatBtn.innerHTML = '<i class="bi bi-x-lg"></i>';
+
+        // Load current conversation if not already loaded
+        if (!this.conversationLoaded) {
+            this.loadCurrentConversation();
+            this.conversationLoaded = true;
+        }
+
+        // Disable body scroll (fix from Frozen Modal guide)
+        document.body.style.overflow = 'hidden';
+        document.documentElement.style.overflow = 'hidden';
+
+        console.log('✅ Modal opened successfully');
+    }
+
+    closeChatModal(event) {
+        // Don't close if clicking inside modal
+        if (event && event.target.closest('.chat-modal')) {
+            console.log('🖱️ Click inside modal, not closing');
+            return;
+        }
+
+        console.log('📁 Closing chat modal...');
+
+        if (!this.chatModal || !this.chatBtn) {
+            console.error('❌ Cannot close modal - elements missing');
+            return;
+        }
+
+        this.modalOpen = false;
+        this.chatModal.classList.remove('active');
+        this.chatBtn.classList.remove('active');
+        this.chatBtn.innerHTML = '<i class="bi bi-chat-heart-fill"></i>';
+
+        // Close sidebar if open and reset modal state
+        if (this.sidebarOpen) {
+            this.sidebarOpen = false;
+            this.conversationSidebar.classList.remove('active');
+            const chatModal = document.querySelector('.chat-modal');
+            if (chatModal) {
+                chatModal.classList.remove('sidebar-open');
+            }
+        }
+
+        // Re-enable body scroll (fix from WeWeb community)
+        document.body.style.overflow = 'auto';
+        document.documentElement.style.overflow = 'auto';
+
+        // Force layout recalculation (fix from WeWeb community)
+        document.body.offsetHeight;
+
+        console.log('✅ Modal closed successfully');
+    }
+
+    toggleConversationSidebar() {
+        if (!this.conversationSidebar) {
+            console.error('❌ Conversation sidebar not found');
+            return;
+        }
+
+        this.sidebarOpen = !this.sidebarOpen;
+        this.conversationSidebar.classList.toggle('active', this.sidebarOpen);
+
+        // Add overlay effect to main modal when sidebar is open
+        const chatModal = document.querySelector('.chat-modal');
+        if (chatModal) {
+            chatModal.classList.toggle('sidebar-open', this.sidebarOpen);
+        }
+
+        console.log(`🔄 Sidebar ${this.sidebarOpen ? 'opened' : 'closed'}`);
+
+        // Refresh conversation list when opening
+        if (this.sidebarOpen) {
+            this.refreshConversationList();
+        }
+
+        // Focus the close button when sidebar opens for better accessibility
+        if (this.sidebarOpen) {
+            setTimeout(() => {
+                const closeBtn = this.conversationSidebar.querySelector('.chat-modal-btn');
+                if (closeBtn) {
+                    closeBtn.focus();
+                }
+            }, 300);
+        }
     }
 
     async loadCurrentConversation() {
         if (!this.currentConversationId) {
+            console.log('💬 No current conversation, showing welcome message');
             this.displayWelcomeMessage();
             return;
         }
 
-        // 🔧 FIX: Ensure we're loading the correct conversation
         console.log(`🔄 Loading conversation: ${this.currentConversationId}`);
 
         try {
             const response = await fetch(`/api/conversations/${this.currentConversationId}/messages`);
             const data = await response.json();
 
-            // 🔧 FIX: Verify we're still on the same conversation
             if (this.currentConversationId !== window.currentConversationId) {
                 console.warn('⚠️ Conversation changed during loading, aborting');
                 return;
@@ -1320,7 +1490,7 @@ class CustomerSupportPortal {
                 this.showWelcomeMessage();
             }
         } catch (error) {
-            console.error('Error loading conversation:', error);
+            console.error('❌ Error loading conversation:', error);
             this.showWelcomeMessage();
         }
     }
@@ -1333,14 +1503,19 @@ class CustomerSupportPortal {
             loadingIndicator.remove();
         }
 
-        // 🔧 FIX: Clear completely before loading new messages
+        if (!chatMessages) {
+            console.error('❌ Chat messages container not found');
+            return;
+        }
+
         chatMessages.innerHTML = '';
 
         messages.forEach(message => {
-            this.addMessageToChatDisplay(message.content, message.sender_type, false, message.metadata || {});
+            const senderType = message.sender_type === 'user' ? 'customer' : 'ai';
+            this.addMessageToChatDisplay(message.content, senderType, false, message.metadata || {});
         });
 
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+        this.smoothScrollToBottom();
         console.log(`✅ Loaded ${messages.length} messages for conversation ${this.currentConversationId}`);
     }
 
@@ -1352,8 +1527,16 @@ class CustomerSupportPortal {
             loadingIndicator.remove();
         }
 
+        if (!chatMessages) {
+            console.error('❌ Chat messages container not found');
+            return;
+        }
+
         const welcomeMessage = this.createWelcomeMessage();
         chatMessages.innerHTML = welcomeMessage;
+        this.smoothScrollToBottom();
+
+        console.log('✅ Welcome message displayed in modal');
     }
 
     createWelcomeMessage() {
@@ -1375,16 +1558,13 @@ class CustomerSupportPortal {
                                     <li class="mb-1">🛍️ <strong>Shopping help</strong> - Product recommendations</li>
                                     <li class="mb-1">🏪 <strong>Browse our amazing product catalog</strong> - Electronics, Fashion, Beauty, Computing, Automotive, Books</li>
                                 </ul>
-                                <div class="welcome-quick-start-actions">
-                                    <p class="mb-2"><strong>✨ Quick Actions:</strong></p>
-                                    <div class="welcome-quick-actions">
-                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Track my recent orders')">📦 My Orders</button>
-                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Show my account summary')">👤 Account Info</button>
-                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Browse your product catalog')">🏪 Browse Catalog</button>
-                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Show me electronics products')">📱 Electronics</button>
-                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Check prices for popular products')">💰 Check Prices</button>
-                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Contact customer support')">📞 Support</button>
-                                    </div>
+                                <div class="welcome-quick-actions">
+                                    <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Track my recent orders')">📦 My Orders</button>
+                                    <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Show my account summary')">👤 Account Info</button>
+                                    <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Browse your product catalog')">🏪 Browse Catalog</button>
+                                    <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Show me electronics products')">📱 Electronics</button>
+                                    <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Check prices for popular products')">💰 Check Prices</button>
+                                    <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Contact customer support')">📞 Support</button>
                                 </div>
                                 <p class="mt-3 mb-0">💬 <strong>Ask me anything!</strong> I'm here to help with your personal account and orders. 🌟💝</p>` :
                                 `<h6 class="mb-2">👋 Welcome to raqibtech.com! 🌟</h6>
@@ -1399,24 +1579,14 @@ class CustomerSupportPortal {
                                     <li class="mb-1">📞 <strong>24/7 Support</strong> - AI and human support always available</li>
                                     <li class="mb-1">🏪 <strong>Amazing Product Catalog</strong> - Electronics, Fashion, Beauty, Computing, Automotive, Books</li>
                                 </ul>
-                                <p class="mb-3">🎯 <strong>Ready for personalized service?</strong> Sign up or log in to:</p>
-                                <ul class="list-unstyled mb-2">
-                                    <li class="mb-1">✅ Track your specific orders in real-time</li>
-                                    <li class="mb-1">✅ Get personalized product recommendations</li>
-                                    <li class="mb-1">✅ Manage your account and payment methods</li>
-                                    <li class="mb-1">✅ Access order history and support tickets</li>
-                                </ul>
-                                <div class="welcome-quick-start-actions">
-                                    <p class="mb-2"><strong>✨ Quick Actions:</strong></p>
-                                    <div class="welcome-quick-actions">
-                                        <a href="/login" class="welcome-quick-action-btn">🔐 Login</a>
-                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('How do I create an account?')">📝 Sign Up</button>
-                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('What services do you offer?')">💡 Learn More</button>
-                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Contact customer support')">📞 Contact Support</button>
-                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Browse your product catalog')">🏪 Browse Catalog</button>
-                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Show me electronics products')">📱 Electronics</button>
-                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Check prices for popular products')">💰 Check Prices</button>
-                                    </div>
+                                <div class="welcome-quick-actions">
+                                    <a href="/login" class="welcome-quick-action-btn">🔐 Login</a>
+                                    <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('How do I create an account?')">📝 Sign Up</button>
+                                    <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('What services do you offer?')">💡 Learn More</button>
+                                    <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Contact customer support')">📞 Contact Support</button>
+                                    <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Browse your product catalog')">🏪 Browse Catalog</button>
+                                    <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Show me electronics products')">📱 Electronics</button>
+                                    <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Check prices for popular products')">💰 Check Prices</button>
                                 </div>
                                 <p class="mt-3 mb-0">💬 <strong>Ask me anything!</strong> I can guide you about our services and help you get started! 🌟</p>`
                             }
@@ -1435,44 +1605,42 @@ class CustomerSupportPortal {
     }
 
     async sendCustomerMessage(message = null) {
-        // 🔧 FIX: Prevent sending messages while typing or during conversation switch
         if (this.isTyping || this.conversationLocked) {
             console.warn('⚠️ Message blocked: System is busy');
             return;
         }
 
         const chatInput = document.getElementById('chatInput');
-        if (!chatInput) return;
+        if (!chatInput) {
+            console.error('❌ Chat input not found');
+            return;
+        }
 
         const userMessage = message || chatInput.value.trim();
-        if (!userMessage) return;
+        if (!userMessage) {
+            console.warn('⚠️ Empty message, not sending');
+            return;
+        }
 
-        // 🔧 FIX: Cancel any existing request before starting new one
+        console.log(`📤 Sending message: ${userMessage.substring(0, 50)}...`);
+
         if (this.activeMessageRequest) {
             this.activeMessageRequest.abort();
             this.activeMessageRequest = null;
             this.removeTypingIndicator();
         }
 
-        // Clear input
         if (!message) chatInput.value = '';
 
-        // 🔧 FIX: Store the conversation ID when starting the request
         const requestConversationId = this.currentConversationId;
-
-        // Add user message to chat
         this.addMessageToChatDisplay(userMessage, 'customer');
-
-        // Show typing indicator
         this.isTyping = true;
         this.showTypingIndicator();
 
         try {
-            // 🔧 FIX: Create AbortController for request tracking
             const controller = new AbortController();
             this.activeMessageRequest = controller;
 
-            // Send to enhanced API
             const response = await fetch('/api/enhanced-query', {
                 method: 'POST',
                 headers: {
@@ -1484,7 +1652,6 @@ class CustomerSupportPortal {
                 signal: controller.signal
             });
 
-            // 🔧 FIX: Verify we're still in the same conversation
             if (requestConversationId !== this.currentConversationId) {
                 console.warn('⚠️ Conversation changed during request, ignoring response');
                 return;
@@ -1496,7 +1663,6 @@ class CustomerSupportPortal {
 
             const data = await response.json();
 
-            // 🔧 FIX: Final check before processing response
             if (requestConversationId !== this.currentConversationId) {
                 console.warn('⚠️ Conversation changed before response processing, ignoring');
                 return;
@@ -1507,22 +1673,20 @@ class CustomerSupportPortal {
             this.removeTypingIndicator();
 
             if (data.success) {
+                console.log('✅ Message sent successfully');
                 this.addCustomerResponseToChat(data);
-                // Refresh conversation list
                 this.refreshConversationList();
             } else {
                 this.addMessageToChatDisplay(data.message || 'Sorry, I encountered an issue. Please try again.', 'ai', true);
             }
 
         } catch (error) {
-            // 🔧 FIX: Only handle non-aborted errors
             if (error.name !== 'AbortError') {
                 this.isTyping = false;
                 this.activeMessageRequest = null;
                 this.removeTypingIndicator();
                 console.error('❌ Customer chat error:', error);
 
-                // 🔧 FIX: Only show error if still in same conversation
                 if (requestConversationId === this.currentConversationId) {
                     this.addMessageToChatDisplay('I apologize, but I\'m experiencing technical difficulties. Please try again or contact our phone support at +234 (702) 5965-922.', 'ai', true);
                 }
@@ -1532,7 +1696,10 @@ class CustomerSupportPortal {
 
     addMessageToChatDisplay(message, sender, isError = false, metadata = {}) {
         const chatMessages = document.getElementById('chatMessages');
-        if (!chatMessages) return;
+        if (!chatMessages) {
+            console.error('❌ Chat messages container not found');
+            return;
+        }
 
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${sender === 'customer' ? 'customer' : 'ai'}`;
@@ -1542,29 +1709,23 @@ class CustomerSupportPortal {
         }
 
         const timestamp = new Date().toLocaleTimeString();
-
-        // Create avatar
         const avatar = document.createElement('div');
         avatar.className = 'message-avatar';
         avatar.innerHTML = sender === 'customer' ? 'U' : 'AI';
 
-        // Create message content container
         const messageContent = document.createElement('div');
         messageContent.className = 'message-content';
 
-        // Create message bubble
         const messageBubble = document.createElement('div');
         messageBubble.className = 'message-bubble';
         messageBubble.innerHTML = message;
 
-        // Create message meta (timestamp and response time for AI)
         const messageMeta = document.createElement('div');
         messageMeta.className = 'message-meta';
 
         if (sender === 'customer') {
             messageMeta.innerHTML = `<span>${timestamp}</span>`;
         } else {
-            // For AI messages, include response time if available
             const responseTime = metadata.execution_time || '';
             messageMeta.innerHTML = `
                 <span>${timestamp}</span>
@@ -1572,26 +1733,20 @@ class CustomerSupportPortal {
             `;
         }
 
-        // Assemble message
         messageContent.appendChild(messageBubble);
         messageContent.appendChild(messageMeta);
-
         messageDiv.appendChild(avatar);
         messageDiv.appendChild(messageContent);
 
         chatMessages.appendChild(messageDiv);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+        this.smoothScrollToBottom();
     }
 
     addCustomerResponseToChat(data) {
-        // Create main response message with response time
         this.addMessageToChatDisplay(data.response, 'ai', false, data);
-
-        // 🆕 Add smart quick actions after every AI response for ALL users
         this.addSmartQuickActions(data);
     }
 
-    // 🆕 Smart Quick Actions System - Fixed for ALL users
     addSmartQuickActions(data) {
         const chatMessages = document.getElementById('chatMessages');
         if (!chatMessages) return;
@@ -1599,7 +1754,6 @@ class CustomerSupportPortal {
         const quickActionDiv = document.createElement('div');
         quickActionDiv.className = 'smart-quick-actions-container';
 
-        // Generate contextual quick actions based on query type and authentication
         const quickActions = this.generateSmartQuickActions(data);
 
         quickActionDiv.innerHTML = `
@@ -1618,7 +1772,7 @@ class CustomerSupportPortal {
         `;
 
         chatMessages.appendChild(quickActionDiv);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+        this.smoothScrollToBottom();
     }
 
     generateSmartQuickActions(data) {
@@ -1626,7 +1780,6 @@ class CustomerSupportPortal {
         const queryType = data.query_type || 'general';
 
         if (this.userAuthenticated) {
-            // Authenticated user actions
             switch (queryType) {
                 case 'order_analytics':
                     actions.push(
@@ -1669,7 +1822,6 @@ class CustomerSupportPortal {
                     );
             }
         } else {
-            // Guest user actions - encourage engagement and signup
             switch (queryType) {
                 case 'product_performance':
                     actions.push(
@@ -1699,7 +1851,6 @@ class CustomerSupportPortal {
         const chatMessages = document.getElementById('chatMessages');
         if (!chatMessages) return;
 
-        // 🔧 FIX: Remove any existing typing indicator first
         this.removeTypingIndicator();
 
         const typingDiv = document.createElement('div');
@@ -1709,7 +1860,7 @@ class CustomerSupportPortal {
             <div class="message-avatar">AI</div>
             <div class="message-content">
                 <div class="typing-indicator">
-                    <span style="color: #6c757d; font-size: 14px;">raqibtech.com Assistant is typing</span>
+                    <span style="color: #6c757d; font-size: 12px;">raqibtech.com Assistant is typing</span>
                     <div class="typing-dots">
                         <div class="typing-dot"></div>
                         <div class="typing-dot"></div>
@@ -1720,13 +1871,23 @@ class CustomerSupportPortal {
         `;
 
         chatMessages.appendChild(typingDiv);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+        this.smoothScrollToBottom();
     }
 
     removeTypingIndicator() {
         const typingIndicator = document.getElementById('typingIndicator');
         if (typingIndicator) {
             typingIndicator.remove();
+        }
+    }
+
+    smoothScrollToBottom() {
+        const chatMessages = document.getElementById('chatMessages');
+        if (chatMessages) {
+            chatMessages.scrollTo({
+                top: chatMessages.scrollHeight,
+                behavior: 'smooth'
+            });
         }
     }
 
@@ -1739,47 +1900,7 @@ class CustomerSupportPortal {
                 this.updateConversationList(data.conversations);
             }
         } catch (error) {
-            console.error('Error refreshing conversation list:', error);
-        }
-    }
-
-    async loadConversationMessages(conversationId) {
-        try {
-            // 🔧 FIX: Clear state before loading
-            this.isTyping = false;
-            if (this.activeMessageRequest) {
-                this.activeMessageRequest.abort();
-                this.activeMessageRequest = null;
-            }
-            this.removeTypingIndicator();
-
-            const response = await fetch(`/api/conversations/${conversationId}/messages`);
-            const data = await response.json();
-
-            // 🔧 FIX: Verify conversation hasn't changed
-            if (conversationId !== this.currentConversationId) {
-                console.warn('⚠️ Conversation changed during message loading');
-                return;
-            }
-
-            if (data.success && data.messages) {
-                // Clear current chat completely
-                const chatMessages = document.getElementById('chatMessages');
-                if (chatMessages) {
-                    chatMessages.innerHTML = '';
-                }
-
-                // Load all messages in chronological order
-                data.messages.forEach(msg => {
-                    const senderType = msg.sender_type === 'user' ? 'customer' : 'ai';
-                    const metadata = msg.metadata || {};
-                    this.addMessageToChatDisplay(msg.content, senderType, false, metadata);
-                });
-
-                console.log(`✅ Loaded ${data.messages.length} messages for conversation ${conversationId}`);
-            }
-        } catch (error) {
-            console.error('❌ Error loading conversation messages:', error);
+            console.error('❌ Error refreshing conversation list:', error);
         }
     }
 
@@ -1792,9 +1913,9 @@ class CustomerSupportPortal {
         if (conversations.length === 0) {
             listContainer.innerHTML = `
                 <div class="text-center text-muted p-3">
-                    <i class="bi bi-chat-dots display-4 mb-2"></i>
-                    <p class="mb-0">No chat history yet</p>
-                    <small>Start a conversation to see it here</small>
+                    <i class="bi bi-chat-dots display-6 mb-2"></i>
+                    <p class="mb-0 small">No chat history yet</p>
+                    <small>Start a conversation!</small>
                 </div>
             `;
             return;
@@ -1802,19 +1923,18 @@ class CustomerSupportPortal {
 
         conversations.forEach(conv => {
             const convElement = document.createElement('div');
-            convElement.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-start conversation-item';
+            convElement.className = 'conversation-item';
             convElement.setAttribute('data-conversation-id', conv.conversation_id);
 
-            // 🆕 ADD: Delete button functionality
             convElement.innerHTML = `
                 <div class="conversation-info" onclick="customerPortal.switchToConversation('${conv.conversation_id}')" style="flex: 1; cursor: pointer;">
-                    <h6 class="mb-1 conversation-title">${conv.title}</h6>
-                    <small class="text-muted">${conv.message_count} messages</small>
+                    <h6>${conv.title}</h6>
+                    <small>${conv.message_count} messages</small>
                 </div>
-                <div class="conversation-actions" style="display: flex; align-items: center; gap: 8px;">
+                <div class="conversation-actions">
                     <small class="text-muted">${new Date(conv.updated_at).toLocaleDateString()}</small>
-                    <button class="btn btn-sm btn-outline-danger" onclick="customerPortal.deleteConversation('${conv.conversation_id}', event)"
-                            title="Delete conversation" style="padding: 2px 6px; font-size: 10px;">
+                    <button class="btn btn-outline-danger btn-sm" onclick="customerPortal.deleteConversation('${conv.conversation_id}', event)"
+                            title="Delete conversation">
                         <i class="bi bi-trash"></i>
                     </button>
                 </div>
@@ -1824,9 +1944,8 @@ class CustomerSupportPortal {
         });
     }
 
-    // 🆕 ADD: Delete conversation functionality
     async deleteConversation(conversationId, event) {
-        event.stopPropagation(); // Prevent conversation switching
+        event.stopPropagation();
 
         if (!confirm('Are you sure you want to delete this conversation? This action cannot be undone.')) {
             return;
@@ -1845,14 +1964,12 @@ class CustomerSupportPortal {
             if (data.success) {
                 console.log(`✅ Deleted conversation ${conversationId}`);
 
-                // If we deleted the current conversation, create a new one or show welcome
                 if (conversationId === this.currentConversationId) {
                     this.currentConversationId = null;
                     window.currentConversationId = null;
                     this.displayWelcomeMessage();
                 }
 
-                // Refresh conversation list
                 this.refreshConversationList();
             } else {
                 alert('Failed to delete conversation. Please try again.');
@@ -1864,7 +1981,6 @@ class CustomerSupportPortal {
     }
 
     async switchToConversation(conversationId) {
-        // 🔧 FIX: Prevent rapid switching and contamination
         if (this.conversationLocked || conversationId === this.currentConversationId) {
             return;
         }
@@ -1872,7 +1988,6 @@ class CustomerSupportPortal {
         this.conversationLocked = true;
 
         try {
-            // 🔧 FIX: Cancel any active requests
             if (this.activeMessageRequest) {
                 this.activeMessageRequest.abort();
                 this.activeMessageRequest = null;
@@ -1882,11 +1997,9 @@ class CustomerSupportPortal {
 
             console.log(`🔄 Switching from conversation ${this.currentConversationId} to ${conversationId}`);
 
-            // Update current conversation ID immediately
             this.currentConversationId = conversationId;
             window.currentConversationId = conversationId;
 
-            // Switch conversation on server
             const response = await fetch(`/api/conversations/${conversationId}/switch`, {
                 method: 'POST',
                 headers: {
@@ -1897,10 +2010,8 @@ class CustomerSupportPortal {
             const data = await response.json();
 
             if (data.success) {
-                // Load conversation messages
                 await this.loadConversationMessages(conversationId);
 
-                // Update active conversation highlighting
                 document.querySelectorAll('.conversation-item').forEach(item => {
                     item.classList.remove('active');
                 });
@@ -1914,10 +2025,45 @@ class CustomerSupportPortal {
         } catch (error) {
             console.error('❌ Error switching conversation:', error);
         } finally {
-            // 🔧 FIX: Always unlock conversation switching
             setTimeout(() => {
                 this.conversationLocked = false;
             }, 500);
+        }
+    }
+
+    async loadConversationMessages(conversationId) {
+        try {
+            this.isTyping = false;
+            if (this.activeMessageRequest) {
+                this.activeMessageRequest.abort();
+                this.activeMessageRequest = null;
+            }
+            this.removeTypingIndicator();
+
+            const response = await fetch(`/api/conversations/${conversationId}/messages`);
+            const data = await response.json();
+
+            if (conversationId !== this.currentConversationId) {
+                console.warn('⚠️ Conversation changed during message loading');
+                return;
+            }
+
+            if (data.success && data.messages) {
+                const chatMessages = document.getElementById('chatMessages');
+                if (chatMessages) {
+                    chatMessages.innerHTML = '';
+                }
+
+                data.messages.forEach(msg => {
+                    const senderType = msg.sender_type === 'user' ? 'customer' : 'ai';
+                    const metadata = msg.metadata || {};
+                    this.addMessageToChatDisplay(msg.content, senderType, false, metadata);
+                });
+
+                console.log(`✅ Loaded ${data.messages.length} messages for conversation ${conversationId}`);
+            }
+        } catch (error) {
+            console.error('❌ Error loading conversation messages:', error);
         }
     }
 
@@ -1925,7 +2071,6 @@ class CustomerSupportPortal {
         const chatMessages = document.getElementById('chatMessages');
         if (!chatMessages) return;
 
-        // 🔧 FIX: Clear any pending states
         this.isTyping = false;
         if (this.activeMessageRequest) {
             this.activeMessageRequest.abort();
@@ -1933,27 +2078,74 @@ class CustomerSupportPortal {
         }
         this.removeTypingIndicator();
 
-        // Clear any existing messages
         chatMessages.innerHTML = '';
-
         const welcomeHtml = this.createWelcomeMessage();
         chatMessages.innerHTML = welcomeHtml;
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+        this.smoothScrollToBottom();
 
-        console.log('✅ Welcome message displayed');
+        console.log('✅ Welcome message displayed in modal');
     }
 }
 
-// Global functions for compatibility
+// Global functions for compatibility and modal control
+function toggleChatModal() {
+    console.log('🖱️ Global toggleChatModal called');
+    if (window.customerPortal) {
+        window.customerPortal.toggleChatModal();
+    } else {
+        console.error('❌ CustomerPortal not initialized');
+    }
+}
+
+function openChatModal() {
+    console.log('🖱️ Global openChatModal called');
+    if (window.customerPortal) {
+        window.customerPortal.openChatModal();
+    } else {
+        console.error('❌ CustomerPortal not initialized');
+    }
+}
+
+function closeChatModal(event) {
+    console.log('🖱️ Global closeChatModal called');
+    if (window.customerPortal) {
+        window.customerPortal.closeChatModal(event);
+    } else {
+        console.error('❌ CustomerPortal not initialized');
+    }
+}
+
+function toggleConversationSidebar() {
+    console.log('🖱️ Global toggleConversationSidebar called');
+    if (window.customerPortal) {
+        window.customerPortal.toggleConversationSidebar();
+    } else {
+        console.error('❌ CustomerPortal not initialized');
+    }
+}
+
 function sendChatMessage() {
+    console.log('🖱️ Global sendChatMessage called');
     if (window.customerPortal) {
         window.customerPortal.sendCustomerMessage();
+    } else {
+        console.error('❌ CustomerPortal not initialized');
     }
 }
 
 function sendQuickMessage(message) {
+    console.log(`🖱️ Global sendQuickMessage called: ${message}`);
     if (window.customerPortal) {
-        window.customerPortal.sendCustomerMessage(message);
+        // Open modal if not already open
+        if (!window.customerPortal.modalOpen) {
+            window.customerPortal.openChatModal();
+        }
+        // Wait for modal to open before sending message
+        setTimeout(() => {
+            window.customerPortal.sendCustomerMessage(message);
+        }, 400);
+    } else {
+        console.error('❌ CustomerPortal not initialized');
     }
 }
 
@@ -1963,21 +2155,20 @@ function trackOrderViaChat() {
 
     if (orderId) {
         sendQuickMessage(`Track my order ${orderId}`);
-        // Switch to chat tab
-        document.getElementById('chat-tab').click();
     } else {
         sendQuickMessage('Help me track my order');
-        document.getElementById('chat-tab').click();
     }
 }
 
 function handleChatKeyPress(event) {
     if (event.key === 'Enter') {
+        event.preventDefault();
         sendChatMessage();
     }
 }
 
 async function createNewChat() {
+    console.log('🆕 Creating new chat...');
     try {
         const response = await fetch('/api/conversations/new', {
             method: 'POST',
@@ -1989,51 +2180,376 @@ async function createNewChat() {
         const data = await response.json();
 
         if (data.success) {
-            // 🔧 FIX: Use the new conversation switching instead of page reload
+            console.log(`✅ New chat created: ${data.conversation_id}`);
             if (window.customerPortal) {
                 await window.customerPortal.switchToConversation(data.conversation_id);
                 await window.customerPortal.refreshConversationList();
             }
         }
     } catch (error) {
-        console.error('Error creating new chat:', error);
+        console.error('❌ Error creating new chat:', error);
     }
 }
 
 async function switchToConversation(conversationId) {
-    // 🔧 FIX: Use the portal's switchToConversation method
+    console.log(`🔄 Global switchToConversation called: ${conversationId}`);
     if (window.customerPortal) {
         await window.customerPortal.switchToConversation(conversationId);
+    } else {
+        console.error('❌ CustomerPortal not initialized');
     }
 }
 
-// Initialize customer portal when DOM is ready
+// Initialize floating modal chat portal when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 Initializing raqibtech.com Customer Support Portal with Session Management');
-    window.customerPortal = new CustomerSupportPortal();
+    console.log('🚀 DOM loaded, initializing raqibtech.com Floating Modal Chat System');
 
-    // 🔧 NEW: Load current conversation if user is authenticated
-    const isAuthenticated = {{ 'true' if session.get('user_authenticated') else 'false' }};
-    const currentConversationId = '{{ current_conversation_id if current_conversation_id else '' }}';
+    // Add small delay to ensure all elements are ready
+    setTimeout(() => {
+        try {
+            window.customerPortal = new CustomerSupportPortal();
 
-    if (isAuthenticated && currentConversationId) {
-        // Load the current conversation messages
-        window.customerPortal.loadConversationMessages(currentConversationId).then(() => {
-            // Mark as active in conversation list
-            const activeItem = document.querySelector(`[data-conversation-id="${currentConversationId}"]`);
-            if (activeItem) {
-                activeItem.classList.add('active');
+            const isAuthenticated = {{ 'true' if session.get('user_authenticated') else 'false' }};
+            const currentConversationId = '{{ current_conversation_id if current_conversation_id else '' }}';
+
+            console.log(`🔍 Auth: ${isAuthenticated}, ConvID: ${currentConversationId}`);
+            console.log('✅ Floating modal chat system ready!');
+
+            // 🔧 DEBUG: Add click test for floating button
+            const floatingBtn = document.getElementById('floatingChatBtn');
+            if (floatingBtn) {
+                console.log('✅ Floating button found and ready');
+
+                // Test button interactivity
+                floatingBtn.addEventListener('mouseenter', () => {
+                    console.log('🖱️ Mouse entered floating button');
+                });
+
+                floatingBtn.addEventListener('mouseleave', () => {
+                    console.log('🖱️ Mouse left floating button');
+                });
+            } else {
+                console.error('❌ Floating button not found!');
             }
-            console.log(`✅ Loaded current conversation: ${currentConversationId}`);
-        }).catch(error => {
-            console.error('❌ Error loading current conversation:', error);
-        });
-    } else if (!isAuthenticated) {
-        // For guest users, show welcome message
-        window.customerPortal.displayWelcomeMessage();
+
+        } catch (error) {
+            console.error('❌ Error initializing chat system:', error);
+        }
+    }, 200);
+});
+
+// 🔧 DEBUG: Window error handler
+window.addEventListener('error', function(e) {
+    console.error('❌ JavaScript Error:', e.error);
+});
+
+// 🔧 DEBUG: Check if modal is clickable
+document.addEventListener('click', function(e) {
+    if (e.target.id === 'floatingChatBtn' || e.target.closest('#floatingChatBtn')) {
+        console.log('🖱️ Direct click detected on floating button');
+    }
+});
+
+// 🔧 DEBUG: Test modal function
+function debugTestModal() {
+    console.log('🔧 DEBUG: Test modal function called');
+
+    const modal = document.getElementById('chatModalOverlay');
+    const button = document.getElementById('floatingChatBtn');
+
+    if (!modal) {
+        alert('❌ Modal element not found!');
+        return;
     }
 
-    console.log('✅ Customer support portal ready!');
+    if (!button) {
+        alert('❌ Floating button not found!');
+        return;
+    }
+
+    // Test 1: Check if elements exist
+    console.log('✅ Modal and button elements found');
+
+    // Test 2: Check button properties
+    const buttonRect = button.getBoundingClientRect();
+    const buttonStyles = window.getComputedStyle(button);
+    console.log('🔍 Button position:', buttonRect);
+    console.log('🔍 Button z-index:', buttonStyles.zIndex);
+    console.log('🔍 Button pointer-events:', buttonStyles.pointerEvents);
+    console.log('🔍 Button display:', buttonStyles.display);
+
+    // Test 3: Check for overlapping elements
+    const elementUnderButton = document.elementFromPoint(buttonRect.left + buttonRect.width/2, buttonRect.top + buttonRect.height/2);
+    console.log('🔍 Element under button center:', elementUnderButton);
+
+    if (elementUnderButton !== button) {
+        console.warn('⚠️ Button might be blocked by:', elementUnderButton);
+    }
+
+    // Test 4: Try clicking floating button programmatically
+    console.log('🔧 Testing floating button click...');
+    try {
+        button.click();
+        console.log('✅ Floating button click successful');
+    } catch (error) {
+        console.error('❌ Floating button click failed:', error);
+    }
+
+    // Test 5: Try opening modal directly as backup
+    modal.classList.add('active');
+    button.classList.add('active');
+    button.innerHTML = '<i class="bi bi-x-lg"></i>';
+
+    // Test 6: Disable body scroll
+    document.body.style.overflow = 'hidden';
+
+    console.log('✅ Modal should be open now');
+    alert('🔧 Debug Test Complete! Check console for detailed info.');
+}
+
+console.log('🔧 Modal debugging and event handlers loaded');
+console.log('✅ Modal system loaded and ready');
+
+// Global functions for compatibility and modal control
+function handleModalClick(event) {
+    event.stopPropagation();
+
+    // Don't close sidebar if clicking on buttons, inputs, or interactive elements
+    if (event.target.closest('button, input, a, .chat-modal-btn, .conversation-item')) {
+        return;
+    }
+
+    // Don't close sidebar if clicking inside the sidebar itself
+    if (event.target.closest('.conversation-sidebar')) {
+        return;
+    }
+
+    // Close sidebar if clicking on empty areas of the modal
+    if (window.customerPortal && window.customerPortal.sidebarOpen) {
+        window.customerPortal.toggleConversationSidebar();
+    }
+}
+
+function toggleChatModal() {
+    console.log('🖱️ Global toggleChatModal called');
+    if (window.customerPortal) {
+        window.customerPortal.toggleChatModal();
+    } else {
+        console.error('❌ CustomerPortal not initialized');
+    }
+}
+
+function openChatModal() {
+    console.log('🖱️ Global openChatModal called');
+    if (window.customerPortal) {
+        window.customerPortal.openChatModal();
+    } else {
+        console.error('❌ CustomerPortal not initialized');
+    }
+}
+
+function closeChatModal(event) {
+    console.log('🖱️ Global closeChatModal called');
+    if (window.customerPortal) {
+        window.customerPortal.closeChatModal(event);
+    } else {
+        console.error('❌ CustomerPortal not initialized');
+    }
+}
+
+function toggleConversationSidebar() {
+    console.log('🖱️ Global toggleConversationSidebar called');
+    if (window.customerPortal) {
+        window.customerPortal.toggleConversationSidebar();
+    } else {
+        console.error('❌ CustomerPortal not initialized');
+    }
+}
+
+function sendChatMessage() {
+    console.log('🖱️ Global sendChatMessage called');
+    if (window.customerPortal) {
+        window.customerPortal.sendCustomerMessage();
+    } else {
+        console.error('❌ CustomerPortal not initialized');
+    }
+}
+
+function sendQuickMessage(message) {
+    console.log(`🖱️ Global sendQuickMessage called: ${message}`);
+    if (window.customerPortal) {
+        // Open modal if not already open
+        if (!window.customerPortal.modalOpen) {
+            window.customerPortal.openChatModal();
+        }
+        // Wait for modal to open before sending message
+        setTimeout(() => {
+            window.customerPortal.sendCustomerMessage(message);
+        }, 400);
+    } else {
+        console.error('❌ CustomerPortal not initialized');
+    }
+}
+
+function trackOrderViaChat() {
+    const orderIdInput = document.getElementById('orderIdInput');
+    const orderId = orderIdInput?.value.trim();
+
+    if (orderId) {
+        sendQuickMessage(`Track my order ${orderId}`);
+    } else {
+        sendQuickMessage('Help me track my order');
+    }
+}
+
+function handleChatKeyPress(event) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        sendChatMessage();
+    }
+}
+
+async function createNewChat() {
+    console.log('🆕 Creating new chat...');
+    try {
+        const response = await fetch('/api/conversations/new', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            console.log(`✅ New chat created: ${data.conversation_id}`);
+            if (window.customerPortal) {
+                await window.customerPortal.switchToConversation(data.conversation_id);
+                await window.customerPortal.refreshConversationList();
+            }
+        }
+    } catch (error) {
+        console.error('❌ Error creating new chat:', error);
+    }
+}
+
+async function switchToConversation(conversationId) {
+    console.log(`🔄 Global switchToConversation called: ${conversationId}`);
+    if (window.customerPortal) {
+        await window.customerPortal.switchToConversation(conversationId);
+    } else {
+        console.error('❌ CustomerPortal not initialized');
+    }
+}
+
+// Initialize floating modal chat portal when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 DOM loaded, initializing raqibtech.com Floating Modal Chat System');
+
+    // Add small delay to ensure all elements are ready
+    setTimeout(() => {
+        try {
+            window.customerPortal = new CustomerSupportPortal();
+
+            const isAuthenticated = {{ 'true' if session.get('user_authenticated') else 'false' }};
+            const currentConversationId = '{{ current_conversation_id if current_conversation_id else '' }}';
+
+            console.log(`🔍 Auth: ${isAuthenticated}, ConvID: ${currentConversationId}`);
+            console.log('✅ Floating modal chat system ready!');
+
+            // 🔧 DEBUG: Add click test for floating button
+            const floatingBtn = document.getElementById('floatingChatBtn');
+            if (floatingBtn) {
+                console.log('✅ Floating button found and ready');
+
+                // Test button interactivity
+                floatingBtn.addEventListener('mouseenter', () => {
+                    console.log('🖱️ Mouse entered floating button');
+                });
+
+                floatingBtn.addEventListener('mouseleave', () => {
+                    console.log('🖱️ Mouse left floating button');
+                });
+            } else {
+                console.error('❌ Floating button not found!');
+            }
+
+        } catch (error) {
+            console.error('❌ Error initializing chat system:', error);
+        }
+    }, 200);
 });
+
+// 🔧 DEBUG: Window error handler
+window.addEventListener('error', function(e) {
+    console.error('❌ JavaScript Error:', e.error);
+});
+
+// 🔧 DEBUG: Check if modal is clickable
+document.addEventListener('click', function(e) {
+    if (e.target.id === 'floatingChatBtn' || e.target.closest('#floatingChatBtn')) {
+        console.log('🖱️ Direct click detected on floating button');
+    }
+});
+
+// 🔧 DEBUG: Test modal function
+function debugTestModal() {
+    console.log('🔧 DEBUG: Test modal function called');
+
+    const modal = document.getElementById('chatModalOverlay');
+    const button = document.getElementById('floatingChatBtn');
+
+    if (!modal) {
+        alert('❌ Modal element not found!');
+        return;
+    }
+
+    if (!button) {
+        alert('❌ Floating button not found!');
+        return;
+    }
+
+    // Test 1: Check if elements exist
+    console.log('✅ Modal and button elements found');
+
+    // Test 2: Check button properties
+    const buttonRect = button.getBoundingClientRect();
+    const buttonStyles = window.getComputedStyle(button);
+    console.log('🔍 Button position:', buttonRect);
+    console.log('🔍 Button z-index:', buttonStyles.zIndex);
+    console.log('🔍 Button pointer-events:', buttonStyles.pointerEvents);
+    console.log('🔍 Button display:', buttonStyles.display);
+
+    // Test 3: Check for overlapping elements
+    const elementUnderButton = document.elementFromPoint(buttonRect.left + buttonRect.width/2, buttonRect.top + buttonRect.height/2);
+    console.log('🔍 Element under button center:', elementUnderButton);
+
+    if (elementUnderButton !== button) {
+        console.warn('⚠️ Button might be blocked by:', elementUnderButton);
+    }
+
+    // Test 4: Try clicking floating button programmatically
+    console.log('🔧 Testing floating button click...');
+    try {
+        button.click();
+        console.log('✅ Floating button click successful');
+    } catch (error) {
+        console.error('❌ Floating button click failed:', error);
+    }
+
+    // Test 5: Try opening modal directly as backup
+    modal.classList.add('active');
+    button.classList.add('active');
+    button.innerHTML = '<i class="bi bi-x-lg"></i>';
+
+    // Test 6: Disable body scroll
+    document.body.style.overflow = 'hidden';
+
+    console.log('✅ Modal should be open now');
+    alert('🔧 Debug Test Complete! Check console for detailed info.');
+}
+
+console.log('🔧 Modal debugging and event handlers loaded');
+console.log('✅ Modal system loaded and ready');
 </script>
 {% endblock %}
