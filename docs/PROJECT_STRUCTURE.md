@@ -165,4 +165,4 @@ python database/[script_name].py
 3. **Deploy Application:** Ready for AI hackathon with authentic Nigerian data!
 
 ---
-*Professional Nigerian e-commerce database with cultural authenticity and realistic business patterns* 🇳🇬
+*Professional Nigerian e-commerce database with cultural authenticity and realistic business patterns*

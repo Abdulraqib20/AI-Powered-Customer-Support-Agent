@@ -1,4 +1,4 @@
-# 🇳🇬 Nigerian E-commerce Database: Ethnic Authenticity Documentation
+#   Nigerian E-commerce Database: Ethnic Authenticity Documentation
 
 ## Overview
 This document describes the **ethnically authentic** data generation system for your Nigerian e-commerce customer support agent. The system ensures cultural accuracy by properly mapping ethnic groups to their traditional geographical regions based on Nigeria's demographic patterns.
@@ -190,7 +190,7 @@ def generate_orders_for_customer(customer):
 - **Product Recommendations:** Ethnicity-based preferences
 - **Economic Targeting:** Tier-appropriate offerings
 
-## 🇳🇬 Conclusion
+##   Conclusion
 
 Your Nigerian e-commerce database now contains **1,703 ethnically authentic customers** with proper cultural mapping. The system respects Nigeria's rich diversity while maintaining business logic integrity.
 

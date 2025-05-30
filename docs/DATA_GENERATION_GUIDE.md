@@ -184,4 +184,4 @@ python -c "import psycopg2; from config.database_config import DATABASE_CONFIG; 
 ✅ **Infinitely Scalable**: Generate millions of records
 ✅ **Production Ready**: Real-world patterns and distributions
 
-**Your Nigerian e-commerce customer support agent database is now world-class! 🇳🇬**
+**Your Nigerian e-commerce customer support agent database is now world-class!  **

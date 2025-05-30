@@ -580,7 +580,7 @@ def main():
             logger.info("   🌍 Ethnically authentic customers")
             logger.info("   ⏰ Realistic timestamp distribution")
             logger.info("   🏆 Intelligent business tier logic")
-            logger.info("   🇳🇬 Ready for AI hackathon!")
+            logger.info("     Ready for AI hackathon!")
         else:
             logger.error("❌ Data insertion failed!")
 

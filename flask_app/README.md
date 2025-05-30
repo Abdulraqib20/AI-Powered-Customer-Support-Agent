@@ -1,4 +1,4 @@
-# 🇳🇬 Nigerian E-commerce Customer Support Agent - Flask Web Application
+#   Nigerian E-commerce Customer Support Agent - Flask Web Application
 
 A comprehensive AI-powered customer support web application designed specifically for Nigerian e-commerce platforms. This Flask application replaces the Streamlit prototype with a production-ready, scalable solution featuring real-time AI chat, customer management, analytics, and Nigerian market-specific optimizations.
 
@@ -398,6 +398,6 @@ For technical support or Nigerian market-specific questions:
 
 ---
 
-**Built with ❤️ for the Nigerian E-commerce Market 🇳🇬**
+**Built with ❤️ for the Nigerian E-commerce Market  **
 
 *Empowering Nigerian businesses with AI-powered customer support solutions that understand local context, culture, and commerce patterns.*

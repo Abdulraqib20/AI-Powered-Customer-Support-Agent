@@ -703,7 +703,7 @@ def api_analytics():
 
 @app.route('/api/chat', methods=['POST'])
 def api_chat():
-    """🇳🇬 Enhanced AI Chat API endpoint with sophisticated database querying"""
+    """  Enhanced AI Chat API endpoint with sophisticated database querying"""
     try:
         data = request.json
         query = data.get('message', '').strip()

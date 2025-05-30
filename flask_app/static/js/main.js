@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', function () {
  * Initialize the application
  */
 function initializeApp() {
-    console.log('🇳🇬 Nigerian Customer Support Agent - Initializing...');
+    console.log('  Nigerian Customer Support Agent - Initializing...');
 
     // Generate session ID for user tracking
     currentUser = generateSessionId();
@@ -314,7 +314,7 @@ function createBusinessCharts(data) {
                 plugins: {
                     title: {
                         display: true,
-                        text: '🇳🇬 Customer Distribution by State'
+                        text: '  Customer Distribution by State'
                     },
                     legend: {
                         position: 'bottom',
@@ -508,4 +508,4 @@ window.viewCustomerDetails = function (customerId) {
     // Customer details viewing will be handled by the integrated system
 };
 
-console.log('🇳🇬 Nigerian Customer Support Agent - JavaScript loaded successfully');
+console.log('  Nigerian Customer Support Agent - JavaScript loaded successfully');

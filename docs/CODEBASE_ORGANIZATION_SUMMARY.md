@@ -39,7 +39,7 @@ customer_support_agent/
 - ✅ **Customer Lifecycle:** New customers recent orders, long-term distributed
 - ✅ **Realistic Registration Times:** Spread over 3 years with growth weighting
 
-### 🇳🇬 **3. Ethnic Authenticity Maintained**
+###   **3. Ethnic Authenticity Maintained**
 
 **Cultural Mapping Results:**
 - ✅ **1,195 ethnically authentic customers**
@@ -170,7 +170,7 @@ Your Nigerian e-commerce customer support agent now has:
 5. ✅ **Intelligent business logic** (tier assignment based on value)
 6. ✅ **Comprehensive documentation** (organized in docs/)
 
-**Ready for AI hackathon deployment with authentic Nigerian e-commerce data! 🇳🇬**
+**Ready for AI hackathon deployment with authentic Nigerian e-commerce data!  **
 
 ---
 *Professional codebase organization complete - Following Python industry standards with cultural authenticity maintained*

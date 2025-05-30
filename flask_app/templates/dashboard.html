@@ -641,6 +641,461 @@
 .original-chat-content {
     display: none;
 }
+
+/* ===== ENHANCED WELCOME MESSAGE STYLES ===== */
+
+/* AI Avatar Enhancement */
+.ai-avatar-icon {
+    font-size: 18px;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+/* Welcome Header */
+.welcome-header {
+    margin-bottom: 20px;
+}
+
+.welcome-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 12px;
+    color: white;
+    margin-bottom: 16px;
+}
+
+.brand-icon {
+    font-size: 24px;
+    animation: rotate 3s linear infinite;
+}
+
+@keyframes rotate {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.brand-text .brand-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0;
+    color: #ffffff;
+}
+
+.brand-text .domain {
+    color: #ffd700;
+}
+
+.brand-text .brand-subtitle {
+    font-size: 12px;
+    margin: 0;
+    opacity: 0.9;
+    color: #e3f2fd;
+}
+
+/* Welcome Greeting */
+.welcome-greeting {
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.greeting-text {
+    font-size: 16px;
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 8px;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.greeting-subtitle {
+    font-size: 13px;
+    color: #6c757d;
+    line-height: 1.5;
+    margin: 0;
+}
+
+/* Capabilities Grid */
+.capabilities-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.capability-card {
+    padding: 12px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    border: 1px solid;
+}
+
+.capability-card.primary {
+    background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+    border-color: #2196f3;
+}
+
+.capability-card.secondary {
+    background: linear-gradient(135deg, #f3e5f5, #e1bee7);
+    border-color: #9c27b0;
+}
+
+.capability-card.accent {
+    background: linear-gradient(135deg, #fff3e0, #ffe0b2);
+    border-color: #ff9800;
+}
+
+.capability-card.success {
+    background: linear-gradient(135deg, #e8f5e8, #c8e6c9);
+    border-color: #4caf50;
+}
+
+.capability-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.capability-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.capability-content h6 {
+    font-size: 12px;
+    font-weight: 600;
+    margin: 0 0 4px 0;
+    color: #2c3e50;
+}
+
+.capability-content p {
+    font-size: 10px;
+    margin: 0;
+    color: #6c757d;
+    line-height: 1.3;
+}
+
+/* Platform Showcase (for guests) */
+.platform-showcase {
+    margin-bottom: 20px;
+}
+
+.showcase-card {
+    padding: 16px;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 12px;
+    border: 1px solid #dee2e6;
+    margin-bottom: 12px;
+}
+
+.showcase-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.showcase-icon {
+    font-size: 20px;
+}
+
+.showcase-header h6 {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0;
+    color: #2c3e50;
+}
+
+.showcase-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.tag {
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 500;
+    border: 1px solid;
+}
+
+.tag.electronics {
+    background: #e3f2fd;
+    color: #1976d2;
+    border-color: #2196f3;
+}
+
+.tag.fashion {
+    background: #fce4ec;
+    color: #c2185b;
+    border-color: #e91e63;
+}
+
+.tag.beauty {
+    background: #f3e5f5;
+    color: #7b1fa2;
+    border-color: #9c27b0;
+}
+
+.tag.computing {
+    background: #e8f5e8;
+    color: #388e3c;
+    border-color: #4caf50;
+}
+
+.tag.automotive {
+    background: #fff3e0;
+    color: #f57c00;
+    border-color: #ff9800;
+}
+
+.tag.books {
+    background: #efebe9;
+    color: #5d4037;
+    border-color: #795548;
+}
+
+.showcase-features {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.feature-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: 6px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.feature-icon {
+    font-size: 14px;
+}
+
+.feature-text {
+    font-size: 10px;
+    font-weight: 500;
+    color: #2c3e50;
+}
+
+/* Quick Actions Section */
+.quick-actions-section {
+    margin-bottom: 20px;
+}
+
+.section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 12px;
+    text-align: center;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.action-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.action-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 12px;
+    border: 1px solid;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: white;
+}
+
+.action-btn.primary {
+    color: #1976d2;
+    border-color: #2196f3;
+}
+
+.action-btn.primary:hover {
+    background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(33, 150, 243, 0.2);
+}
+
+.action-btn.secondary {
+    color: #7b1fa2;
+    border-color: #9c27b0;
+}
+
+.action-btn.secondary:hover {
+    background: linear-gradient(135deg, #f3e5f5, #e1bee7);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(156, 39, 176, 0.2);
+}
+
+.action-btn.accent {
+    color: #f57c00;
+    border-color: #ff9800;
+}
+
+.action-btn.accent:hover {
+    background: linear-gradient(135deg, #fff3e0, #ffe0b2);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(255, 152, 0, 0.2);
+}
+
+.action-btn.success {
+    color: #388e3c;
+    border-color: #4caf50;
+}
+
+.action-btn.success:hover {
+    background: linear-gradient(135deg, #e8f5e8, #c8e6c9);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(76, 175, 80, 0.2);
+}
+
+.action-btn.warning {
+    color: #f57c00;
+    border-color: #ff9800;
+}
+
+.action-btn.warning:hover {
+    background: linear-gradient(135deg, #fff8e1, #ffecb3);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(255, 152, 0, 0.2);
+}
+
+.action-btn.info {
+    color: #0288d1;
+    border-color: #03a9f4;
+}
+
+.action-btn.info:hover {
+    background: linear-gradient(135deg, #e1f5fe, #b3e5fc);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(3, 169, 244, 0.2);
+}
+
+.action-icon {
+    font-size: 14px;
+}
+
+.action-text {
+    font-weight: 500;
+}
+
+/* Welcome Footer */
+.welcome-footer {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.footer-stats {
+    display: flex;
+    justify-content: space-around;
+    margin-bottom: 12px;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    text-align: center;
+}
+
+.stat-icon {
+    font-size: 16px;
+}
+
+.stat-text {
+    font-size: 9px;
+    font-weight: 500;
+    color: #6c757d;
+}
+
+.cta-section {
+    margin-bottom: 12px;
+}
+
+.cta-highlight {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px;
+    background: linear-gradient(135deg, #fff3e0, #ffe0b2);
+    border: 1px solid #ff9800;
+    border-radius: 8px;
+}
+
+.cta-icon {
+    font-size: 16px;
+}
+
+.cta-text {
+    font-size: 11px;
+    font-weight: 500;
+    color: #e65100;
+}
+
+.footer-cta {
+    font-size: 11px;
+    text-align: center;
+    color: #6c757d;
+    margin: 0;
+}
+
+/* Welcome Message Responsive */
+@media (max-width: 480px) {
+    .capabilities-grid,
+    .action-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .showcase-features {
+        grid-template-columns: 1fr;
+    }
+
+    .footer-stats {
+        flex-direction: column;
+        gap: 8px;
+    }
+}
+
+/* Fix: Make close button visible in sidebar header */
+.conversation-sidebar-header .chat-modal-btn {
+    background: rgba(44, 62, 80, 0.1);
+    color: #2c3e50;
+    border: 1px solid rgba(44, 62, 80, 0.2);
+}
+
+.conversation-sidebar-header .chat-modal-btn:hover {
+    background: rgba(44, 62, 80, 0.2);
+    color: #2c3e50;
+}
 </style>
 
 <!-- Session and User Info Header -->
@@ -785,7 +1240,7 @@
                                 </h2>
                                 <p class="brand-subtitle">Your Trusted Nigerian E-commerce Partner</p>
                                 <div class="brand-stats">
-                                    <span class="badge bg-success me-2">🇳🇬 36 States + FCT</span>
+                                    <span class="badge bg-success me-2">  36 States + FCT</span>
                                     <span class="badge bg-primary me-2">📦 1M+ Deliveries</span>
                                     <span class="badge bg-warning">⭐ 4.8/5 Rating</span>
                                 </div>
@@ -974,7 +1429,7 @@
                                     <div class="card-body">
                                         <h6 class="mb-3">
                                             <i class="bi bi-geo-alt-fill me-2"></i>
-                                            🇳🇬 Nationwide Coverage in Nigeria
+                                              Nationwide Coverage in Nigeria
                                         </h6>
                                         <p class="mb-0">
                                             We deliver to all 36 Nigerian states + FCT with dedicated support for your region.
@@ -997,11 +1452,11 @@
 </button>
 
 <!-- 🔧 DEBUG: Temporary test button to verify modal functionality -->
-<div style="position: fixed; top: 10px; right: 10px; z-index: 10000;">
+<!-- <div style="position: fixed; top: 10px; right: 10px; z-index: 10000;">
     <button class="btn btn-warning btn-sm" onclick="debugTestModal()" id="debugTestBtn">
         🔧 Test Modal
     </button>
-</div>
+</div> -->
 
 <!-- Chat Modal -->
 <div class="chat-modal-overlay" id="chatModalOverlay" onclick="closeChatModal(event)">
@@ -1542,64 +1997,219 @@ class CustomerSupportPortal {
     createWelcomeMessage() {
         return `
             <div class="message ai welcome">
-                <div class="message-avatar">AI</div>
+                <div class="message-avatar">
+                    <div class="ai-avatar-icon">🚀</div>
+                </div>
                 <div class="message-content">
                     <div class="message-bubble">
                         <div class="welcome-content">
                             ${this.userAuthenticated ?
-                                `<h6 class="mb-2">👋 Welcome back! 🌟</h6>
-                                <p class="mb-3">🎉 Great to see you again! I'm excited to help you with your orders and account today! 😊✨</p>
-                                <p class="mb-3">💙 As your personal support assistant, I can help with:</p>
-                                <ul class="list-unstyled mb-3">
-                                    <li class="mb-1">🔍 <strong>Track your orders</strong> - Real-time delivery updates</li>
-                                    <li class="mb-1">💳 <strong>Payment assistance</strong> - Billing and payment issues</li>
-                                    <li class="mb-1">🚚 <strong>Delivery management</strong> - Address changes and scheduling</li>
-                                    <li class="mb-1">👤 <strong>Account settings</strong> - Profile and preferences</li>
-                                    <li class="mb-1">🛍️ <strong>Shopping help</strong> - Product recommendations</li>
-                                    <li class="mb-1">🏪 <strong>Browse our amazing product catalog</strong> - Electronics, Fashion, Beauty, Computing, Automotive, Books</li>
-                                </ul>
-                                <div class="welcome-quick-actions">
-                                    <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Track my recent orders')">📦 My Orders</button>
-                                    <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Show my account summary')">👤 Account Info</button>
-                                    <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Browse your product catalog')">🏪 Browse Catalog</button>
-                                    <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Show me electronics products')">📱 Electronics</button>
-                                    <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Check prices for popular products')">💰 Check Prices</button>
-                                    <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Contact customer support')">📞 Support</button>
-                                </div>
-                                <p class="mt-3 mb-0">💬 <strong>Ask me anything!</strong> I'm here to help with your personal account and orders. 🌟💝</p>` :
-                                `<h6 class="mb-2">👋 Welcome to raqibtech.com! 🌟</h6>
-                                <p class="mb-3">😊 I'm your AI customer support guide! I'm here to show you what our platform can do.</p>
-                                <p class="mb-3">🔒 <strong>For Guest Users:</strong> I can provide general information about our services, but for personalized support with your orders and account, you'll need to sign up or log in!</p>
-                                <p class="mb-3">🌟 <strong>What raqibtech.com offers:</strong></p>
-                                <ul class="list-unstyled mb-3">
-                                    <li class="mb-1">🛍️ <strong>E-commerce Platform</strong> - Shop from thousands of products</li>
-                                    <li class="mb-1">🇳🇬 <strong>Nigeria-wide Delivery</strong> - We deliver to all 36 states + FCT</li>
-                                    <li class="mb-1">💳 <strong>Flexible Payments</strong> - Pay on Delivery, Card, Bank Transfer</li>
-                                    <li class="mb-1">👤 <strong>Account Tiers</strong> - Bronze, Silver, Gold, Platinum with benefits</li>
-                                    <li class="mb-1">📞 <strong>24/7 Support</strong> - AI and human support always available</li>
-                                    <li class="mb-1">🏪 <strong>Amazing Product Catalog</strong> - Electronics, Fashion, Beauty, Computing, Automotive, Books</li>
-                                </ul>
-                                <div class="welcome-quick-actions">
-                                    <a href="/login" class="welcome-quick-action-btn">🔐 Login</a>
-                                    <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('How do I create an account?')">📝 Sign Up</button>
-                                    <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('What services do you offer?')">💡 Learn More</button>
-                                    <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Contact customer support')">📞 Contact Support</button>
-                                    <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Browse your product catalog')">🏪 Browse Catalog</button>
-                                    <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Show me electronics products')">📱 Electronics</button>
-                                    <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Check prices for popular products')">💰 Check Prices</button>
-                                </div>
-                                <p class="mt-3 mb-0">💬 <strong>Ask me anything!</strong> I can guide you about our services and help you get started! 🌟</p>`
+                                this.createAuthenticatedWelcome() :
+                                this.createGuestWelcome()
                             }
                         </div>
                     </div>
                     <div class="message-meta">
-                        <span>${new Date().toLocaleTimeString()}</span>
+                        <span class="welcome-timestamp">${new Date().toLocaleTimeString()}</span>
                         <span class="response-time">${this.userAuthenticated ?
-                            "Your personal support assistant - always here for you!" :
-                            "Sign up for personalized support - it's free!"
+                            "🌟 Your Personal AI Assistant" :
+                            "🎯 Ready to Help You Explore"
                         }</span>
                     </div>
                 </div>
+            </div>
+        `;
+    }
+
+    createAuthenticatedWelcome() {
+        return `
+            <div class="welcome-header">
+                <div class="welcome-brand">
+                    <div class="brand-icon">🚀</div>
+                    <div class="brand-text">
+                        <h5 class="brand-title">raqibtech<span class="domain">.com</span></h5>
+                        <p class="brand-subtitle">Your Personal AI Support Assistant</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="welcome-greeting">
+                <h6 class="greeting-text">🌟 Welcome back! Ready to supercharge your experience?</h6>
+                <p class="greeting-subtitle">I'm your dedicated AI assistant, powered by advanced technology to make your shopping and support experience seamless! ✨</p>
+            </div>
+
+            <div class="capabilities-grid">
+                <div class="capability-card primary">
+                    <div class="capability-icon">📦</div>
+                    <div class="capability-content">
+                        <h6>Order Management</h6>
+                        <p>Track, modify, and manage all your orders with real-time updates</p>
+                    </div>
+                </div>
+                <div class="capability-card secondary">
+                    <div class="capability-icon">🛍️</div>
+                    <div class="capability-content">
+                        <h6>Smart Shopping</h6>
+                        <p>Get personalized recommendations and exclusive deals</p>
+                    </div>
+                </div>
+                <div class="capability-card accent">
+                    <div class="capability-icon">💳</div>
+                    <div class="capability-content">
+                        <h6>Payment & Billing</h6>
+                        <p>Secure payment assistance and billing support</p>
+                    </div>
+                </div>
+                <div class="capability-card success">
+                    <div class="capability-icon">🚚</div>
+                    <div class="capability-content">
+                        <h6>Delivery Control</h6>
+                        <p>Manage addresses, schedules, and delivery preferences</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="quick-actions-section">
+                <h6 class="section-title">🎯 Popular Actions</h6>
+                <div class="action-grid">
+                    <button class="action-btn primary" onclick="customerPortal.sendCustomerMessage('Track my recent orders')">
+                        <span class="action-icon">📦</span>
+                        <span class="action-text">My Orders</span>
+                    </button>
+                    <button class="action-btn secondary" onclick="customerPortal.sendCustomerMessage('Show my account summary')">
+                        <span class="action-icon">👤</span>
+                        <span class="action-text">Account Info</span>
+                    </button>
+                    <button class="action-btn accent" onclick="customerPortal.sendCustomerMessage('Browse your product catalog')">
+                        <span class="action-icon">🏪</span>
+                        <span class="action-text">Browse Store</span>
+                    </button>
+                    <button class="action-btn success" onclick="customerPortal.sendCustomerMessage('Show me trending electronics')">
+                        <span class="action-icon">📱</span>
+                        <span class="action-text">Electronics</span>
+                    </button>
+                    <button class="action-btn warning" onclick="customerPortal.sendCustomerMessage('What are the latest deals and offers?')">
+                        <span class="action-icon">🏷️</span>
+                        <span class="action-text">Deals & Offers</span>
+                    </button>
+                    <button class="action-btn info" onclick="customerPortal.sendCustomerMessage('Contact customer support')">
+                        <span class="action-icon">💬</span>
+                        <span class="action-text">Support</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="welcome-footer">
+                <div class="footer-stats">
+                    <div class="stat-item">
+                        <span class="stat-icon"> </span>
+                        <span class="stat-text">Nationwide Delivery</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-icon">⚡</span>
+                        <span class="stat-text">Instant Support</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-icon">🔒</span>
+                        <span class="stat-text">Secure Platform</span>
+                    </div>
+                </div>
+                <p class="footer-cta">💬 <strong>Ready to get started?</strong> Just type your question or tap any action above!</p>
+            </div>
+        `;
+    }
+
+    createGuestWelcome() {
+        return `
+            <div class="welcome-header">
+                <div class="welcome-brand">
+                    <div class="brand-icon">🚀</div>
+                    <div class="brand-text">
+                        <h5 class="brand-title">raqibtech<span class="domain">.com</span></h5>
+                        <p class="brand-subtitle">Nigeria's Premier E-commerce Platform</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="welcome-greeting">
+                <h6 class="greeting-text">👋 Welcome to the Future of Shopping!</h6>
+                <p class="greeting-subtitle">I'm your AI shopping guide! Discover amazing products, unbeatable prices, and seamless delivery across Nigeria!  ✨</p>
+            </div>
+
+            <div class="platform-showcase">
+                <div class="showcase-card featured">
+                    <div class="showcase-header">
+                        <span class="showcase-icon">🏪</span>
+                        <h6>Amazing Product Range</h6>
+                    </div>
+                    <div class="showcase-tags">
+                        <span class="tag electronics">📱 Electronics</span>
+                        <span class="tag fashion">👗 Fashion</span>
+                        <span class="tag beauty">💄 Beauty</span>
+                        <span class="tag computing">💻 Computing</span>
+                        <span class="tag automotive">🚗 Automotive</span>
+                        <span class="tag books">📚 Books</span>
+                    </div>
+                </div>
+
+                <div class="showcase-features">
+                    <div class="feature-item">
+                        <span class="feature-icon"> </span>
+                        <span class="feature-text">All 36 States + FCT Delivery</span>
+                    </div>
+                    <div class="feature-item">
+                        <span class="feature-icon">💳</span>
+                        <span class="feature-text">Pay on Delivery Available</span>
+                    </div>
+                    <div class="feature-item">
+                        <span class="feature-icon">⭐</span>
+                        <span class="feature-text">Premium Account Tiers</span>
+                    </div>
+                    <div class="feature-item">
+                        <span class="feature-icon">📞</span>
+                        <span class="feature-text">24/7 AI + Human Support</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="quick-actions-section">
+                <h6 class="section-title">🎯 Explore Our Platform</h6>
+                <div class="action-grid">
+                    <a href="/login" class="action-btn primary">
+                        <span class="action-icon">🔐</span>
+                        <span class="action-text">Login</span>
+                    </a>
+                    <button class="action-btn secondary" onclick="customerPortal.sendCustomerMessage('How do I create an account?')">
+                        <span class="action-icon">📝</span>
+                        <span class="action-text">Sign Up</span>
+                    </button>
+                    <button class="action-btn accent" onclick="customerPortal.sendCustomerMessage('Browse your product catalog')">
+                        <span class="action-icon">🏪</span>
+                        <span class="action-text">Browse Store</span>
+                    </button>
+                    <button class="action-btn success" onclick="customerPortal.sendCustomerMessage('Show me trending electronics')">
+                        <span class="action-icon">📱</span>
+                        <span class="action-text">Electronics</span>
+                    </button>
+                    <button class="action-btn warning" onclick="customerPortal.sendCustomerMessage('What are your delivery areas?')">
+                        <span class="action-icon">🚚</span>
+                        <span class="action-text">Delivery Info</span>
+                    </button>
+                    <button class="action-btn info" onclick="customerPortal.sendCustomerMessage('Contact customer support')">
+                        <span class="action-icon">💬</span>
+                        <span class="action-text">Support</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="welcome-footer">
+                <div class="cta-section">
+                    <div class="cta-highlight">
+                        <span class="cta-icon">🎉</span>
+                        <span class="cta-text">Ready to start shopping? Create your account for personalized experiences!</span>
+                    </div>
+                </div>
+                <p class="footer-cta">💬 <strong>Ask me anything!</strong> I'm here to help you discover our amazing platform!</p>
             </div>
         `;
     }
@@ -2238,318 +2848,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 200);
 });
 
-// 🔧 DEBUG: Window error handler
-window.addEventListener('error', function(e) {
-    console.error('❌ JavaScript Error:', e.error);
-});
-
-// 🔧 DEBUG: Check if modal is clickable
-document.addEventListener('click', function(e) {
-    if (e.target.id === 'floatingChatBtn' || e.target.closest('#floatingChatBtn')) {
-        console.log('🖱️ Direct click detected on floating button');
-    }
-});
-
-// 🔧 DEBUG: Test modal function
-function debugTestModal() {
-    console.log('🔧 DEBUG: Test modal function called');
-
-    const modal = document.getElementById('chatModalOverlay');
-    const button = document.getElementById('floatingChatBtn');
-
-    if (!modal) {
-        alert('❌ Modal element not found!');
-        return;
-    }
-
-    if (!button) {
-        alert('❌ Floating button not found!');
-        return;
-    }
-
-    // Test 1: Check if elements exist
-    console.log('✅ Modal and button elements found');
-
-    // Test 2: Check button properties
-    const buttonRect = button.getBoundingClientRect();
-    const buttonStyles = window.getComputedStyle(button);
-    console.log('🔍 Button position:', buttonRect);
-    console.log('🔍 Button z-index:', buttonStyles.zIndex);
-    console.log('🔍 Button pointer-events:', buttonStyles.pointerEvents);
-    console.log('🔍 Button display:', buttonStyles.display);
-
-    // Test 3: Check for overlapping elements
-    const elementUnderButton = document.elementFromPoint(buttonRect.left + buttonRect.width/2, buttonRect.top + buttonRect.height/2);
-    console.log('🔍 Element under button center:', elementUnderButton);
-
-    if (elementUnderButton !== button) {
-        console.warn('⚠️ Button might be blocked by:', elementUnderButton);
-    }
-
-    // Test 4: Try clicking floating button programmatically
-    console.log('🔧 Testing floating button click...');
-    try {
-        button.click();
-        console.log('✅ Floating button click successful');
-    } catch (error) {
-        console.error('❌ Floating button click failed:', error);
-    }
-
-    // Test 5: Try opening modal directly as backup
-    modal.classList.add('active');
-    button.classList.add('active');
-    button.innerHTML = '<i class="bi bi-x-lg"></i>';
-
-    // Test 6: Disable body scroll
-    document.body.style.overflow = 'hidden';
-
-    console.log('✅ Modal should be open now');
-    alert('🔧 Debug Test Complete! Check console for detailed info.');
-}
-
-console.log('🔧 Modal debugging and event handlers loaded');
-console.log('✅ Modal system loaded and ready');
-
-// Global functions for compatibility and modal control
-function handleModalClick(event) {
-    event.stopPropagation();
-
-    // Don't close sidebar if clicking on buttons, inputs, or interactive elements
-    if (event.target.closest('button, input, a, .chat-modal-btn, .conversation-item')) {
-        return;
-    }
-
-    // Don't close sidebar if clicking inside the sidebar itself
-    if (event.target.closest('.conversation-sidebar')) {
-        return;
-    }
-
-    // Close sidebar if clicking on empty areas of the modal
-    if (window.customerPortal && window.customerPortal.sidebarOpen) {
-        window.customerPortal.toggleConversationSidebar();
-    }
-}
-
-function toggleChatModal() {
-    console.log('🖱️ Global toggleChatModal called');
-    if (window.customerPortal) {
-        window.customerPortal.toggleChatModal();
-    } else {
-        console.error('❌ CustomerPortal not initialized');
-    }
-}
-
-function openChatModal() {
-    console.log('🖱️ Global openChatModal called');
-    if (window.customerPortal) {
-        window.customerPortal.openChatModal();
-    } else {
-        console.error('❌ CustomerPortal not initialized');
-    }
-}
-
-function closeChatModal(event) {
-    console.log('🖱️ Global closeChatModal called');
-    if (window.customerPortal) {
-        window.customerPortal.closeChatModal(event);
-    } else {
-        console.error('❌ CustomerPortal not initialized');
-    }
-}
-
-function toggleConversationSidebar() {
-    console.log('🖱️ Global toggleConversationSidebar called');
-    if (window.customerPortal) {
-        window.customerPortal.toggleConversationSidebar();
-    } else {
-        console.error('❌ CustomerPortal not initialized');
-    }
-}
-
-function sendChatMessage() {
-    console.log('🖱️ Global sendChatMessage called');
-    if (window.customerPortal) {
-        window.customerPortal.sendCustomerMessage();
-    } else {
-        console.error('❌ CustomerPortal not initialized');
-    }
-}
-
-function sendQuickMessage(message) {
-    console.log(`🖱️ Global sendQuickMessage called: ${message}`);
-    if (window.customerPortal) {
-        // Open modal if not already open
-        if (!window.customerPortal.modalOpen) {
-            window.customerPortal.openChatModal();
-        }
-        // Wait for modal to open before sending message
-        setTimeout(() => {
-            window.customerPortal.sendCustomerMessage(message);
-        }, 400);
-    } else {
-        console.error('❌ CustomerPortal not initialized');
-    }
-}
-
-function trackOrderViaChat() {
-    const orderIdInput = document.getElementById('orderIdInput');
-    const orderId = orderIdInput?.value.trim();
-
-    if (orderId) {
-        sendQuickMessage(`Track my order ${orderId}`);
-    } else {
-        sendQuickMessage('Help me track my order');
-    }
-}
-
-function handleChatKeyPress(event) {
-    if (event.key === 'Enter') {
-        event.preventDefault();
-        sendChatMessage();
-    }
-}
-
-async function createNewChat() {
-    console.log('🆕 Creating new chat...');
-    try {
-        const response = await fetch('/api/conversations/new', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-            console.log(`✅ New chat created: ${data.conversation_id}`);
-            if (window.customerPortal) {
-                await window.customerPortal.switchToConversation(data.conversation_id);
-                await window.customerPortal.refreshConversationList();
-            }
-        }
-    } catch (error) {
-        console.error('❌ Error creating new chat:', error);
-    }
-}
-
-async function switchToConversation(conversationId) {
-    console.log(`🔄 Global switchToConversation called: ${conversationId}`);
-    if (window.customerPortal) {
-        await window.customerPortal.switchToConversation(conversationId);
-    } else {
-        console.error('❌ CustomerPortal not initialized');
-    }
-}
-
-// Initialize floating modal chat portal when DOM is ready
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 DOM loaded, initializing raqibtech.com Floating Modal Chat System');
-
-    // Add small delay to ensure all elements are ready
-    setTimeout(() => {
-        try {
-            window.customerPortal = new CustomerSupportPortal();
-
-            const isAuthenticated = {{ 'true' if session.get('user_authenticated') else 'false' }};
-            const currentConversationId = '{{ current_conversation_id if current_conversation_id else '' }}';
-
-            console.log(`🔍 Auth: ${isAuthenticated}, ConvID: ${currentConversationId}`);
-            console.log('✅ Floating modal chat system ready!');
-
-            // 🔧 DEBUG: Add click test for floating button
-            const floatingBtn = document.getElementById('floatingChatBtn');
-            if (floatingBtn) {
-                console.log('✅ Floating button found and ready');
-
-                // Test button interactivity
-                floatingBtn.addEventListener('mouseenter', () => {
-                    console.log('🖱️ Mouse entered floating button');
-                });
-
-                floatingBtn.addEventListener('mouseleave', () => {
-                    console.log('🖱️ Mouse left floating button');
-                });
-            } else {
-                console.error('❌ Floating button not found!');
-            }
-
-        } catch (error) {
-            console.error('❌ Error initializing chat system:', error);
-        }
-    }, 200);
-});
-
-// 🔧 DEBUG: Window error handler
-window.addEventListener('error', function(e) {
-    console.error('❌ JavaScript Error:', e.error);
-});
-
-// 🔧 DEBUG: Check if modal is clickable
-document.addEventListener('click', function(e) {
-    if (e.target.id === 'floatingChatBtn' || e.target.closest('#floatingChatBtn')) {
-        console.log('🖱️ Direct click detected on floating button');
-    }
-});
-
-// 🔧 DEBUG: Test modal function
-function debugTestModal() {
-    console.log('🔧 DEBUG: Test modal function called');
-
-    const modal = document.getElementById('chatModalOverlay');
-    const button = document.getElementById('floatingChatBtn');
-
-    if (!modal) {
-        alert('❌ Modal element not found!');
-        return;
-    }
-
-    if (!button) {
-        alert('❌ Floating button not found!');
-        return;
-    }
-
-    // Test 1: Check if elements exist
-    console.log('✅ Modal and button elements found');
-
-    // Test 2: Check button properties
-    const buttonRect = button.getBoundingClientRect();
-    const buttonStyles = window.getComputedStyle(button);
-    console.log('🔍 Button position:', buttonRect);
-    console.log('🔍 Button z-index:', buttonStyles.zIndex);
-    console.log('🔍 Button pointer-events:', buttonStyles.pointerEvents);
-    console.log('🔍 Button display:', buttonStyles.display);
-
-    // Test 3: Check for overlapping elements
-    const elementUnderButton = document.elementFromPoint(buttonRect.left + buttonRect.width/2, buttonRect.top + buttonRect.height/2);
-    console.log('🔍 Element under button center:', elementUnderButton);
-
-    if (elementUnderButton !== button) {
-        console.warn('⚠️ Button might be blocked by:', elementUnderButton);
-    }
-
-    // Test 4: Try clicking floating button programmatically
-    console.log('🔧 Testing floating button click...');
-    try {
-        button.click();
-        console.log('✅ Floating button click successful');
-    } catch (error) {
-        console.error('❌ Floating button click failed:', error);
-    }
-
-    // Test 5: Try opening modal directly as backup
-    modal.classList.add('active');
-    button.classList.add('active');
-    button.innerHTML = '<i class="bi bi-x-lg"></i>';
-
-    // Test 6: Disable body scroll
-    document.body.style.overflow = 'hidden';
-
-    console.log('✅ Modal should be open now');
-    alert('🔧 Debug Test Complete! Check console for detailed info.');
-}
-
-console.log('🔧 Modal debugging and event handlers loaded');
 console.log('✅ Modal system loaded and ready');
 </script>
 {% endblock %}
+

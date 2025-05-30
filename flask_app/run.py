@@ -13,7 +13,7 @@ sys.path.append(str(Path(__file__).parent.parent.resolve()))
 
 try:
     from app import app
-    print("🇳🇬 Nigerian Customer Support Agent - Starting Flask Application")
+    print("  Nigerian Customer Support Agent - Starting Flask Application")
     print("=" * 60)
     print("🌐 Local URL: http://localhost:5000")
     print("📊 Dashboard: http://localhost:5000 (4 tabs available)")

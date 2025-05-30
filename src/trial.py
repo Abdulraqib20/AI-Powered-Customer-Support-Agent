@@ -43,36 +43,36 @@ def generate_synthetic_data(self, user_id: str) -> dict | None:
 
         from groq import Groq
         groq_client = Groq(api_key=GROQ_API_KEY)
-        
+
         # Nigerian-focused prompt with explicit formatting
-        prompt = f"""Generate a detailed Nigerian customer profile for raqibtech customer ID {user_id}. 
+        prompt = f"""Generate a detailed Nigerian customer profile for raqibtech customer ID {user_id}.
 
         Follow this EXACT format:
-        
+
         CUSTOMER PROFILE
         - Full name: [Common Nigerian name e.g., Adebayo Chukwuma]
         - Phone: [0803... or 0812... number]
         - Email: [@yahoo.com or @gmail.com]
         - Location: [Lagos|Abuja|Port Harcourt neighborhood e.g., Victoria Island, Wuse 2]
-        
+
         CURRENT ORDER (Date: {order_date})
         - Product: [Popular Nigerian electronics e.g., Solar inverter, Thermocool fridge]
         - Price: [₦ followed by amount e.g., ₦150,000]
         - Delivery: [Address with landmark e.g., 24 Oba Akran, beside Chicken Republic]
         - Expected Delivery: {expected_delivery}
-        
+
         ORDER HISTORY (LAST 3 MONTHS)
         - [Month]: [Product] - [Price]
         - [Month]: [Product] - [Price]
-        
+
         CUSTOMER PREFERENCES
         - Payment: [Bank transfer|Opay|Palmpay]
         - Delivery note: [Nigerian-specific instruction e.g., "Call okada rider before coming"]
-        
-        Use Nigerian English terms like "NEPA bill", "okada", or "pure water". 
+
+        Use Nigerian English terms like "NEPA bill", "okada", or "pure water".
         Do NOT use markdown or special formatting.
         """
-        
+
         response = groq_client.chat.completions.create(
             model=GROQ_MODEL_NAME,
             messages=[
@@ -82,9 +82,9 @@ def generate_synthetic_data(self, user_id: str) -> dict | None:
             temperature=0.5,
             max_tokens=800
         )
-        
+
         raw_content = response.choices[0].message.content
-        
+
         # Enhanced parsing with Nigerian context validation
         required_sections = {
             "CUSTOMER PROFILE": ["Full name", "Phone", "Email", "Location"],
@@ -92,10 +92,10 @@ def generate_synthetic_data(self, user_id: str) -> dict | None:
             "ORDER HISTORY": [],
             "CUSTOMER PREFERENCES": ["Payment"]
         }
-        
+
         parsed_data = {}
         current_section = None
-        
+
         for line in raw_content.split('\n'):
             line = line.strip()
             if line.startswith("CUSTOMER PROFILE"):
@@ -124,13 +124,13 @@ def generate_synthetic_data(self, user_id: str) -> dict | None:
         errors = []
         if not parsed_data.get("CUSTOMER PROFILE", {}).get("Phone", "").startswith(("080", "081", "070", "090")):
             errors.append("Invalid Nigerian phone number format")
-            
+
         if "₦" not in parsed_data.get("CURRENT ORDER", {}).get("Price", ""):
             errors.append("Price missing Naira symbol (₦)")
-            
+
         if not errors and all(
-            section in parsed_data and 
-            (isinstance(parsed_data[section], dict) and parsed_data[section]) or 
+            section in parsed_data and
+            (isinstance(parsed_data[section], dict) and parsed_data[section]) or
             (isinstance(parsed_data[section], list) and len(parsed_data[section]) >= 1)
             for section in required_sections
         ):
@@ -142,32 +142,32 @@ def generate_synthetic_data(self, user_id: str) -> dict | None:
                 )
                 for section, data in parsed_data.items()
             )
-            
+
             self.memory.add(
-                profile_text, 
-                user_id=user_id, 
+                profile_text,
+                user_id=user_id,
                 metadata={"app_id": self.app_id, "role": "system"}
             )
 
             # Display in Streamlit with Nigerian styling
-            with st.expander(f"🇳🇬 Customer Profile - {user_id}", expanded=True):
+            with st.expander(f"  Customer Profile - {user_id}", expanded=True):
                 cols = st.columns(2)
                 with cols[0]:
                     st.subheader("Basic Info")
                     st.write(f"**Name**: {parsed_data['CUSTOMER PROFILE']['Full name']}")
                     st.write(f"**Phone**: {parsed_data['CUSTOMER PROFILE']['Phone']}")
                     st.write(f"**Location**: {parsed_data['CUSTOMER PROFILE']['Location']}")
-                    
+
                 with cols[1]:
                     st.subheader("Current Order")
                     st.write(f"**Product**: {parsed_data['CURRENT ORDER']['Product']}")
                     st.write(f"**Price**: {parsed_data['CURRENT ORDER']['Price']}")
                     st.write(f"**Delivery**: {parsed_data['CURRENT ORDER']['Delivery']}")
-                
+
                 st.subheader("Order History")
                 for item in parsed_data["ORDER HISTORY"]:
                     st.write(f"- {item}")
-                
+
                 st.subheader("Preferences")
                 st.write(f"**Payment Method**: {parsed_data['CUSTOMER PREFERENCES']['Payment']}")
                 if "Delivery note" in parsed_data["CUSTOMER PREFERENCES"]:

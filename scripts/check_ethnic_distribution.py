@@ -19,7 +19,7 @@ def check_database_results():
         conn = psycopg2.connect(**DATABASE_CONFIG)
         cursor = conn.cursor()
 
-        print("🇳🇬 NIGERIAN E-COMMERCE DATABASE - ETHNIC AUTHENTICITY REPORT")
+        print("  NIGERIAN E-COMMERCE DATABASE - ETHNIC AUTHENTICITY REPORT")
         print("=" * 70)
 
         # Basic counts
@@ -137,7 +137,7 @@ def check_database_results():
         print("📍 Names properly mapped to traditional ethnic regions")
         print("🌍 Nigerian geopolitical zones respected")
         print("🔗 Business logic tiers maintained")
-        print("🇳🇬 Ready for AI hackathon!")
+        print("  Ready for AI hackathon!")
 
         conn.close()
 

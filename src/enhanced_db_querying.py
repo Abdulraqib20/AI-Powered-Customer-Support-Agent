@@ -1,5 +1,5 @@
 """
-🇳🇬 Enhanced Database Querying System for Nigerian E-commerce Customer Support Agent
+  Enhanced Database Querying System for Nigerian E-commerce Customer Support Agent
 ===================================================================================
 
 Multi-Stage Pipeline Architecture:
@@ -944,7 +944,7 @@ RESPONSE STYLE:
 
     def generate_nigerian_response(self, query_context: QueryContext, conversation_history: List[Dict], session_context: Dict[str, Any] = None) -> str:
         """
-        🇳🇬 Generate Nigerian business-aware natural language response with enhanced emotional intelligence
+          Generate Nigerian business-aware natural language response with enhanced emotional intelligence
         """
 
         # 🎭 STEP 1: Analyze user sentiment and emotional state
@@ -1080,7 +1080,7 @@ AVAILABLE DATABASE INFO: {safe_json_dumps(query_context.execution_result, max_it
 7. 🎉 If customer is happy, share their joy and maintain the positive energy
 8. 💡 If customer is confused, be extra patient and break things down clearly with helpful emojis
 9. ⚡ If customer is impatient, acknowledge urgency and provide quick, actionable solutions
-10. 🇳🇬 Maintain Nigerian business context while being emotionally intelligent
+10.   Maintain Nigerian business context while being emotionally intelligent
 
 CRITICAL: Do not give me any information about topics not related to raqibtech.com customer support. Do not justify your answers about non-platform topics. If the question is not about raqibtech.com services, politely redirect to platform-related assistance.
 
@@ -1136,7 +1136,7 @@ Respond as a caring, emotionally intelligent customer support friend (no quotes,
             )
 
             ai_response = response.choices[0].message.content.strip()
-            logger.info(f"🇳🇬 Generated emotionally intelligent Nigerian response with {sentiment_data['emotion']} tone")
+            logger.info(f"  Generated emotionally intelligent Nigerian response with {sentiment_data['emotion']} tone")
             return ai_response
 
         except Exception as e:

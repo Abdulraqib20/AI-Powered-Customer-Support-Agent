@@ -53,7 +53,7 @@ raw_env = [
 
 def when_ready(server):
     """Called when the server is started."""
-    server.log.info("🇳🇬 Nigerian Customer Support Agent started successfully!")
+    server.log.info("  Nigerian Customer Support Agent started successfully!")
     server.log.info(f"Workers: {workers}, Connections per worker: {worker_connections}")
 
 def worker_int(worker):
@@ -74,7 +74,7 @@ def pre_exec(server):
 
 def on_exit(server):
     """Called when gunicorn is shutting down."""
-    server.log.info("🇳🇬 Nigerian Customer Support Agent shutting down...")
+    server.log.info("  Nigerian Customer Support Agent shutting down...")
 
 def on_reload(server):
     """Called when gunicorn is reloading."""

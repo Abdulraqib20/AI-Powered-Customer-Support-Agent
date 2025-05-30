@@ -446,7 +446,7 @@ def main():
     logger.info(f"   📊 {successful_analytics} analytics records added")
     logger.info("   🌍 All ethnic authenticity preserved")
     logger.info("   ⏰ All constraints respected")
-    logger.info("   🇳🇬 Ready for AI hackathon!")
+    logger.info("     Ready for AI hackathon!")
 
 if __name__ == "__main__":
     main()

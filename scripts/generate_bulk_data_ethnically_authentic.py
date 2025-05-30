@@ -599,7 +599,7 @@ def main():
         if insert_ethnically_authentic_data(customers_df, orders_df):
             logger.info("🎉 Ethnically Authentic Data Generation Complete!")
             logger.info("✅ Cultural authenticity maintained throughout!")
-            logger.info("🇳🇬 Your Nigerian e-commerce database is now culturally accurate!")
+            logger.info("  Your Nigerian e-commerce database is now culturally accurate!")
         else:
             logger.error("❌ Data generation failed!")
 
