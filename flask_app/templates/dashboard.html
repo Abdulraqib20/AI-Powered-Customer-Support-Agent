@@ -359,74 +359,56 @@
 
 /* Smart Quick Actions Styling */
 .smart-quick-actions-container {
-    margin: 16px 0;
-    padding: 0 48px; /* Align with AI message */
+    margin: 15px 0;
+    padding: 0;
 }
 
 .smart-quick-actions {
-    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
-    border-radius: 16px;
-    padding: 20px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
     border: 1px solid #dee2e6;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .quick-actions-header {
-    margin-bottom: 16px;
+    font-size: 13px;
     font-weight: 600;
     color: #495057;
-    font-size: 14px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+    margin-bottom: 8px;
+    text-align: center;
 }
 
 .quick-actions-buttons {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 6px;
+    justify-content: center;
 }
 
 .smart-quick-action-btn {
-    background: linear-gradient(135deg, #18bc9c, #16a085);
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
     color: white;
     border: none;
-    padding: 10px 16px;
     border-radius: 20px;
-    font-size: 13px;
-    font-weight: 600;
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 500;
     cursor: pointer;
     transition: all 0.3s ease;
-    box-shadow: 0 2px 8px rgba(24, 188, 156, 0.3);
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
+    white-space: nowrap;
+    box-shadow: 0 2px 4px rgba(0,123,255,0.3);
 }
 
 .smart-quick-action-btn:hover {
-    background: linear-gradient(135deg, #16a085, #138f75);
-    transform: translateY(-2px) scale(1.02);
-    box-shadow: 0 6px 20px rgba(24, 188, 156, 0.4);
-    color: white;
-    text-decoration: none;
+    background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,123,255,0.4);
 }
 
 .smart-quick-action-btn:active {
-    transform: translateY(0) scale(0.98);
-}
-
-/* Responsive quick actions */
-@media (max-width: 768px) {
-    .smart-quick-actions-container {
-        padding: 0 16px;
-    }
-
-    .smart-quick-action-btn {
-        font-size: 12px;
-        padding: 8px 12px;
-    }
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0,123,255,0.3);
 }
 
 /* raqibtech.com Branding Styles */
@@ -552,6 +534,295 @@
         width: 40px;
         height: 40px;
         font-size: 20px;
+    }
+}
+
+/* 🎨 Enhanced Quick Actions for Smart Response */
+.smart-quick-actions-container {
+    margin: 15px 0;
+    padding: 0;
+}
+
+.smart-quick-actions {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border: 1px solid #dee2e6;
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.quick-actions-header {
+    font-size: 13px;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 8px;
+    text-align: center;
+}
+
+.quick-actions-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+}
+
+.smart-quick-action-btn {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    color: white;
+    border: none;
+    border-radius: 20px;
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    box-shadow: 0 2px 4px rgba(0,123,255,0.3);
+}
+
+.smart-quick-action-btn:hover {
+    background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,123,255,0.4);
+}
+
+.smart-quick-action-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0,123,255,0.3);
+}
+
+/* 🆕 Conversation Management Styles */
+.conversation-item {
+    position: relative;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.conversation-item:hover {
+    background-color: #f8f9fa;
+    transform: translateX(2px);
+}
+
+.conversation-item.active {
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    border-left: 4px solid #2196f3;
+}
+
+.conversation-info {
+    flex: 1;
+    padding: 8px 0;
+}
+
+.conversation-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.conversation-item:hover .conversation-actions {
+    opacity: 1;
+}
+
+.conversation-actions .btn-outline-danger {
+    border: 1px solid #dc3545;
+    color: #dc3545;
+    background: transparent;
+    transition: all 0.3s ease;
+}
+
+.conversation-actions .btn-outline-danger:hover {
+    background-color: #dc3545;
+    color: white;
+    transform: scale(1.1);
+}
+
+.conversation-actions .btn-outline-danger:active {
+    transform: scale(0.95);
+}
+
+/* 🔧 FIX: Improved typing indicator */
+.typing-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+}
+
+.typing-dots {
+    display: flex;
+    gap: 3px;
+}
+
+.typing-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: #6c757d;
+    animation: typingPulse 1.4s ease-in-out infinite both;
+}
+
+.typing-dot:nth-child(1) { animation-delay: -0.32s; }
+.typing-dot:nth-child(2) { animation-delay: -0.16s; }
+.typing-dot:nth-child(3) { animation-delay: 0s; }
+
+@keyframes typingPulse {
+    0%, 80%, 100% {
+        opacity: 0.4;
+        transform: scale(0.8);
+    }
+    40% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* 🆕 Enhanced Welcome Message Quick Actions */
+.welcome-quick-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    margin: 15px 0;
+}
+
+.welcome-quick-action-btn {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+    border: none;
+    border-radius: 25px;
+    padding: 8px 16px;
+    font-size: 12px;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    box-shadow: 0 3px 6px rgba(40,167,69,0.3);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.welcome-quick-action-btn:hover {
+    background: linear-gradient(135deg, #20c997 0%, #17a2b8 100%);
+    color: white;
+    text-decoration: none;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 10px rgba(40,167,69,0.4);
+}
+
+.welcome-quick-action-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 3px 6px rgba(40,167,69,0.3);
+}
+
+/* 🔧 FIX: Conversation list improvements */
+#chatHistoryList .list-group-item {
+    border-left: none;
+    border-right: none;
+    border-top: 1px solid #dee2e6;
+    border-bottom: none;
+    padding: 12px 15px;
+}
+
+#chatHistoryList .list-group-item:first-child {
+    border-top: none;
+}
+
+#chatHistoryList .list-group-item:last-child {
+    border-bottom: 1px solid #dee2e6;
+}
+
+/* 🆕 Empty conversation state */
+.empty-conversations {
+    text-align: center;
+    color: #6c757d;
+    padding: 40px 20px;
+}
+
+.empty-conversations i {
+    font-size: 3rem;
+    margin-bottom: 15px;
+    opacity: 0.5;
+}
+
+/* 🔧 FIX: Loading states */
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255,255,255,0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #007bff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* 🆕 Enhanced message meta styling */
+.message-meta {
+    margin-top: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.message-meta span:first-child {
+    font-size: 11px;
+    color: #6c757d;
+}
+
+.response-time {
+    font-size: 10px;
+    color: #28a745;
+    background: rgba(40,167,69,0.1);
+    padding: 2px 6px;
+    border-radius: 10px;
+    white-space: nowrap;
+}
+
+/* 🔧 FIX: Responsive improvements */
+@media (max-width: 768px) {
+    .welcome-quick-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .welcome-quick-action-btn {
+        justify-content: center;
+        width: 100%;
+    }
+
+    .quick-actions-buttons {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .smart-quick-action-btn {
+        justify-content: center;
+        width: 100%;
+    }
+
+    .conversation-actions {
+        opacity: 1; /* Always visible on mobile */
     }
 }
 </style>
@@ -1007,6 +1278,9 @@ class CustomerSupportPortal {
         console.log('🛍️ Initializing raqibtech.com Customer Support Portal with Session Management...');
         this.currentConversationId = window.currentConversationId;
         this.userAuthenticated = window.userAuthenticated;
+        this.isTyping = false; // 🔧 FIX: Track typing state to prevent contamination
+        this.activeMessageRequest = null; // 🔧 FIX: Track active requests
+        this.conversationLocked = false; // 🔧 FIX: Prevent rapid conversation switching
         this.initializeCustomerFeatures();
         this.loadCurrentConversation();
     }
@@ -1027,9 +1301,18 @@ class CustomerSupportPortal {
             return;
         }
 
+        // 🔧 FIX: Ensure we're loading the correct conversation
+        console.log(`🔄 Loading conversation: ${this.currentConversationId}`);
+
         try {
             const response = await fetch(`/api/conversations/${this.currentConversationId}/messages`);
             const data = await response.json();
+
+            // 🔧 FIX: Verify we're still on the same conversation
+            if (this.currentConversationId !== window.currentConversationId) {
+                console.warn('⚠️ Conversation changed during loading, aborting');
+                return;
+            }
 
             if (data.success && data.messages.length > 0) {
                 this.displayConversationHistory(data.messages);
@@ -1050,6 +1333,7 @@ class CustomerSupportPortal {
             loadingIndicator.remove();
         }
 
+        // 🔧 FIX: Clear completely before loading new messages
         chatMessages.innerHTML = '';
 
         messages.forEach(message => {
@@ -1057,6 +1341,7 @@ class CustomerSupportPortal {
         });
 
         chatMessages.scrollTop = chatMessages.scrollHeight;
+        console.log(`✅ Loaded ${messages.length} messages for conversation ${this.currentConversationId}`);
     }
 
     showWelcomeMessage() {
@@ -1088,7 +1373,19 @@ class CustomerSupportPortal {
                                     <li class="mb-1">🚚 <strong>Delivery management</strong> - Address changes and scheduling</li>
                                     <li class="mb-1">👤 <strong>Account settings</strong> - Profile and preferences</li>
                                     <li class="mb-1">🛍️ <strong>Shopping help</strong> - Product recommendations</li>
+                                    <li class="mb-1">🏪 <strong>Browse our amazing product catalog</strong> - Electronics, Fashion, Beauty, Computing, Automotive, Books</li>
                                 </ul>
+                                <div class="welcome-quick-start-actions">
+                                    <p class="mb-2"><strong>✨ Quick Actions:</strong></p>
+                                    <div class="welcome-quick-actions">
+                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Track my recent orders')">📦 My Orders</button>
+                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Show my account summary')">👤 Account Info</button>
+                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Browse your product catalog')">🏪 Browse Catalog</button>
+                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Show me electronics products')">📱 Electronics</button>
+                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Check prices for popular products')">💰 Check Prices</button>
+                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Contact customer support')">📞 Support</button>
+                                    </div>
+                                </div>
                                 <p class="mt-3 mb-0">💬 <strong>Ask me anything!</strong> I'm here to help with your personal account and orders. 🌟💝</p>` :
                                 `<h6 class="mb-2">👋 Welcome to raqibtech.com! 🌟</h6>
                                 <p class="mb-3">😊 I'm your AI customer support guide! I'm here to show you what our platform can do.</p>
@@ -1100,6 +1397,7 @@ class CustomerSupportPortal {
                                     <li class="mb-1">💳 <strong>Flexible Payments</strong> - Pay on Delivery, Card, Bank Transfer</li>
                                     <li class="mb-1">👤 <strong>Account Tiers</strong> - Bronze, Silver, Gold, Platinum with benefits</li>
                                     <li class="mb-1">📞 <strong>24/7 Support</strong> - AI and human support always available</li>
+                                    <li class="mb-1">🏪 <strong>Amazing Product Catalog</strong> - Electronics, Fashion, Beauty, Computing, Automotive, Books</li>
                                 </ul>
                                 <p class="mb-3">🎯 <strong>Ready for personalized service?</strong> Sign up or log in to:</p>
                                 <ul class="list-unstyled mb-2">
@@ -1115,8 +1413,6 @@ class CustomerSupportPortal {
                                         <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('How do I create an account?')">📝 Sign Up</button>
                                         <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('What services do you offer?')">💡 Learn More</button>
                                         <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Contact customer support')">📞 Contact Support</button>
-
-                                        <!-- 🆕 Product-related quick actions -->
                                         <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Browse your product catalog')">🏪 Browse Catalog</button>
                                         <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Show me electronics products')">📱 Electronics</button>
                                         <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Check prices for popular products')">💰 Check Prices</button>
@@ -1139,22 +1435,43 @@ class CustomerSupportPortal {
     }
 
     async sendCustomerMessage(message = null) {
+        // 🔧 FIX: Prevent sending messages while typing or during conversation switch
+        if (this.isTyping || this.conversationLocked) {
+            console.warn('⚠️ Message blocked: System is busy');
+            return;
+        }
+
         const chatInput = document.getElementById('chatInput');
         if (!chatInput) return;
 
         const userMessage = message || chatInput.value.trim();
         if (!userMessage) return;
 
+        // 🔧 FIX: Cancel any existing request before starting new one
+        if (this.activeMessageRequest) {
+            this.activeMessageRequest.abort();
+            this.activeMessageRequest = null;
+            this.removeTypingIndicator();
+        }
+
         // Clear input
         if (!message) chatInput.value = '';
+
+        // 🔧 FIX: Store the conversation ID when starting the request
+        const requestConversationId = this.currentConversationId;
 
         // Add user message to chat
         this.addMessageToChatDisplay(userMessage, 'customer');
 
         // Show typing indicator
+        this.isTyping = true;
         this.showTypingIndicator();
 
         try {
+            // 🔧 FIX: Create AbortController for request tracking
+            const controller = new AbortController();
+            this.activeMessageRequest = controller;
+
             // Send to enhanced API
             const response = await fetch('/api/enhanced-query', {
                 method: 'POST',
@@ -1163,14 +1480,30 @@ class CustomerSupportPortal {
                 },
                 body: JSON.stringify({
                     query: userMessage
-                })
+                }),
+                signal: controller.signal
             });
+
+            // 🔧 FIX: Verify we're still in the same conversation
+            if (requestConversationId !== this.currentConversationId) {
+                console.warn('⚠️ Conversation changed during request, ignoring response');
+                return;
+            }
 
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
             const data = await response.json();
+
+            // 🔧 FIX: Final check before processing response
+            if (requestConversationId !== this.currentConversationId) {
+                console.warn('⚠️ Conversation changed before response processing, ignoring');
+                return;
+            }
+
+            this.isTyping = false;
+            this.activeMessageRequest = null;
             this.removeTypingIndicator();
 
             if (data.success) {
@@ -1182,9 +1515,18 @@ class CustomerSupportPortal {
             }
 
         } catch (error) {
-            this.removeTypingIndicator();
-            console.error('❌ Customer chat error:', error);
-            this.addMessageToChatDisplay('I apologize, but I\'m experiencing technical difficulties. Please try again or contact our phone support at +234 (702) 5965-922.', 'ai', true);
+            // 🔧 FIX: Only handle non-aborted errors
+            if (error.name !== 'AbortError') {
+                this.isTyping = false;
+                this.activeMessageRequest = null;
+                this.removeTypingIndicator();
+                console.error('❌ Customer chat error:', error);
+
+                // 🔧 FIX: Only show error if still in same conversation
+                if (requestConversationId === this.currentConversationId) {
+                    this.addMessageToChatDisplay('I apologize, but I\'m experiencing technical difficulties. Please try again or contact our phone support at +234 (702) 5965-922.', 'ai', true);
+                }
+            }
         }
     }
 
@@ -1245,11 +1587,11 @@ class CustomerSupportPortal {
         // Create main response message with response time
         this.addMessageToChatDisplay(data.response, 'ai', false, data);
 
-        // 🆕 Add smart quick actions after every AI response
+        // 🆕 Add smart quick actions after every AI response for ALL users
         this.addSmartQuickActions(data);
     }
 
-    // 🆕 Smart Quick Actions System
+    // 🆕 Smart Quick Actions System - Fixed for ALL users
     addSmartQuickActions(data) {
         const chatMessages = document.getElementById('chatMessages');
         if (!chatMessages) return;
@@ -1302,6 +1644,14 @@ class CustomerSupportPortal {
                         { icon: '💼', text: 'Account Benefits', onclick: `customerPortal.sendCustomerMessage('What are my account benefits')` }
                     );
                     break;
+                case 'product_performance':
+                    actions.push(
+                        { icon: '🏪', text: 'Browse More Products', onclick: `customerPortal.sendCustomerMessage('Browse your product catalog')` },
+                        { icon: '📱', text: 'Electronics', onclick: `customerPortal.sendCustomerMessage('Show me electronics products')` },
+                        { icon: '👗', text: 'Fashion', onclick: `customerPortal.sendCustomerMessage('Show me fashion items')` },
+                        { icon: '💄', text: 'Beauty', onclick: `customerPortal.sendCustomerMessage('Show me beauty products')` }
+                    );
+                    break;
                 case 'revenue_insights':
                     actions.push(
                         { icon: '💳', text: 'Payment Methods', onclick: `customerPortal.sendCustomerMessage('What payment methods do you accept')` },
@@ -1320,14 +1670,26 @@ class CustomerSupportPortal {
             }
         } else {
             // Guest user actions - encourage engagement and signup
-            actions.push(
-                { icon: '🔐', text: 'Login', onclick: `window.location.href='/login'` },
-                { icon: '📝', text: 'Create Account', onclick: `customerPortal.sendCustomerMessage('How do I create an account?')` },
-                { icon: '🛍️', text: 'Explore Products', onclick: `customerPortal.sendCustomerMessage('What products do you offer?')` },
-                { icon: '📍', text: 'Delivery Areas', onclick: `customerPortal.sendCustomerMessage('What areas do you deliver to?')` },
-                { icon: '💳', text: 'Payment Options', onclick: `customerPortal.sendCustomerMessage('What payment methods do you accept?')` },
-                { icon: '📞', text: 'Contact Support', onclick: `customerPortal.sendCustomerMessage('How to contact customer support')` }
-            );
+            switch (queryType) {
+                case 'product_performance':
+                    actions.push(
+                        { icon: '🏪', text: 'Browse More Products', onclick: `customerPortal.sendCustomerMessage('Browse your product catalog')` },
+                        { icon: '📱', text: 'Electronics', onclick: `customerPortal.sendCustomerMessage('Show me electronics products')` },
+                        { icon: '👗', text: 'Fashion', onclick: `customerPortal.sendCustomerMessage('Show me fashion items')` },
+                        { icon: '💄', text: 'Beauty', onclick: `customerPortal.sendCustomerMessage('Show me beauty products')` },
+                        { icon: '🔐', text: 'Login for Personal Shop', onclick: `window.location.href='/login'` }
+                    );
+                    break;
+                default:
+                    actions.push(
+                        { icon: '🔐', text: 'Login', onclick: `window.location.href='/login'` },
+                        { icon: '📝', text: 'Create Account', onclick: `customerPortal.sendCustomerMessage('How do I create an account?')` },
+                        { icon: '🛍️', text: 'Explore Products', onclick: `customerPortal.sendCustomerMessage('What products do you offer?')` },
+                        { icon: '📍', text: 'Delivery Areas', onclick: `customerPortal.sendCustomerMessage('What areas do you deliver to?')` },
+                        { icon: '💳', text: 'Payment Options', onclick: `customerPortal.sendCustomerMessage('What payment methods do you accept?')` },
+                        { icon: '📞', text: 'Contact Support', onclick: `customerPortal.sendCustomerMessage('How to contact customer support')` }
+                    );
+            }
         }
 
         return actions;
@@ -1336,6 +1698,9 @@ class CustomerSupportPortal {
     showTypingIndicator() {
         const chatMessages = document.getElementById('chatMessages');
         if (!chatMessages) return;
+
+        // 🔧 FIX: Remove any existing typing indicator first
+        this.removeTypingIndicator();
 
         const typingDiv = document.createElement('div');
         typingDiv.className = 'message ai typing';
@@ -1380,11 +1745,25 @@ class CustomerSupportPortal {
 
     async loadConversationMessages(conversationId) {
         try {
+            // 🔧 FIX: Clear state before loading
+            this.isTyping = false;
+            if (this.activeMessageRequest) {
+                this.activeMessageRequest.abort();
+                this.activeMessageRequest = null;
+            }
+            this.removeTypingIndicator();
+
             const response = await fetch(`/api/conversations/${conversationId}/messages`);
             const data = await response.json();
 
+            // 🔧 FIX: Verify conversation hasn't changed
+            if (conversationId !== this.currentConversationId) {
+                console.warn('⚠️ Conversation changed during message loading');
+                return;
+            }
+
             if (data.success && data.messages) {
-                // Clear current chat
+                // Clear current chat completely
                 const chatMessages = document.getElementById('chatMessages');
                 if (chatMessages) {
                     chatMessages.innerHTML = '';
@@ -1425,22 +1804,88 @@ class CustomerSupportPortal {
             const convElement = document.createElement('div');
             convElement.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-start conversation-item';
             convElement.setAttribute('data-conversation-id', conv.conversation_id);
-            convElement.onclick = () => this.switchToConversation(conv.conversation_id);
 
+            // 🆕 ADD: Delete button functionality
             convElement.innerHTML = `
-                <div class="conversation-info">
+                <div class="conversation-info" onclick="customerPortal.switchToConversation('${conv.conversation_id}')" style="flex: 1; cursor: pointer;">
                     <h6 class="mb-1 conversation-title">${conv.title}</h6>
                     <small class="text-muted">${conv.message_count} messages</small>
                 </div>
-                <small class="text-muted">${new Date(conv.updated_at).toLocaleDateString()}</small>
+                <div class="conversation-actions" style="display: flex; align-items: center; gap: 8px;">
+                    <small class="text-muted">${new Date(conv.updated_at).toLocaleDateString()}</small>
+                    <button class="btn btn-sm btn-outline-danger" onclick="customerPortal.deleteConversation('${conv.conversation_id}', event)"
+                            title="Delete conversation" style="padding: 2px 6px; font-size: 10px;">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
             `;
 
             listContainer.appendChild(convElement);
         });
     }
 
-    async switchToConversation(conversationId) {
+    // 🆕 ADD: Delete conversation functionality
+    async deleteConversation(conversationId, event) {
+        event.stopPropagation(); // Prevent conversation switching
+
+        if (!confirm('Are you sure you want to delete this conversation? This action cannot be undone.')) {
+            return;
+        }
+
         try {
+            const response = await fetch(`/api/conversations/${conversationId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                console.log(`✅ Deleted conversation ${conversationId}`);
+
+                // If we deleted the current conversation, create a new one or show welcome
+                if (conversationId === this.currentConversationId) {
+                    this.currentConversationId = null;
+                    window.currentConversationId = null;
+                    this.displayWelcomeMessage();
+                }
+
+                // Refresh conversation list
+                this.refreshConversationList();
+            } else {
+                alert('Failed to delete conversation. Please try again.');
+            }
+        } catch (error) {
+            console.error('❌ Error deleting conversation:', error);
+            alert('Error deleting conversation. Please try again.');
+        }
+    }
+
+    async switchToConversation(conversationId) {
+        // 🔧 FIX: Prevent rapid switching and contamination
+        if (this.conversationLocked || conversationId === this.currentConversationId) {
+            return;
+        }
+
+        this.conversationLocked = true;
+
+        try {
+            // 🔧 FIX: Cancel any active requests
+            if (this.activeMessageRequest) {
+                this.activeMessageRequest.abort();
+                this.activeMessageRequest = null;
+            }
+            this.isTyping = false;
+            this.removeTypingIndicator();
+
+            console.log(`🔄 Switching from conversation ${this.currentConversationId} to ${conversationId}`);
+
+            // Update current conversation ID immediately
+            this.currentConversationId = conversationId;
+            window.currentConversationId = conversationId;
+
             // Switch conversation on server
             const response = await fetch(`/api/conversations/${conversationId}/switch`, {
                 method: 'POST',
@@ -1464,10 +1909,15 @@ class CustomerSupportPortal {
                     activeItem.classList.add('active');
                 }
 
-                console.log(`✅ Switched to conversation ${conversationId}`);
+                console.log(`✅ Successfully switched to conversation ${conversationId}`);
             }
         } catch (error) {
             console.error('❌ Error switching conversation:', error);
+        } finally {
+            // 🔧 FIX: Always unlock conversation switching
+            setTimeout(() => {
+                this.conversationLocked = false;
+            }, 500);
         }
     }
 
@@ -1475,76 +1925,22 @@ class CustomerSupportPortal {
         const chatMessages = document.getElementById('chatMessages');
         if (!chatMessages) return;
 
+        // 🔧 FIX: Clear any pending states
+        this.isTyping = false;
+        if (this.activeMessageRequest) {
+            this.activeMessageRequest.abort();
+            this.activeMessageRequest = null;
+        }
+        this.removeTypingIndicator();
+
         // Clear any existing messages
         chatMessages.innerHTML = '';
 
-        const welcomeHtml = `
-            <div class="message ai welcome">
-                <div class="message-avatar">AI</div>
-                <div class="message-content">
-                    <div class="message-bubble">
-                        <div class="welcome-content">
-                            ${this.userAuthenticated ?
-                                `<h6 class="mb-2">👋 Welcome back! 🌟</h6>
-                                <p class="mb-3">🎉 Great to see you again! I'm excited to help you with your orders and account today! 😊✨</p>
-                                <p class="mb-3">💙 As your personal support assistant, I can help with:</p>
-                                <ul class="list-unstyled mb-3">
-                                    <li class="mb-1">🔍 <strong>Track your orders</strong> - Real-time delivery updates</li>
-                                    <li class="mb-1">💳 <strong>Payment assistance</strong> - Billing and payment issues</li>
-                                    <li class="mb-1">🚚 <strong>Delivery management</strong> - Address changes and scheduling</li>
-                                    <li class="mb-1">👤 <strong>Account settings</strong> - Profile and preferences</li>
-                                    <li class="mb-1">🛍️ <strong>Shopping help</strong> - Product recommendations</li>
-                                </ul>
-                                <p class="mt-3 mb-0">💬 <strong>Ask me anything!</strong> I'm here to help with your personal account and orders. 🌟💝</p>` :
-                                `<h6 class="mb-2">👋 Welcome to raqibtech.com! 🌟</h6>
-                                <p class="mb-3">😊 I'm your AI customer support guide! I'm here to show you what our platform can do.</p>
-                                <p class="mb-3">🔒 <strong>For Guest Users:</strong> I can provide general information about our services, but for personalized support with your orders and account, you'll need to sign up or log in!</p>
-                                <p class="mb-3">🌟 <strong>What raqibtech.com offers:</strong></p>
-                                <ul class="list-unstyled mb-3">
-                                    <li class="mb-1">🛍️ <strong>E-commerce Platform</strong> - Shop from thousands of products</li>
-                                    <li class="mb-1">🇳🇬 <strong>Nigeria-wide Delivery</strong> - We deliver to all 36 states + FCT</li>
-                                    <li class="mb-1">💳 <strong>Flexible Payments</strong> - Pay on Delivery, Card, Bank Transfer</li>
-                                    <li class="mb-1">👤 <strong>Account Tiers</strong> - Bronze, Silver, Gold, Platinum with benefits</li>
-                                    <li class="mb-1">📞 <strong>24/7 Support</strong> - AI and human support always available</li>
-                                </ul>
-                                <p class="mb-3">🎯 <strong>Ready for personalized service?</strong> Sign up or log in to:</p>
-                                <ul class="list-unstyled mb-2">
-                                    <li class="mb-1">✅ Track your specific orders in real-time</li>
-                                    <li class="mb-1">✅ Get personalized product recommendations</li>
-                                    <li class="mb-1">✅ Manage your account and payment methods</li>
-                                    <li class="mb-1">✅ Access order history and support tickets</li>
-                                </ul>
-                                <div class="welcome-quick-start-actions">
-                                    <p class="mb-2"><strong>✨ Quick Actions:</strong></p>
-                                    <div class="welcome-quick-actions">
-                                        <a href="/login" class="welcome-quick-action-btn">🔐 Login</a>
-                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('How do I create an account?')">📝 Sign Up</button>
-                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('What services do you offer?')">💡 Learn More</button>
-                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Contact customer support')">📞 Contact Support</button>
-
-                                        <!-- 🆕 Product-related quick actions -->
-                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Browse your product catalog')">🏪 Browse Catalog</button>
-                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Show me electronics products')">📱 Electronics</button>
-                                        <button class="welcome-quick-action-btn" onclick="customerPortal.sendCustomerMessage('Check prices for popular products')">💰 Check Prices</button>
-                                    </div>
-                                </div>
-                                <p class="mt-3 mb-0">💬 <strong>Ask me anything!</strong> I can guide you about our services and help you get started! 🌟</p>`
-                            }
-                        </div>
-                    </div>
-                    <div class="message-meta">
-                        <span>${new Date().toLocaleTimeString()}</span>
-                        <span class="response-time">${this.userAuthenticated ?
-                            "Your personal support assistant - always here for you!" :
-                            "Sign up for personalized support - it's free!"
-                        }</span>
-                    </div>
-                </div>
-            </div>
-        `;
-
+        const welcomeHtml = this.createWelcomeMessage();
         chatMessages.innerHTML = welcomeHtml;
         chatMessages.scrollTop = chatMessages.scrollHeight;
+
+        console.log('✅ Welcome message displayed');
     }
 }
 

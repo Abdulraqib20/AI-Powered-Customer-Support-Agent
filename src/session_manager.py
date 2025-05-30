@@ -49,36 +49,69 @@ class SessionManager:
         }
 
     def get_connection(self):
-        """Get database connection"""
-        return psycopg2.connect(**self.db_config)
+        """Get database connection with error handling"""
+        try:
+            return psycopg2.connect(**self.db_config)
+        except psycopg2.OperationalError as e:
+            print(f"❌ Database connection failed: {e}")
+            raise
+        except Exception as e:
+            print(f"❌ Unexpected connection error: {e}")
+            raise
 
     def create_session(self, user_identifier: Optional[str] = None) -> str:
-        """Create a new user session"""
+        """Create a new user session with comprehensive error handling"""
         try:
             with self.get_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     session_id = str(uuid.uuid4())
 
-                    # First check if session already exists (unlikely but possible)
+                    # Check if session already exists (unlikely but possible)
                     cur.execute("SELECT session_id FROM user_sessions WHERE session_id = %s", (session_id,))
                     if cur.fetchone():
                         # Very unlikely, but generate a new one
                         session_id = str(uuid.uuid4())
 
-                    cur.execute("""
-                        INSERT INTO user_sessions (session_id, user_identifier, session_data)
-                        VALUES (%s, %s, %s)
-                        RETURNING session_id
-                    """, (session_id, user_identifier, json.dumps({})))
+                    try:
+                        cur.execute("""
+                            INSERT INTO user_sessions (session_id, user_identifier, session_data)
+                            VALUES (%s, %s, %s)
+                            RETURNING session_id
+                        """, (session_id, user_identifier, json.dumps({})))
 
-                    result = cur.fetchone()
-                    conn.commit()
-                    print(f"✅ Session created successfully: {result['session_id']}")
-                    return result['session_id']
+                        result = cur.fetchone()
+                        if result:
+                            conn.commit()
+                            print(f"✅ Session created successfully: {result['session_id']}")
+                            return result['session_id']
+                        else:
+                            raise Exception("Session creation returned no result")
 
+                    except psycopg2.IntegrityError as ie:
+                        conn.rollback()
+                        print(f"❌ Session creation integrity error: {ie}")
+                        # Generate new session_id and retry once
+                        session_id = str(uuid.uuid4())
+                        cur.execute("""
+                            INSERT INTO user_sessions (session_id, user_identifier, session_data)
+                            VALUES (%s, %s, %s)
+                            RETURNING session_id
+                        """, (session_id, user_identifier, json.dumps({})))
+                        result = cur.fetchone()
+                        if result:
+                            conn.commit()
+                            print(f"✅ Session created successfully on retry: {result['session_id']}")
+                            return result['session_id']
+                        else:
+                            raise Exception("Session creation failed on retry")
+
+        except psycopg2.DatabaseError as db_error:
+            print(f"❌ Database error creating session: {db_error}")
+            fallback_id = str(uuid.uuid4())
+            print(f"⚠️ Using fallback session ID: {fallback_id}")
+            return fallback_id
         except Exception as e:
             print(f"❌ Error creating session: {e}")
-            # Return a fallback UUID but note it won't have database backing
             fallback_id = str(uuid.uuid4())
             print(f"⚠️ Using fallback session ID: {fallback_id}")
             return fallback_id
@@ -199,6 +232,97 @@ class SessionManager:
         except Exception as e:
             print(f"❌ Error getting conversations: {e}")
             return []
+
+    def get_user_conversations_by_email(self, user_email: str) -> List[ChatConversation]:
+        """Get all conversations for an authenticated user by their email across all sessions"""
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    # Get conversations from all sessions that belong to this user
+                    cur.execute("""
+                        SELECT
+                            c.conversation_id,
+                            c.session_id,
+                            c.conversation_title,
+                            c.created_at,
+                            c.updated_at,
+                            c.is_active,
+                            COUNT(m.message_id) as message_count
+                        FROM chat_conversations c
+                        LEFT JOIN chat_messages m ON c.conversation_id = m.conversation_id
+                        INNER JOIN user_sessions us ON c.session_id = us.session_id
+                        WHERE us.user_identifier = %s
+                        GROUP BY c.conversation_id, c.session_id, c.conversation_title,
+                                c.created_at, c.updated_at, c.is_active
+                        ORDER BY c.updated_at DESC
+                    """, (user_email,))
+
+                    conversations = []
+                    for row in cur.fetchall():
+                        conversations.append(ChatConversation(
+                            conversation_id=row['conversation_id'],
+                            session_id=row['session_id'],
+                            conversation_title=row['conversation_title'],
+                            created_at=row['created_at'],
+                            updated_at=row['updated_at'],
+                            is_active=row['is_active'],
+                            message_count=row['message_count'] or 0
+                        ))
+
+                    print(f"✅ Found {len(conversations)} conversations for user {user_email}")
+                    return conversations
+
+        except Exception as e:
+            print(f"❌ Error getting conversations by email: {e}")
+            return []
+
+    def link_conversations_to_current_session(self, user_email: str, current_session_id: str):
+        """Link existing conversations to the current session for authenticated users"""
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    # 🔧 FIX: Get all conversations for this user across all their sessions
+                    cur.execute("""
+                        SELECT c.conversation_id, c.session_id, c.updated_at,
+                               COUNT(m.message_id) as message_count
+                        FROM chat_conversations c
+                        INNER JOIN user_sessions us ON c.session_id = us.session_id
+                        LEFT JOIN chat_messages m ON c.conversation_id = m.conversation_id
+                        WHERE us.user_identifier = %s
+                        GROUP BY c.conversation_id, c.session_id, c.updated_at
+                        ORDER BY c.updated_at DESC
+                    """, (user_email,))
+
+                    user_conversations = cur.fetchall()
+                    print(f"🔍 Found {len(user_conversations)} existing conversations for {user_email}")
+
+                    if user_conversations:
+                        # Update only the most recent conversation to current session
+                        # This ensures the user can continue their latest conversation seamlessly
+                        most_recent_conv = user_conversations[0]
+                        conv_id, old_session_id, updated_at, msg_count = most_recent_conv
+
+                        if old_session_id != current_session_id:
+                            cur.execute("""
+                                UPDATE chat_conversations
+                                SET session_id = %s
+                                WHERE conversation_id = %s
+                            """, (current_session_id, conv_id))
+
+                            updated_count = cur.rowcount
+                            conn.commit()
+
+                            if updated_count > 0:
+                                print(f"✅ Linked most recent conversation {conv_id[:8]}... ({msg_count} messages) to current session")
+                            else:
+                                print(f"⚠️ No conversations were updated for {user_email}")
+                        else:
+                            print(f"ℹ️ Most recent conversation already linked to current session")
+                    else:
+                        print(f"ℹ️ No existing conversations found for {user_email}")
+
+        except Exception as e:
+            print(f"❌ Error linking conversations: {e}")
 
     def add_message(self, conversation_id: str, sender_type: str, content: str, metadata: Dict[str, Any] = None) -> str:
         """Add a message to a conversation"""

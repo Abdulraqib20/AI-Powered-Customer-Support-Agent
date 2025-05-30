@@ -291,29 +291,25 @@ class EnhancedDatabaseQuerying:
             entities['order_id'] = order_id_match.group(1)
             logger.info(f"Extracted order_id: {entities['order_id']}")
 
-        # 🆕 CONTEXT INHERITANCE: If no explicit entities found, check conversation history
-        # Only inherit context for non-authenticated users or when no specific entities are found
+        # 🔧 CRITICAL FIX: NEVER inherit conversation history for authenticated users
+        # Only inherit context for guest users when no specific entities are found
         if conversation_history and not entities['order_id']:
-            # Look for order_id or customer_id from recent conversation
+            # 🔧 FIX: Only inherit if this is truly a guest user (no customer_id in session)
+            # This should be controlled by the calling function, but double-check here
+
+            # Look for order_id or customer_id from recent conversation (ONLY for guests)
             for conversation in conversation_history[:3]:  # Check last 3 conversations
                 if 'entities' in conversation:
                     conv_entities = conversation['entities']
 
-                    # Inherit order_id if available
+                    # Inherit order_id if available (for both guest and authenticated users)
                     if conv_entities.get('order_id') and not entities['order_id']:
                         entities['order_id'] = conv_entities['order_id']
                         logger.info(f"🔄 Inherited order_id from conversation history: {entities['order_id']}")
 
-                    # 🔧 FIX: Only inherit customer_id if the user is NOT authenticated
-                    # This prevents authenticated users from getting overridden by conversation history
-                    if not entities.get('customer_id') and not entities.get('customer_verified'):
-                        # Try to extract customer_id from execution results if order was queried
-                        if conversation.get('execution_result'):
-                            for result in conversation['execution_result']:
-                                if 'customer_id' in result and not entities['customer_id']:
-                                    entities['customer_id'] = str(result['customer_id'])
-                                    logger.info(f"🔄 Inherited customer_id from conversation history: {entities['customer_id']}")
-                                    break
+                    # 🔧 CRITICAL FIX: NEVER inherit customer_id from conversation history
+                    # This was causing cross-user contamination
+                    # Let the calling function handle customer_id from session instead
 
         # 🆕 ADDITIONAL CONTEXT: If we have order_id from history but need customer_id for order history
         if entities.get('order_id') and not entities.get('customer_id') and 'history' in query_lower:
@@ -487,7 +483,7 @@ Generate ONLY the SQL query, no explanations or markdown formatting.
 
         try:
             response = self.groq_client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model="meta-llama/llama-4-scout-17b-16e-instruct",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Generate SQL query for: {user_query}"}
@@ -678,46 +674,79 @@ Generate ONLY the SQL query, no explanations or markdown formatting.
         else:
             return "SELECT 'Fallback query executed' as message;"
 
-    def execute_database_query(self, sql_query: str) -> Tuple[List[Dict], Optional[str]]:
-        """
-        🗄️ Execute SQL query with comprehensive error handling
-        """
+    def get_database_connection(self):
+        """Get database connection with comprehensive error handling"""
         try:
             conn = psycopg2.connect(**self.db_config)
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-            logger.info(f"🔍 Executing query: {sql_query}")
-            cursor.execute(sql_query)
-
-            # Handle different query types
-            if sql_query.strip().lower().startswith(('select', 'with')):
-                results = [dict(row) for row in cursor.fetchall()]
-            else:
-                # For INSERT/UPDATE/DELETE
-                conn.commit()
-                results = [{"affected_rows": cursor.rowcount, "status": "success"}]
-
-            cursor.close()
-            conn.close()
-
-            logger.info(f"✅ Query executed successfully, {len(results)} rows returned")
-            return results, None
-
-        except psycopg2.Error as e:
-            error_msg = f"Database error: {str(e)}"
-            logger.error(f"❌ {error_msg}")
-
-            # Try simplified fallback query
-            if "relation" in str(e) or "column" in str(e):
-                fallback_results = [{"error": "Table or column not found", "suggestion": "Please check your query"}]
-                return fallback_results, error_msg
-
-            return [], error_msg
-
+            app_logger.info("✅ Database connection established")
+            return conn
+        except psycopg2.OperationalError as oe:
+            app_logger.error(f"❌ Database operational error: {oe}")
+            raise Exception(f"Database connection failed: {oe}")
+        except psycopg2.DatabaseError as de:
+            app_logger.error(f"❌ Database error: {de}")
+            raise Exception(f"Database error: {de}")
         except Exception as e:
-            error_msg = f"Execution error: {str(e)}"
-            logger.error(f"❌ {error_msg}")
-            return [], error_msg
+            app_logger.error(f"❌ Unexpected database connection error: {e}")
+            raise Exception(f"Database connection error: {e}")
+
+    def execute_sql_query(self, sql_query: str, max_retries: int = 3) -> Tuple[bool, List[Dict], str]:
+        """
+        Execute SQL query with comprehensive error handling and retry logic
+        Returns: (success, results, error_message)
+        """
+        for attempt in range(max_retries):
+            try:
+                with self.get_database_connection() as conn:
+                    with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                        app_logger.info(f"🔍 Executing query: {sql_query}")
+
+                        try:
+                            cursor.execute(sql_query)
+                            results = cursor.fetchall()
+
+                            # Convert RealDictRow to regular dict for JSON serialization
+                            json_results = [dict(row) for row in results]
+
+                            app_logger.info(f"✅ Query executed successfully, {len(json_results)} rows returned")
+                            return True, json_results, ""
+
+                        except psycopg2.ProgrammingError as pe:
+                            error_msg = f"SQL programming error: {pe}"
+                            app_logger.error(f"❌ {error_msg}")
+                            return False, [], error_msg
+
+                        except psycopg2.DataError as de:
+                            error_msg = f"SQL data error: {de}"
+                            app_logger.error(f"❌ {error_msg}")
+                            return False, [], error_msg
+
+                        except psycopg2.IntegrityError as ie:
+                            error_msg = f"SQL integrity error: {ie}"
+                            app_logger.error(f"❌ {error_msg}")
+                            return False, [], error_msg
+
+            except psycopg2.OperationalError as oe:
+                error_msg = f"Database operational error (attempt {attempt + 1}/{max_retries}): {oe}"
+                app_logger.warning(f"⚠️ {error_msg}")
+
+                if attempt < max_retries - 1:
+                    time.sleep(0.5 * (attempt + 1))  # Exponential backoff
+                    continue
+                else:
+                    return False, [], f"Database connection failed after {max_retries} attempts: {oe}"
+
+            except psycopg2.DatabaseError as de:
+                error_msg = f"Database error: {de}"
+                app_logger.error(f"❌ {error_msg}")
+                return False, [], error_msg
+
+            except Exception as e:
+                error_msg = f"Unexpected error executing query: {e}"
+                app_logger.error(f"❌ {error_msg}")
+                return False, [], error_msg
+
+        return False, [], "Maximum retry attempts exceeded"
 
     def store_conversation_context(self, query_context: QueryContext, user_id: str = "anonymous"):
         """
@@ -1097,7 +1126,7 @@ Respond as a caring, emotionally intelligent customer support friend (no quotes,
 
         try:
             response = self.groq_client.chat.completions.create(
-                model="llama-3.3-70b-versatile",  # Keep for complex emotional understanding
+                model="meta-llama/llama-4-scout-17b-16e-instruct",  # Keep for complex emotional understanding
                 messages=[
                     {"role": "system", "content": response_prompt},
                     {"role": "user", "content": f"Generate emotionally intelligent response for: {query_context.user_query}"}
@@ -1354,11 +1383,37 @@ How can I help you with your raqibtech.com experience today? 🌟"""
             # Step 3: Classify query intent and extract entities
             query_type, entities = self.classify_query_intent(user_query, conversation_history)
 
+            # 🔧 CRITICAL FIX: Override entities with authenticated session data
+            if session_context and session_context.get('customer_verified', False):
+                # For authenticated users, ALWAYS use session customer_id, never conversation history
+                authenticated_customer_id = session_context.get('customer_id')
+                if authenticated_customer_id:
+                    entities['customer_id'] = str(authenticated_customer_id)
+                    entities['customer_verified'] = True
+                    logger.info(f"🔐 Using authenticated customer_id: {authenticated_customer_id} (overriding any conversation history)")
+                else:
+                    logger.warning(f"⚠️ Authenticated user but no customer_id in session: {session_context}")
+            else:
+                # For guest users, mark as not verified
+                entities['customer_verified'] = False
+                logger.info(f"👤 Guest user - no authenticated customer_id")
+
             # Step 4: Generate SQL query based on classification
             sql_query = self.generate_sql_query(user_query, query_type, entities)
 
             # Step 5: Execute the database query
-            execution_result, error_message = self.execute_database_query(sql_query)
+            success, execution_result, error_message = self.execute_sql_query(sql_query)
+
+            if not success:
+                # Query failed - try fallback
+                fallback_sql = self._get_fallback_query(query_type, entities)
+                app_logger.info(f"🔄 Trying fallback query: {fallback_sql}")
+                success, execution_result, error_message = self.execute_sql_query(fallback_sql)
+
+                if not success:
+                    # Both original and fallback failed
+                    execution_result = []
+                    app_logger.error(f"❌ Both original and fallback queries failed: {error_message}")
 
             # Step 6: Create query context
             query_context = QueryContext(

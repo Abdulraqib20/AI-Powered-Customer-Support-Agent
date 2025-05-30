@@ -22,6 +22,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 import uuid
+import psycopg2
 
 # Flask imports
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
@@ -228,7 +229,7 @@ api_tracker = APIUsageTracker()
 # Session Management Functions
 @app.before_request
 def before_request():
-    """Initialize session for each request"""
+    """Initialize session for each request with comprehensive error handling"""
     # Skip session handling for static files
     if request.endpoint and request.endpoint.startswith('static'):
         return
@@ -240,25 +241,37 @@ def before_request():
             session['session_id'] = session_id
             session['current_conversation_id'] = None
             app_logger.info(f"🆕 Created new session: {session_id}")
+        except psycopg2.DatabaseError as db_error:
+            app_logger.error(f"❌ Database error creating session: {db_error}")
+            # Use fallback session without database backing
+            session['session_id'] = f"fallback_{uuid.uuid4()}"
+            session['current_conversation_id'] = None
+            app_logger.warning("⚠️ Using fallback session due to database error")
         except Exception as e:
-            error_logger.error(f"❌ Failed to create session: {e}")
+            app_logger.error(f"❌ Failed to create session: {e}")
             # Use fallback session ID
             session['session_id'] = f"fallback_{uuid.uuid4()}"
             session['current_conversation_id'] = None
+            app_logger.warning("⚠️ Using fallback session due to error")
     else:
         # Update session activity if it exists in database
         try:
             session_manager.update_session_activity(session['session_id'])
+        except psycopg2.DatabaseError as db_error:
+            app_logger.warning(f"⚠️ Database error updating session activity: {db_error}")
+            # Continue without updating - not critical
         except Exception as e:
-            # If session update fails, it might not exist in DB, recreate it
-            app_logger.warning(f"⚠️ Session update failed, recreating: {e}")
+            # If session update fails, it might not exist in DB, try to recreate it
+            app_logger.warning(f"⚠️ Session update failed: {e}")
             try:
                 session_id = session_manager.create_session()
                 session['session_id'] = session_id
                 session['current_conversation_id'] = None
+                app_logger.info(f"🔄 Recreated session: {session_id}")
             except Exception as create_error:
-                error_logger.error(f"❌ Failed to recreate session: {create_error}")
+                app_logger.error(f"❌ Failed to recreate session: {create_error}")
                 # Keep existing session ID as fallback
+                pass
 
 
 class DateTimeEncoder(json.JSONEncoder):
@@ -499,22 +512,33 @@ def dashboard():
 
         # Only load conversations for authenticated users
         if session.get('user_authenticated', False):
-            conversations = session_manager.get_user_conversations(session['session_id'])
+            user_email = session.get('customer_email')
 
-            # Create a default conversation if none exists for authenticated users
-            if not conversations:
-                try:
-                    conversation_id = session_manager.create_conversation(session['session_id'], "New Chat")
-                    session['current_conversation_id'] = conversation_id
-                    conversations = session_manager.get_user_conversations(session['session_id'])
-                except Exception as conv_error:
-                    app_logger.warning(f"⚠️ Failed to create default conversation: {conv_error}")
-                    conversations = []
-                    session['current_conversation_id'] = None
-            else:
-                # Use the most recent conversation if no current one is set
-                if not session.get('current_conversation_id'):
-                    session['current_conversation_id'] = conversations[0].conversation_id
+            if user_email:
+                # 🔧 FIX: Get conversations by email for authenticated users to maintain history across sessions
+                conversations = session_manager.get_user_conversations_by_email(user_email)
+
+                # 🔧 FIX: Link the most recent conversation to current session for seamless experience
+                if conversations:
+                    session_manager.link_conversations_to_current_session(user_email, session['session_id'])
+
+                    # Set the most recent conversation as current if none is set
+                    if not session.get('current_conversation_id'):
+                        session['current_conversation_id'] = conversations[0].conversation_id
+                        current_conversation_id = conversations[0].conversation_id
+                        app_logger.info(f"🔄 Set most recent conversation as current: {current_conversation_id}")
+                else:
+                    # Create a default conversation if none exists for authenticated users
+                    try:
+                        conversation_id = session_manager.create_conversation(session['session_id'], "New Chat")
+                        session['current_conversation_id'] = conversation_id
+                        current_conversation_id = conversation_id
+                        conversations = session_manager.get_user_conversations_by_email(user_email)
+                        app_logger.info(f"✅ Created first conversation for user: {conversation_id}")
+                    except Exception as conv_error:
+                        app_logger.warning(f"⚠️ Failed to create default conversation: {conv_error}")
+                        conversations = []
+                        session['current_conversation_id'] = None
 
             current_conversation_id = session.get('current_conversation_id')
         else:
@@ -853,11 +877,10 @@ def api_quick_action():
 
 @app.route('/api/enhanced-query', methods=['POST'])
 def api_enhanced_query():
-    """Enhanced query API with advanced database querying and AI responses"""
+    """Enhanced query API using the new EnhancedDatabaseQuerying system"""
     try:
         data = request.get_json()
         user_query = data.get('query', '').strip()
-        include_sql = data.get('include_sql', False)
 
         if not user_query:
             return jsonify({
@@ -865,126 +888,103 @@ def api_enhanced_query():
                 'message': 'Query is required'
             }), 400
 
-        # Get session context for AI
-        session_context = session_manager.get_session_context_for_ai(session['session_id'])
+        # 🔧 CRITICAL FIX: Build proper session context for authentication
+        session_context = {
+            'user_authenticated': session.get('user_authenticated', False),
+            'customer_verified': session.get('user_authenticated', False),  # 🔧 FIX: Use correct key
+            'customer_id': session.get('customer_id'),  # 🔧 FIX: Use authenticated customer_id
+            'customer_name': session.get('customer_name', 'valued customer'),
+            'customer_email': session.get('customer_email'),
+            'user_id': session.get('user_id', 'anonymous'),
+            'session_id': session.get('session_id')
+        }
 
-        # 🔧 FIX: Add Flask session authentication data to context
-        if session.get('user_authenticated') and session.get('user_email'):
-            session_context.update({
-                'user_authenticated': True,
-                'user_email': session['user_email'],
-                'customer_id': session.get('customer_id'),
-                'customer_verified': True  # If they logged in successfully, they're verified
-            })
+        # 🔧 DEBUG: Log session context for troubleshooting
+        app_logger.info(f"🔍 Session context: user_authenticated={session_context['user_authenticated']}, customer_id={session_context['customer_id']}, user_id={session_context['user_id']}")
 
-            # Also update the session manager with the email
-            try:
-                with session_manager.get_connection() as conn:
-                    with conn.cursor() as cur:
-                        cur.execute("""
-                            UPDATE user_sessions
-                            SET user_identifier = %s
-                            WHERE session_id = %s
-                        """, (session['user_email'], session['session_id']))
-                        conn.commit()
-            except Exception as session_update_error:
-                app_logger.warning(f"⚠️ Failed to update session with email: {session_update_error}")
+        # Initialize enhanced database querying
+        enhanced_db = EnhancedDatabaseQuerying()
 
-        # Get or create conversation
+        # Process the query with session context
+        result = enhanced_db.process_enhanced_query(user_query, session_context)
+
+        # Store message in chat if we have a conversation
         conversation_id = session.get('current_conversation_id')
-        if not conversation_id:
-            try:
-                conversation_id = session_manager.create_conversation(session['session_id'], "New Chat")
-                session['current_conversation_id'] = conversation_id
-            except Exception as conv_error:
-                app_logger.warning(f"⚠️ Failed to create conversation: {conv_error}")
-                conversation_id = None
-        else:
-            # Verify conversation exists
-            try:
-                conversations = session_manager.get_user_conversations(session['session_id'])
-                if not any(conv.conversation_id == conversation_id for conv in conversations):
-                    # Conversation doesn't exist, create a new one
-                    conversation_id = session_manager.create_conversation(session['session_id'], "New Chat")
-                    session['current_conversation_id'] = conversation_id
-            except Exception as verify_error:
-                app_logger.warning(f"⚠️ Failed to verify conversation: {verify_error}")
-                conversation_id = None
-
-        # Add user message to conversation (if conversation exists)
-        message_added = False
         if conversation_id:
             try:
-                session_manager.add_message(conversation_id, 'user', user_query)
-                message_added = True
-            except Exception as msg_error:
-                app_logger.warning(f"⚠️ Failed to add user message: {msg_error}")
+                # Add user message
+                session_manager.add_message(
+                    conversation_id=conversation_id,
+                    content=user_query,
+                    sender_type='user',
+                    metadata={}
+                )
 
-        # Initialize enhanced query engine
-        enhanced_querying = EnhancedDatabaseQuerying()
-
-        # 🔄 Use the enhanced process_enhanced_query method with session context
-        result = enhanced_querying.process_enhanced_query(user_query, session_context)
-
-        # Add AI response to conversation (if conversation exists)
-        if conversation_id and message_added:
-            try:
+                # Add AI response
                 ai_metadata = {
                     'query_type': result.get('query_type'),
                     'execution_time': result.get('execution_time'),
-                    'results_count': result.get('results_count')
+                    'results_count': result.get('results_count'),
+                    'sql_query': result.get('sql_query')
                 }
-                session_manager.add_message(conversation_id, 'ai', result['response'], ai_metadata)
-            except Exception as ai_msg_error:
-                app_logger.warning(f"⚠️ Failed to add AI message: {ai_msg_error}")
 
-        # Auto-generate conversation title from first user message (if conversation exists)
-        if conversation_id:
+                session_manager.add_message(
+                    conversation_id=conversation_id,
+                    content=result.get('response', 'Sorry, I encountered an issue.'),
+                    sender_type='ai',
+                    metadata=ai_metadata
+                )
+
+            except Exception as msg_error:
+                app_logger.error(f"❌ Message storage error: {msg_error}")
+
+        # Update session with current conversation if needed
+        if not conversation_id and session.get('user_authenticated'):
             try:
-                conversations = session_manager.get_user_conversations(session['session_id'])
-                current_conv = next((c for c in conversations if c.conversation_id == conversation_id), None)
-                if current_conv and current_conv.conversation_title == "New Chat" and current_conv.message_count >= 2:
-                    # Generate title from first 5 words of user query
-                    title_words = user_query.split()[:5]
-                    title = ' '.join(title_words) + ('...' if len(title_words) == 5 else '')
-                    session_manager.update_conversation_title(conversation_id, title)
-            except Exception as title_error:
-                app_logger.warning(f"⚠️ Failed to update conversation title: {title_error}")
+                # Create new conversation for authenticated users
+                new_conversation_id = session_manager.create_conversation(
+                    session_id=session['session_id'],
+                    title=user_query[:50] + "..." if len(user_query) > 50 else user_query
+                )
+                session['current_conversation_id'] = new_conversation_id
+                app_logger.info(f"✅ Created new conversation: {new_conversation_id}")
 
-        # Include SQL in response if requested
-        if include_sql:
-            result['sql_query'] = result.get('sql_query', '')
+                # Add messages to new conversation
+                session_manager.add_message(
+                    conversation_id=new_conversation_id,
+                    content=user_query,
+                    sender_type='user',
+                    metadata={}
+                )
 
-        api_logger.info(f"Enhanced query processed: {result.get('query_type', 'unknown')} - {result.get('execution_time', 'N/A')}")
+                ai_metadata = {
+                    'query_type': result.get('query_type'),
+                    'execution_time': result.get('execution_time'),
+                    'results_count': result.get('results_count'),
+                    'sql_query': result.get('sql_query')
+                }
 
-        # Return enhanced response with full pipeline details
-        return jsonify({
-            'success': result.get('success', True),
-            'response': result.get('response', 'No response generated'),
-            'query_type': result.get('query_type', 'unknown'),
-            'sql_query': result.get('sql_query', '') if include_sql else '',
-            'results_count': result.get('results_count', 0),
-            'execution_time': result.get('execution_time', 'N/A'),
-            'entities': result.get('entities', {}),
-            'has_results': result.get('has_results', False),
-            'timestamp': result.get('timestamp', datetime.now().isoformat()),
-            'session_authenticated': session.get('user_authenticated', False),
-            'session_user': session.get('user_email', 'guest'),
-            'conversation_id': conversation_id,
-            'message_added': message_added,
-            'pipeline_stages': {
-                'intent_classification': f"Query Type: {result.get('query_type', 'unknown')}",
-                'sql_generation': 'SQL query generated' if result.get('sql_query') else 'No SQL needed',
-                'database_execution': f"Found {result.get('results_count', 0)} results",
-                'response_generation': 'AI response generated successfully'
-            }
-        })
+                session_manager.add_message(
+                    conversation_id=new_conversation_id,
+                    content=result.get('response', 'Sorry, I encountered an issue.'),
+                    sender_type='ai',
+                    metadata=ai_metadata
+                )
+
+            except Exception as conv_error:
+                app_logger.error(f"❌ Conversation creation error: {conv_error}")
+
+        # Log successful query processing
+        app_logger.info(f"Enhanced query processed: {result.get('query_type')} - {result.get('execution_time')}")
+
+        return jsonify(result)
 
     except Exception as e:
-        error_logger.error(f"Enhanced query API error: {e}")
+        app_logger.error(f"❌ Enhanced query API error: {e}")
         return jsonify({
             'success': False,
-            'message': f'An error occurred: {str(e)}'
+            'message': 'Query processing failed. Please try again.',
+            'error': str(e)
         }), 500
 
 
@@ -1206,7 +1206,16 @@ def get_conversations():
                 'message': 'Please log in to access conversation history'
             })
 
-        conversations = session_manager.get_user_conversations(session['session_id'])
+        user_email = session.get('customer_email')
+        if not user_email:
+            return jsonify({
+                'success': True,
+                'conversations': [],
+                'message': 'User email not found in session'
+            })
+
+        # 🔧 FIX: Use email-based lookup for authenticated users
+        conversations = session_manager.get_user_conversations_by_email(user_email)
 
         # Convert to serializable format
         conversation_list = []
@@ -1240,12 +1249,19 @@ def get_conversation_messages(conversation_id):
                 'message': 'Please log in to access conversation messages'
             }), 401
 
-        # 🔧 CRITICAL FIX: Verify the conversation belongs to the current session
-        user_conversations = session_manager.get_user_conversations(session['session_id'])
+        user_email = session.get('customer_email')
+        if not user_email:
+            return jsonify({
+                'success': False,
+                'message': 'User email not found in session'
+            }), 401
+
+        # 🔧 CRITICAL FIX: Verify the conversation belongs to the current user by email
+        user_conversations = session_manager.get_user_conversations_by_email(user_email)
         conversation_belongs_to_user = any(conv.conversation_id == conversation_id for conv in user_conversations)
 
         if not conversation_belongs_to_user:
-            app_logger.warning(f"🚨 Unauthorized conversation access attempt: User session {session['session_id']} tried to access conversation {conversation_id}")
+            app_logger.warning(f"🚨 Unauthorized conversation access attempt: User {user_email} tried to access conversation {conversation_id}")
             return jsonify({
                 'success': False,
                 'message': 'Conversation not found or access denied'
@@ -1299,25 +1315,26 @@ def create_new_conversation():
 
 @app.route('/api/conversations/<conversation_id>/switch', methods=['POST'])
 def switch_conversation(conversation_id):
-    """Switch to a different conversation"""
+    """Switch to a specific conversation"""
     try:
-        # 🔧 FIX: Only authenticated users can switch conversations
-        if not session.get('user_authenticated', False):
-            return jsonify({
-                'success': False,
-                'message': 'Please log in to access conversation history'
-            }), 401
+        # Log the conversation switch
+        app_logger.info(f"🔄 User switching to conversation: {conversation_id}")
 
+        # Update session
         session['current_conversation_id'] = conversation_id
 
         return jsonify({
             'success': True,
+            'message': f'Switched to conversation {conversation_id}',
             'conversation_id': conversation_id
         })
 
     except Exception as e:
         app_logger.error(f"❌ Error switching conversation: {e}")
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return jsonify({
+            'success': False,
+            'message': 'Failed to switch conversation'
+        }), 500
 
 
 @app.route('/login')
@@ -1330,64 +1347,231 @@ def login_page():
 
 @app.route('/api/login', methods=['POST'])
 def login_api():
-    """Simple login API - only allows existing customers"""
+    """Handle user login with comprehensive database error handling"""
     try:
         data = request.get_json()
         email = data.get('email', '').strip().lower()
+        password = data.get('password', '')
 
         if not email:
-            return jsonify({'success': False, 'message': 'Email is required'}), 400
+            return jsonify({
+                'success': False,
+                'message': 'Email is required'
+            }), 400
 
-        # Check if customer exists in database
+        # Database connection for authentication
+        db_config = {
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'port': os.getenv('DB_PORT', '5432'),
+            'database': os.getenv('DB_NAME', 'nigerian_ecommerce'),
+            'user': os.getenv('DB_USER', 'postgres'),
+            'password': os.getenv('DB_PASSWORD', 'oracle'),
+        }
+
+        conn = psycopg2.connect(**db_config)
+        cursor = conn.cursor()
+
         try:
-            customer = customer_repo.get_customer_by_email(email)
+            # Step 1: Verify customer exists
+            cursor.execute("SELECT customer_id, name, email FROM customers WHERE email = %s", (email,))
+            customer = cursor.fetchone()
+
             if not customer:
+                cursor.close()
+                conn.close()
                 return jsonify({
                     'success': False,
-                    'message': 'Customer not found. Please make sure you\'re using the email address associated with your raqibtech.com orders.'
-                }), 404
-        except Exception as db_error:
-            error_logger.error(f"Database error during customer lookup: {db_error}")
-            return jsonify({'success': False, 'message': 'Database connection issue. Please try again.'}), 500
+                    'message': 'Email not found in our system. Please check your email address or contact support.'
+                }), 401
 
-        # Update session with user identifier
-        session_id = session['session_id']
-        try:
-            with session_manager.get_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute("""
+            customer_id, customer_name, customer_email = customer
+            current_session_id = session.get('session_id')  # Get current Flask session_id
+
+            if not current_session_id:
+                current_session_id = str(uuid.uuid4())
+
+            # Create session data
+            session_data = {
+                'customer_id': customer_id,
+                'customer_name': customer_name,
+                'customer_email': customer_email,
+                'authenticated': True,
+                'login_time': datetime.now().isoformat()
+            }
+
+            # Step 2: Handle session management carefully to avoid constraint violations
+            try:
+                # Check if user already has a session
+                cursor.execute("SELECT session_id FROM user_sessions WHERE user_identifier = %s", (email,))
+                existing_user_session = cursor.fetchone()
+
+                if existing_user_session:
+                    # User already has a session - just update the session data, keep same session_id
+                    existing_session_id = existing_user_session[0]
+                    cursor.execute("""
                         UPDATE user_sessions
-                        SET user_identifier = %s
-                        WHERE session_id = %s
-                    """, (email, session_id))
-                    conn.commit()
-        except Exception as session_error:
-            error_logger.error(f"Session update error: {session_error}")
-            # Continue with login even if session update fails
-            app_logger.warning("Session update failed but continuing with login")
+                        SET last_active = CURRENT_TIMESTAMP,
+                            session_data = %s
+                        WHERE user_identifier = %s
+                        RETURNING session_id
+                    """, (json.dumps(session_data), email))
 
-        session['user_email'] = email
+                    result = cursor.fetchone()
+                    if result:
+                        authenticated_session_id = result[0]
+                        app_logger.info(f"✅ Updated existing user session for {email}")
+                    else:
+                        raise Exception("Failed to update existing user session")
+
+                else:
+                    # No existing user session - check if current session exists
+                    cursor.execute("SELECT session_id, user_identifier FROM user_sessions WHERE session_id = %s", (current_session_id,))
+                    current_session = cursor.fetchone()
+
+                    if current_session:
+                        # Current session exists - update it with user authentication
+                        cursor.execute("""
+                            UPDATE user_sessions
+                            SET user_identifier = %s,
+                                last_active = CURRENT_TIMESTAMP,
+                                session_data = %s
+                            WHERE session_id = %s
+                            RETURNING session_id
+                        """, (email, json.dumps(session_data), current_session_id))
+
+                        result = cursor.fetchone()
+                        if result:
+                            authenticated_session_id = result[0]
+                            app_logger.info(f"✅ Updated current session {current_session_id} with user authentication")
+                        else:
+                            raise Exception("Failed to update current session")
+
+                    else:
+                        # No session exists - create new one
+                        cursor.execute("""
+                            INSERT INTO user_sessions (session_id, user_identifier, created_at, last_active, session_data)
+                            VALUES (%s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %s)
+                            RETURNING session_id
+                        """, (current_session_id, email, json.dumps(session_data)))
+
+                        result = cursor.fetchone()
+                        if result:
+                            authenticated_session_id = result[0]
+                            app_logger.info(f"✅ Created new session {current_session_id} for user {email}")
+                        else:
+                            raise Exception("Failed to create new session")
+
+                # Step 3: Commit the transaction
+                conn.commit()
+                app_logger.info(f"✅ Session authenticated for user: {email} -> customer_id: {customer_id}")
+
+            except psycopg2.IntegrityError as ie:
+                conn.rollback()
+                app_logger.error(f"❌ Database integrity error during login: {ie}")
+                return jsonify({
+                    'success': False,
+                    'message': 'Login failed due to data integrity issue. Please try again.'
+                }), 500
+
+            except psycopg2.OperationalError as oe:
+                conn.rollback()
+                app_logger.error(f"❌ Database operational error during login: {oe}")
+                return jsonify({
+                    'success': False,
+                    'message': 'Database connection issue. Please try again.'
+                }), 500
+
+            except Exception as session_error:
+                conn.rollback()
+                app_logger.error(f"❌ Session management error: {session_error}")
+                return jsonify({
+                    'success': False,
+                    'message': 'Session setup failed. Please try again.'
+                }), 500
+
+        finally:
+            cursor.close()
+            conn.close()
+
+        # Step 4: Update Flask session
         session['user_authenticated'] = True
-        session['customer_id'] = customer['customer_id']  # Store customer ID for queries
+        session['customer_id'] = customer_id
+        session['customer_name'] = customer_name
+        session['customer_email'] = customer_email
+        session['session_id'] = authenticated_session_id
+        session['user_id'] = f"customer_{customer_id}"
+
+        # Clear any conversation contamination
+        session.pop('current_conversation_id', None)
+
+        # Step 5: Link existing conversations safely
+        try:
+            session_manager.link_conversations_to_current_session(email, authenticated_session_id)
+            app_logger.info(f"🔗 Linked existing conversations to current session for {email}")
+        except Exception as link_error:
+            app_logger.warning(f"⚠️ Failed to link conversations: {link_error}")
+            # Don't fail login for conversation linking issues
+
+        app_logger.info(f"✅ User authenticated successfully: {customer_name} (ID: {customer_id}) - {email}")
 
         return jsonify({
             'success': True,
-            'message': f'Welcome back, {customer["name"]}!',
-            'user_email': email,
-            'customer_name': customer['name']
+            'message': f'Welcome back, {customer_name}!',
+            'customer_name': customer_name,
+            'customer_id': customer_id,
+            'redirect': '/'
         })
 
+    except psycopg2.DatabaseError as db_error:
+        app_logger.error(f"❌ Database error during login: {db_error}")
+        return jsonify({
+            'success': False,
+            'message': 'Database service temporarily unavailable. Please try again.'
+        }), 500
+
+    except psycopg2.Error as pg_error:
+        app_logger.error(f"❌ PostgreSQL error during login: {pg_error}")
+        return jsonify({
+            'success': False,
+            'message': 'Authentication service error. Please try again.'
+        }), 500
+
     except Exception as e:
-        error_logger.error(f"Login error: {e}")
-        return jsonify({'success': False, 'message': f'Login failed: {str(e)}'}), 500
+        app_logger.error(f"❌ Unexpected login error: {e}")
+        return jsonify({
+            'success': False,
+            'message': 'Login failed. Please try again.'
+        }), 500
 
 
 @app.route('/logout')
 def logout():
-    """Logout user"""
-    session.pop('user_email', None)
-    session.pop('user_authenticated', None)
-    return redirect(url_for('dashboard'))
+    """Handle user logout with complete session cleanup"""
+    try:
+        # 🔧 FIX: Log current session before clearing
+        current_user = session.get('customer_name', 'Unknown')
+        customer_id = session.get('customer_id', 'Unknown')
+        app_logger.info(f"🚪 User logging out: {current_user} (ID: {customer_id})")
+
+        # 🔧 FIX: Clear ALL session data to prevent contamination
+        session.clear()
+
+        # 🔧 FIX: Create fresh anonymous session
+        session['session_id'] = str(uuid.uuid4())
+        session['user_authenticated'] = False
+        session['user_id'] = 'anonymous'
+
+        app_logger.info(f"✅ Session cleared - new anonymous session: {session['session_id']}")
+
+        return redirect('/')
+
+    except Exception as e:
+        app_logger.error(f"❌ Logout error: {e}")
+        # Force clear session even on error
+        session.clear()
+        session['session_id'] = str(uuid.uuid4())
+        session['user_authenticated'] = False
+        return redirect('/')
 
 
 # Health check endpoint
@@ -1416,6 +1600,56 @@ def internal_error(error):
     # Provide default stats to prevent template errors
     default_stats = {'total_customers': 0, 'total_orders': 0, 'pending_orders': 0, 'active_conversations': 0}
     return render_template('500.html', stats=default_stats), 500
+
+
+# 🆕 ADD: Delete conversation endpoint
+@app.route('/api/conversations/<conversation_id>', methods=['DELETE'])
+def delete_conversation(conversation_id):
+    """Delete a specific conversation and all its messages"""
+    try:
+        db_config = {
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'port': os.getenv('DB_PORT', '5432'),
+            'database': os.getenv('DB_NAME', 'nigerian_ecommerce'),
+            'user': os.getenv('DB_USER', 'postgres'),
+            'password': os.getenv('DB_PASSWORD', 'oracle'),
+        }
+
+        conn = psycopg2.connect(**db_config)
+        cursor = conn.cursor()
+
+        # First, delete all messages in the conversation
+        cursor.execute("DELETE FROM chat_messages WHERE conversation_id = %s", (conversation_id,))
+        messages_deleted = cursor.rowcount
+
+        # Then, delete the conversation itself
+        cursor.execute("DELETE FROM chat_conversations WHERE conversation_id = %s", (conversation_id,))
+        conversation_deleted = cursor.rowcount
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        # If this was the current conversation, clear it from session
+        if session.get('current_conversation_id') == conversation_id:
+            session.pop('current_conversation_id', None)
+
+        app_logger.info(f"✅ Deleted conversation {conversation_id}: {messages_deleted} messages, {conversation_deleted} conversation")
+
+        return jsonify({
+            'success': True,
+            'message': f'Conversation deleted successfully',
+            'messages_deleted': messages_deleted,
+            'conversation_deleted': conversation_deleted
+        })
+
+    except Exception as e:
+        app_logger.error(f"❌ Error deleting conversation {conversation_id}: {e}")
+        return jsonify({
+            'success': False,
+            'message': 'Failed to delete conversation',
+            'error': str(e)
+        }), 500
 
 
 if __name__ == '__main__':
