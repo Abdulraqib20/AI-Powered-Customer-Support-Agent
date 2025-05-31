@@ -292,12 +292,11 @@ class EnhancedDatabaseQuerying:
 
     def classify_query_intent(self, user_query: str, conversation_history: List[Dict] = None) -> Tuple[QueryType, Dict[str, Any]]:
         """
-        🧠 Intelligent query classification using AI with Nigerian e-commerce context
+        🎯 Enhanced query classification with cart operation detection
         """
-        user_query_lower = user_query.lower()
-        query_lower = user_query_lower  # Alias for consistent naming
+        query_lower = user_query.lower()
 
-        # Initialize entities dict early to prevent reference errors
+        # Initialize entities dictionary with all required fields
         entities = {
             'order_id': None,
             'customer_id': None,
@@ -316,8 +315,33 @@ class EnhancedDatabaseQuerying:
             'needs_customer_lookup': False
         }
 
+        # 🛒 ENHANCED CART OPERATION DETECTION
+        cart_keywords = [
+            'add to cart', 'add to my cart', 'add item to cart',
+            'remove from cart', 'delete from cart', 'clear cart',
+            'view cart', 'show cart', 'cart contents', 'what\'s in my cart',
+            'update cart', 'modify cart', 'change quantity in cart'
+        ]
+
+        if any(keyword in query_lower for keyword in cart_keywords):
+            logger.info(f"🛒 CART OPERATION DETECTED: Query should be handled by OrderAIAssistant, not SQL layer")
+            entities['shopping_intent'] = True
+            return QueryType.SHOPPING_CART, entities
+
+        # 🛍️ Enhanced shopping intent detection
+        shopping_patterns = [
+            'i want to buy', 'i need to purchase', 'i\'d like to order',
+            'can i buy', 'how do i buy', 'purchase', 'order now',
+            'add this to', 'checkout', 'place order', 'buy this'
+        ]
+
+        if any(pattern in query_lower for pattern in shopping_patterns):
+            logger.info(f"🛍️ SHOPPING INTENT DETECTED: Should be handled by OrderAIAssistant")
+            entities['shopping_intent'] = True
+            return QueryType.ORDER_PLACEMENT, entities
+
         # 🆕 CUSTOMER SUPPORT CONTACT QUERIES - Handle these specially
-        if any(phrase in user_query_lower for phrase in [
+        if any(phrase in query_lower for phrase in [
             'contact customer support', 'customer support contact', 'support contact',
             'how to contact support', 'customer service contact', 'support phone',
             'support email', 'how to reach support', 'customer care contact',
@@ -544,12 +568,21 @@ NIGERIAN BUSINESS CONTEXT:
 3. Customer support queries should NOT access customer personal data
 4. Support contact information is handled by application layer, not database
 
+🚫 CRITICAL: DO NOT GENERATE QUERIES FOR THESE OPERATIONS (handled by application layer):
+- Cart operations (add to cart, remove from cart, view cart)
+- Order placement operations
+- Shopping cart management
+- Payment processing
+- User authentication operations
+For these operations, return: SELECT 'APPLICATION_LAYER_OPERATION' as message;
+
 QUERY GENERATION RULES:
 1. Always use proper PostgreSQL syntax
 2. Include appropriate WHERE clauses for Nigerian context. If 'order_id' is present in EXTRACTED ENTITIES, prioritize filtering by `orders.order_id`.
 3. If 'customer_id' is present in EXTRACTED ENTITIES (from conversation history), use it to filter customer-related queries.
 4. For "order history" queries with customer_id: SELECT o.*, c.name FROM orders o JOIN customers c ON o.customer_id = c.customer_id WHERE o.customer_id = [customer_id]
 5. If 'needs_customer_lookup' is true and order_id is available: First get customer_id from the order, then get all orders for that customer
+6. For product browsing/search queries: Use products table with appropriate filters
 """
 
         try:
@@ -1154,41 +1187,91 @@ QUERY GENERATION RULES:
         """
         🛡️ Convert technical SQL errors into user-friendly messages
         Following OWASP security guidelines to prevent information disclosure
+
+        🚀 Enhanced error handling with debugging support
+        Based on Python debugging best practices from the tutorial
         """
-        error_lower = error_message.lower()
+        try:
+            # Enhanced debugging: Log the full error context
+            logger.error(f"🐛 DEBUG INFO - User query: '{user_query}', Error: '{error_message}'")
 
-        # Detect specific error types and provide appropriate user messages
-        if 'function' in error_lower and 'does not exist' in error_lower:
-            return "I'm having trouble processing your request right now. Our technical team has been notified. Please try rephrasing your question or contact our support team for assistance! 😊"
+            # Handle specific database operation errors
+            if "does not exist" in error_message.lower():
+                # Check if it's a cart operation that should be handled by application layer
+                if "cart" in error_message.lower():
+                    logger.warning(f"🔧 DEBUGGING: Cart operation detected in SQL layer - should be handled by OrderAIAssistant")
+                    return "I see you're trying to manage your cart! Let me handle that properly for you. Please try your request again, and I'll use our shopping system. 🛒✨"
 
-        elif 'column' in error_lower and 'does not exist' in error_lower:
-            return "I couldn't find the specific information you're looking for. Please try rephrasing your question or let me know if you'd like help with something else! 🤔"
+                # Check for other missing tables
+                table_name = self._extract_table_name_from_error(error_message)
+                if table_name:
+                    logger.error(f"🚨 DATABASE SCHEMA ERROR: Table '{table_name}' does not exist in database")
+                    return f"I'm experiencing a technical issue with our database. Our team has been notified. Please try a different query or contact support at +234 (702) 5965-922. 🔧💙"
 
-        elif 'syntax error' in error_lower or 'invalid syntax' in error_lower:
-            return "I'm having difficulty understanding your request. Could you please rephrase it? I'm here to help! 💙"
+            # Handle permission/access errors
+            if "permission denied" in error_message.lower() or "access" in error_message.lower():
+                logger.error(f"🔒 DATABASE ACCESS ERROR: {error_message}")
+                return "I don't have permission to access that information for security reasons. Please contact our support team for assistance! 🔒💙"
 
-        elif 'permission denied' in error_lower or 'access denied' in error_lower:
-            return "I don't have access to that information right now. Please contact our support team for assistance with this request! 🔒"
+            # Handle SQL syntax errors with debugging info
+            if "syntax error" in error_message.lower():
+                logger.error(f"📝 SQL SYNTAX ERROR: Generated invalid SQL for query '{user_query}'")
+                return "I'm having trouble understanding your request. Could you try rephrasing it? Our team has been notified of this issue. 🤔💙"
 
-        elif 'timeout' in error_lower or 'connection' in error_lower:
-            return "Our system is experiencing high demand right now. Please try again in a moment, or contact our support team if the issue persists! ⏰"
+            # Handle connection errors
+            if "connection" in error_message.lower() or "timeout" in error_message.lower():
+                logger.error(f"🌐 DATABASE CONNECTION ERROR: {error_message}")
+                return "I'm having trouble connecting to our database right now. Please try again in a moment! 🔄💙"
 
-        elif 'string_agg' in error_lower or 'aggregate function' in error_lower:
-            return "I'm having trouble organizing the data for your request. Our technical team is working on this. Please try a simpler question or contact support! 📊"
+            # Handle constraint violations (like foreign key errors)
+            if "constraint" in error_message.lower() or "foreign key" in error_message.lower():
+                logger.error(f"🔗 DATABASE CONSTRAINT ERROR: {error_message}")
+                return "There's a data consistency issue. Our technical team has been notified. Please try a different approach! 🔧💙"
 
-        elif 'data type' in error_lower or 'type cast' in error_lower:
-            return "There's a data formatting issue with your request. Please try rephrasing your question or contact our support team! 🔧"
+            # Enhanced debugging for column errors
+            if "column" in error_message.lower() and "does not exist" in error_message.lower():
+                column_name = self._extract_column_name_from_error(error_message)
+                logger.error(f"📊 DATABASE COLUMN ERROR: Column '{column_name}' not found - schema mismatch detected")
+                return "I'm having trouble accessing the requested information due to a database structure issue. Our team has been notified! 📊💙"
 
-        else:
-            # Generic user-friendly message for unknown errors
-            return f"""I apologize, but I'm having trouble processing your request right now. 😔
+            # Generic fallback with enhanced debugging
+            logger.error(f"🔍 UNHANDLED DATABASE ERROR: {error_message} | User Query: {user_query}")
+            return "I encountered an unexpected issue while processing your request. Our technical team has been notified and will investigate! Please try again or contact support. 🚀💙"
 
-Here's what you can do:
-• Try rephrasing your question in a different way
-• Contact our support team at +234 (702) 5965-922
-• Send us an email at support@raqibtech.com
+        except Exception as debug_error:
+            # Handle errors in error handling (meta-debugging)
+            logger.error(f"❌ ERROR IN ERROR HANDLER: {debug_error}")
+            return "I'm experiencing technical difficulties. Please contact our support team at +234 (702) 5965-922 for immediate assistance! 😊💙"
 
-I'm here to help you with product information, order tracking, and shopping assistance! 💙"""
+    def _extract_table_name_from_error(self, error_message: str) -> str:
+        """Extract table name from database error for debugging"""
+        try:
+            import re
+            # Pattern to match 'relation "table_name" does not exist'
+            match = re.search(r'relation "([^"]+)" does not exist', error_message)
+            if match:
+                return match.group(1)
+
+            # Pattern to match 'table "table_name" doesn't exist'
+            match = re.search(r'table "([^"]+)" doesn\'t exist', error_message)
+            if match:
+                return match.group(1)
+
+            return ""
+        except Exception:
+            return ""
+
+    def _extract_column_name_from_error(self, error_message: str) -> str:
+        """Extract column name from database error for debugging"""
+        try:
+            import re
+            # Pattern to match 'column "column_name" does not exist'
+            match = re.search(r'column "([^"]+)" does not exist', error_message)
+            if match:
+                return match.group(1)
+            return ""
+        except Exception:
+            return ""
 
     def detect_user_sentiment(self, user_query: str) -> Dict[str, Any]:
         """
