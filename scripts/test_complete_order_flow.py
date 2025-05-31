@@ -1,169 +1,168 @@
 #!/usr/bin/env python3
 """
-🧪 Test Complete Order Flow with Progressive Checkout
-================================================================================
+🧪 Test Complete Order Flow
+===========================
 
-This script tests:
-1. User message logging ✅
-2. AI response logging ✅
-3. Progressive checkout flow
-4. Database order insertion
-5. Context preservation
+Test the complete order flow from chat to database to ensure
+orders are properly saved when placed through the AI chat interface.
 """
 
-import sys
 import os
+import sys
+import logging
+from pathlib import Path
+
+# Add project root to path
+sys.path.append(str(Path(__file__).parent.parent))
 sys.path.append('src')
 
-def test_complete_order_flow():
-    print("🧪 TESTING COMPLETE ORDER FLOW")
-    print("=" * 80)
+# Setup logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-    from enhanced_db_querying import EnhancedDatabaseQuerying
-
-    # Initialize system
-    enhanced_db = EnhancedDatabaseQuerying()
-
-    # Test session with proper authentication
-    session_context = {
-        'user_authenticated': True,
-        'customer_id': 1503,
-        'user_id': 'customer_1503',
-        'customer_verified': True
-    }
-
-    # Test the complete progressive checkout flow
-    test_scenarios = [
-        {
-            'step': 1,
-            'query': "Add Samsung Galaxy A24 to my cart",
-            'expected': "Should add to cart and ask for delivery address"
-        },
-        {
-            'step': 2,
-            'query': "My delivery address is Lugbe, Abuja",
-            'expected': "Should confirm address and ask for payment method"
-        },
-        {
-            'step': 3,
-            'query': "I want to use RaqibTechPay",
-            'expected': "Should confirm payment and show order summary"
-        },
-        {
-            'step': 4,
-            'query': "Confirm order",
-            'expected': "Should place order in database and show order ID"
-        }
-    ]
-
-    print("🎯 PROGRESSIVE CHECKOUT FLOW TEST")
-    print("-" * 80)
-
-    for scenario in test_scenarios:
-        print(f"\n📋 Step {scenario['step']}: {scenario['query']}")
-        print(f"🎯 Expected: {scenario['expected']}")
-        print("-" * 40)
-
-        try:
-            result = enhanced_db.process_enhanced_query(scenario['query'], session_context)
-
-            print(f"✅ Success: {result['success']}")
-            print(f"🎭 Query Type: {result.get('query_type', 'N/A')}")
-
-            if result.get('query_type') == 'shopping_action':
-                shopping_data = result.get('shopping_data', {})
-                print(f"🛒 Shopping Action: {shopping_data.get('action', 'N/A')}")
-
-                if 'order_id' in shopping_data:
-                    print(f"🎉 ORDER PLACED! Order ID: {shopping_data['order_id']}")
-                    print(f"💾 Database ID: {shopping_data.get('database_order_id', 'N/A')}")
-                    break  # Order completed successfully
-                else:
-                    print(f"📝 Message: {shopping_data.get('message', 'N/A')[:150]}...")
-            else:
-                print(f"📝 Response: {result['response'][:150]}...")
-
-        except Exception as e:
-            print(f"❌ Error: {e}")
-            import traceback
-            traceback.print_exc()
-            break
-
-    print("\n" + "=" * 80)
-
-def test_direct_order_placement():
-    print("\n🎯 TESTING DIRECT ORDER PLACEMENT")
-    print("=" * 80)
-
-    from enhanced_db_querying import EnhancedDatabaseQuerying
-
-    # Initialize system
-    enhanced_db = EnhancedDatabaseQuerying()
-
-    # Test session with proper authentication
-    session_context = {
-        'user_authenticated': True,
-        'customer_id': 1503,
-        'user_id': 'customer_1503',
-        'customer_verified': True
-    }
-
-    # Test direct order placement (should auto-add delivery/payment)
-    direct_order_query = "place the order for the Samsung phone for me"
-
-    print(f"📋 Testing: '{direct_order_query}'")
-    print("🎯 Expected: Should auto-add delivery/payment and place order directly")
-    print("-" * 40)
+def test_order_ai_assistant():
+    """Test the Order AI Assistant directly"""
+    logger.info("🧪 Testing Order AI Assistant...")
 
     try:
-        result = enhanced_db.process_enhanced_query(direct_order_query, session_context)
+        from order_ai_assistant import order_ai_assistant
+        logger.info("✅ Order AI Assistant imported successfully")
 
-        print(f"✅ Success: {result['success']}")
-        print(f"🎭 Query Type: {result.get('query_type', 'N/A')}")
+        # Test adding to cart
+        test_product = {
+            'product_id': 1,
+            'product_name': 'Samsung Galaxy A24 128GB Smartphone',
+            'category': 'Electronics',
+            'brand': 'Samsung',
+            'price': 425000.00
+        }
 
-        if result.get('query_type') == 'shopping_action':
-            shopping_data = result.get('shopping_data', {})
-            print(f"🛒 Shopping Action: {shopping_data.get('action', 'N/A')}")
+        # Add to cart
+        cart_result = order_ai_assistant.add_to_cart(1, test_product)
+        logger.info(f"Add to cart result: {cart_result.get('success', False)}")
 
-            if 'order_id' in shopping_data:
-                print(f"🎉 ORDER PLACED! Order ID: {shopping_data['order_id']}")
-                print(f"💾 Database ID: {shopping_data.get('database_order_id', 'N/A')}")
+        if cart_result['success']:
+            # Place order
+            delivery_address = {
+                'street': 'Test Street',
+                'city': 'Lagos',
+                'state': 'Lagos',
+                'country': 'Nigeria'
+            }
+
+            order_result = order_ai_assistant.place_order(1, delivery_address, 'RaqibTechPay')
+            logger.info(f"Order placement result: {order_result.get('success', False)}")
+
+            if order_result['success']:
+                logger.info(f"✅ Order placed successfully! Order ID: {order_result.get('order_id')}")
+                return True
             else:
-                print(f"📝 Cart Action: {shopping_data.get('message', 'N/A')[:150]}...")
+                logger.error(f"❌ Order placement failed: {order_result.get('message')}")
         else:
-            print(f"📝 Response: {result['response'][:150]}...")
+            logger.error(f"❌ Add to cart failed: {cart_result.get('message')}")
+
+        return False
 
     except Exception as e:
-        print(f"❌ Error: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"❌ Order AI Assistant test failed: {e}")
+        return False
 
-def test_message_logging():
-    print("\n🔍 TESTING MESSAGE LOGGING")
-    print("=" * 80)
-    print("✅ User message logging: Check terminal for '👤 USER:' messages")
-    print("✅ AI response logging: Check terminal for '🤖 AI:' messages")
-    print("📋 Both should appear in the terminal output above")
+def test_enhanced_db_querying():
+    """Test the enhanced database querying with shopping"""
+    logger.info("🧪 Testing Enhanced Database Querying...")
+
+    try:
+        from enhanced_db_querying import EnhancedDatabaseQuerying
+        enhanced_db = EnhancedDatabaseQuerying()
+
+        # Test session context
+        test_session = {
+            'user_authenticated': True,
+            'customer_verified': True,
+            'customer_id': 1,
+            'customer_name': 'Test User',
+            'user_id': 'test_user_123'
+        }
+
+        # Test shopping query
+        test_query = "I want to buy the Samsung Galaxy A24"
+
+        result = enhanced_db.process_enhanced_query(test_query, test_session)
+        logger.info(f"Enhanced query result: {result.get('success', False)}")
+
+        if result.get('success'):
+            logger.info("✅ Enhanced database querying works")
+            return True
+        else:
+            logger.error(f"❌ Enhanced query failed: {result.get('error', 'Unknown error')}")
+            return False
+
+    except Exception as e:
+        logger.error(f"❌ Enhanced DB test failed: {e}")
+        return False
+
+def check_database_orders():
+    """Check recent orders in database"""
+    logger.info("🔍 Checking database for recent orders...")
+
+    try:
+        from config.database_config import DATABASE_CONFIG
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+
+        with psycopg2.connect(**DATABASE_CONFIG) as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("""
+                    SELECT order_id, customer_id, order_status, total_amount, created_at
+                    FROM orders
+                    WHERE customer_id = 1
+                    ORDER BY created_at DESC
+                    LIMIT 5
+                """)
+
+                orders = cursor.fetchall()
+                logger.info(f"📋 Found {len(orders)} recent orders for customer 1")
+
+                for order in orders:
+                    logger.info(f"   Order {order['order_id']}: {order['order_status']} - ₦{order['total_amount']} ({order['created_at']})")
+
+                return len(orders) > 0
+
+    except Exception as e:
+        logger.error(f"❌ Database check failed: {e}")
+        return False
+
+def main():
+    """Main test function"""
+    logger.info("🚀 Starting Complete Order Flow Test...")
+
+    # Test 1: Order AI Assistant
+    logger.info("\n=== Test 1: Order AI Assistant ===")
+    ai_test = test_order_ai_assistant()
+
+    # Test 2: Enhanced Database Querying
+    logger.info("\n=== Test 2: Enhanced Database Querying ===")
+    db_test = test_enhanced_db_querying()
+
+    # Test 3: Check Database
+    logger.info("\n=== Test 3: Database Orders Check ===")
+    db_check = check_database_orders()
+
+    # Summary
+    logger.info("\n=== TEST SUMMARY ===")
+    logger.info(f"Order AI Assistant: {'✅ PASS' if ai_test else '❌ FAIL'}")
+    logger.info(f"Enhanced DB Querying: {'✅ PASS' if db_test else '❌ FAIL'}")
+    logger.info(f"Database Orders: {'✅ FOUND' if db_check else '❌ NONE'}")
+
+    if ai_test and db_test:
+        logger.info("🎉 ORDER SYSTEM IS WORKING!")
+        logger.info("👉 You can now test the chat interface")
+        return True
+    else:
+        logger.error("❌ Some tests failed - check logs above")
+        return False
 
 if __name__ == "__main__":
-    print("🧪 COMPREHENSIVE ORDER SYSTEM TEST")
-    print("=" * 80)
-    print("🎯 Testing all enhanced features:")
-    print("   1. User/AI message logging")
-    print("   2. Progressive checkout flow")
-    print("   3. Direct order placement")
-    print("   4. Database order insertion")
-    print("   5. Context preservation")
-    print("=" * 80)
-
-    test_complete_order_flow()
-    test_direct_order_placement()
-    test_message_logging()
-
-    print("\n🎉 TEST COMPLETE!")
-    print("=" * 80)
-    print("📋 Check the terminal output above for:")
-    print("   👤 USER: messages (user logging)")
-    print("   🤖 AI: messages (AI response logging)")
-    print("   🎯 Order placement attempts")
-    print("   💾 Database insertion results")
+    success = main()
+    if not success:
+        sys.exit(1)

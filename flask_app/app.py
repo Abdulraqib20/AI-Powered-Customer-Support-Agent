@@ -64,8 +64,22 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 from src.recommendation_engine import ProductRecommendationEngine
 from src.order_management import OrderManagementSystem
 
-# Initialize loggers
+# Initialize loggers FIRST before any conditional imports
 app_logger, api_logger, error_logger = setup_logging()
+
+# Add import for the enhanced customer support recommendation system
+try:
+    from src.customer_support_recommendations import (
+        CustomerSupportRecommendationEngine,
+        SupportRecommendationRequest,
+        SupportScenario,
+        get_customer_support_recommendations
+    )
+    app_logger.info("✅ Successfully imported enhanced customer support recommendations")
+    ENHANCED_SUPPORT_AVAILABLE = True
+except ImportError as e:
+    app_logger.warning(f"⚠️ Enhanced customer support recommendations not available: {e}")
+    ENHANCED_SUPPORT_AVAILABLE = False
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -140,6 +154,9 @@ try:
     customer_repo = CustomerRepository(db_manager)
     order_repo = OrderRepository(db_manager)
     analytics_repo = AnalyticsRepository(db_manager)
+
+    # Initialize enhanced database querying
+    db_querying = EnhancedDatabaseQuerying()
 
     app_logger.info("✅ Database services initialized successfully")
 
@@ -370,24 +387,23 @@ def get_ai_response(query: str, context: str = "", user_id: str = "anonymous") -
             return "I'm currently operating in limited mode. AI chat functionality requires API configuration. However, I can still help you with basic customer support tasks and database queries."
 
         # raqibtech.com customer support context
-        system_prompt = """You are a friendly customer support AI assistant for raqibtech.com, a Nigerian e-commerce platform.
-        You help customers with their orders, account questions, payment issues, delivery tracking, and shopping assistance.
+        system_prompt = """You are a caring, empathetic customer support assistant for raqibtech.com, a Nigerian e-commerce platform.
+        Your goal is to genuinely help customers feel heard and supported.
 
         Platform context:
-        - raqibtech.com: Nigerian e-commerce platform
-        - User: Customer who shops on the platform (not internal staff)
-        - Serving customers across all 36 Nigerian states + FCT
+        - raqibtech.com: Nigerian e-commerce serving all 36 states + FCT
         - Payment methods: Pay on Delivery, Bank Transfer, Card, RaqibTechPay
         - Currency: Nigerian Naira (₦)
-        - Business hours: 8 AM - 8 PM WAT (West Africa Time)
 
-        Customer service style:
-        - Warm, friendly, and professional tone
-        - Help customers with their specific needs
-        - Address customers directly ("your order", "your account")
-        - Provide clear, actionable guidance
-        - Show that raqibtech.com cares about their experience
-        - Use conversational Nigerian English
+        Your communication style:
+        - Be genuinely empathetic - acknowledge their feelings first
+        - Keep responses concise (2-4 sentences max)
+        - Show you truly care about their experience
+        - Use warm, authentic Nigerian tone
+        - Focus on solving their immediate need
+        - Avoid overwhelming them with too much information
+
+        Remember: You're helping a real person with real concerns. Lead with empathy, be brief and helpful.
         """
 
         # Prepare the conversation
@@ -410,7 +426,7 @@ def get_ai_response(query: str, context: str = "", user_id: str = "anonymous") -
             model="llama-3.1-8b-instant",  # Faster model for real-time customer chat
             messages=messages,
             temperature=0.3,
-            max_tokens=1000,
+            max_tokens=300,  # Reduced for more concise responses
             top_p=0.9,
             stream=False
         )
@@ -501,6 +517,18 @@ app_logger.info("Enhanced Database Querying system initialized")
 recommendation_engine = ProductRecommendationEngine()
 order_management = OrderManagementSystem()
 app_logger.info("✅ Recommendation Engine and Order Management systems initialized")
+
+# Initialize enhanced customer support recommendation engine
+if ENHANCED_SUPPORT_AVAILABLE:
+    try:
+        support_recommendation_engine = CustomerSupportRecommendationEngine()
+        app_logger.info("✅ Enhanced CustomerSupportRecommendationEngine initialized")
+    except Exception as e:
+        app_logger.error(f"❌ Error initializing CustomerSupportRecommendationEngine: {e}")
+        support_recommendation_engine = None
+        ENHANCED_SUPPORT_AVAILABLE = False
+else:
+    support_recommendation_engine = None
 
 # Routes
 
@@ -2270,6 +2298,403 @@ def check_product_availability():
         return jsonify({
             'success': False,
             'error': 'Failed to check product availability',
+            'message': str(e)
+        }), 500
+
+
+@app.route('/api/support/recommendations', methods=['POST'])
+def get_support_recommendations():
+    """🎯 Get intelligent customer support recommendations"""
+    try:
+        data = request.get_json()
+        customer_id = session.get('customer_id') if session.get('user_authenticated') else None
+
+        if not customer_id:
+            return jsonify({
+                'success': False,
+                'error': 'Authentication required for personalized support recommendations',
+                'message': 'Please log in to get personalized support assistance'
+            }), 401
+
+        # Extract request parameters
+        support_query = data.get('support_query', '')
+        scenario = data.get('scenario', 'general_browsing')
+        customer_mood = data.get('customer_mood', 'neutral')
+        conversation_history = data.get('conversation_history', [])
+        current_products = data.get('current_products', [])
+        cart_items = data.get('cart_items', [])
+        budget_range = data.get('budget_range')
+        urgency_level = data.get('urgency_level', 'medium')
+        preferred_categories = data.get('preferred_categories', [])
+
+        if not support_query:
+            return jsonify({
+                'success': False,
+                'error': 'Support query is required',
+                'message': 'Please provide your support question or request'
+            }), 400
+
+        # Use enhanced support engine if available
+        if ENHANCED_SUPPORT_AVAILABLE and support_recommendation_engine:
+            try:
+                # Convert scenario string to enum
+                scenario_enum = None
+                try:
+                    scenario_enum = SupportScenario(scenario)
+                except ValueError:
+                    scenario_enum = SupportScenario.GENERAL_BROWSING
+
+                # Create support request
+                support_request = SupportRecommendationRequest(
+                    customer_id=customer_id,
+                    support_query=support_query,
+                    scenario=scenario_enum,
+                    customer_mood=customer_mood,
+                    conversation_history=conversation_history,
+                    current_products=current_products,
+                    cart_items=cart_items,
+                    budget_range=tuple(budget_range) if budget_range and len(budget_range) == 2 else None,
+                    urgency_level=urgency_level,
+                    preferred_categories=preferred_categories,
+                    session_context=dict(session)
+                )
+
+                # Get enhanced recommendations
+                support_response = support_recommendation_engine.get_support_recommendations(support_request)
+
+                return jsonify({
+                    'success': True,
+                    'support_recommendations': {
+                        'recommendations': support_response.recommendations,
+                        'primary_message': support_response.primary_message,
+                        'secondary_message': support_response.secondary_message,
+                        'call_to_action': support_response.call_to_action,
+                        'confidence_score': support_response.confidence_score,
+                        'recommendation_reasoning': support_response.recommendation_reasoning,
+                        'total_recommendations': support_response.total_recommendations,
+                        'estimated_satisfaction_impact': support_response.estimated_satisfaction_impact,
+                        'next_best_actions': support_response.next_best_actions
+                    },
+                    'scenario': scenario,
+                    'customer_mood': customer_mood,
+                    'enhanced_support': True,
+                    'generated_at': datetime.now().isoformat()
+                })
+
+            except Exception as e:
+                app_logger.error(f"❌ Enhanced support recommendations error: {e}")
+                # Fallback to basic recommendations
+                pass
+
+        # Fallback to basic recommendations using existing engine
+        try:
+            basic_recommendations = recommendation_engine.get_comprehensive_recommendations(
+                customer_id=customer_id, limit=15)
+
+            return jsonify({
+                'success': True,
+                'support_recommendations': {
+                    'recommendations': basic_recommendations,
+                    'primary_message': "I'd be happy to help you find exactly what you need.",
+                    'secondary_message': f"Here are some personalized recommendations based on your preferences.",
+                    'call_to_action': "Which of these products interests you most?",
+                    'confidence_score': 0.7,
+                    'recommendation_reasoning': ["Based on your purchase history", "Popular among similar customers"],
+                    'total_recommendations': sum(len(recs) for recs in basic_recommendations.values()),
+                    'estimated_satisfaction_impact': "medium",
+                    'next_best_actions': ["Ask about specific products", "Add items to cart", "Get more details"]
+                },
+                'scenario': scenario,
+                'customer_mood': customer_mood,
+                'enhanced_support': False,
+                'generated_at': datetime.now().isoformat()
+            })
+
+        except Exception as e:
+            app_logger.error(f"❌ Basic support recommendations error: {e}")
+            return jsonify({
+                'success': False,
+                'error': 'Failed to generate support recommendations',
+                'message': 'Unable to provide recommendations at this time. Please try again.'
+            }), 500
+
+    except Exception as e:
+        app_logger.error(f"❌ Support recommendations endpoint error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Support recommendations service unavailable',
+            'message': str(e)
+        }), 500
+
+
+@app.route('/api/support/context-analysis', methods=['POST'])
+def analyze_support_context():
+    """🧠 Analyze customer support context for intelligent assistance"""
+    try:
+        data = request.get_json()
+        customer_id = session.get('customer_id') if session.get('user_authenticated') else None
+
+        support_query = data.get('support_query', '')
+        conversation_history = data.get('conversation_history', [])
+
+        if not support_query:
+            return jsonify({
+                'success': False,
+                'error': 'Support query is required for context analysis'
+            }), 400
+
+        # Analyze context using enhanced DB querying
+        try:
+            context_analysis = db_querying.analyze_customer_support_context(support_query, customer_id)
+
+            if hasattr(context_analysis, '__dict__'):
+                context_data = {
+                    'support_query': context_analysis.support_query,
+                    'support_category': context_analysis.support_category,
+                    'customer_mood': context_analysis.customer_mood,
+                    'conversation_stage': context_analysis.conversation_stage,
+                    'mentioned_products': context_analysis.mentioned_products,
+                    'problem_category': context_analysis.problem_category,
+                    'resolution_priority': context_analysis.resolution_priority
+                }
+            else:
+                context_data = context_analysis
+
+            # Get suggested scenarios based on context
+            suggested_scenarios = []
+            if context_data.get('support_category') == 'product_issue':
+                suggested_scenarios = ['troubleshooting', 'satisfaction_recovery', 'return_exchange']
+            elif context_data.get('support_category') == 'order_problem':
+                suggested_scenarios = ['order_assistance', 'satisfaction_recovery']
+            elif context_data.get('customer_mood') == 'frustrated':
+                suggested_scenarios = ['satisfaction_recovery', 'troubleshooting']
+            elif context_data.get('customer_mood') == 'curious':
+                suggested_scenarios = ['product_inquiry', 'product_comparison', 'general_browsing']
+            else:
+                suggested_scenarios = ['general_browsing', 'product_inquiry']
+
+            return jsonify({
+                'success': True,
+                'context_analysis': context_data,
+                'suggested_scenarios': suggested_scenarios,
+                'recommended_approach': {
+                    'urgency_level': 'high' if context_data.get('resolution_priority') == 'high' else 'medium',
+                    'response_tone': 'empathetic' if context_data.get('customer_mood') == 'frustrated' else 'helpful',
+                    'focus_areas': context_data.get('mentioned_products', []) + [context_data.get('problem_category', 'general')]
+                },
+                'generated_at': datetime.now().isoformat()
+            })
+
+        except Exception as e:
+            app_logger.error(f"❌ Context analysis error: {e}")
+
+            # Fallback basic analysis
+            basic_analysis = {
+                'support_query': support_query,
+                'support_category': 'general_inquiry',
+                'customer_mood': 'neutral',
+                'conversation_stage': 'initial',
+                'mentioned_products': [],
+                'problem_category': 'general',
+                'resolution_priority': 'medium'
+            }
+
+            return jsonify({
+                'success': True,
+                'context_analysis': basic_analysis,
+                'suggested_scenarios': ['general_browsing'],
+                'recommended_approach': {
+                    'urgency_level': 'medium',
+                    'response_tone': 'helpful',
+                    'focus_areas': ['general']
+                },
+                'fallback_used': True,
+                'generated_at': datetime.now().isoformat()
+            })
+
+    except Exception as e:
+        app_logger.error(f"❌ Support context analysis endpoint error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Context analysis service unavailable',
+            'message': str(e)
+        }), 500
+
+
+@app.route('/api/support/cross-sell', methods=['POST'])
+def get_cross_sell_recommendations():
+    """🛒 Get cross-sell recommendations for customer support"""
+    try:
+        data = request.get_json()
+        customer_id = session.get('customer_id') if session.get('user_authenticated') else None
+
+        if not customer_id:
+            return jsonify({
+                'success': False,
+                'error': 'Authentication required for cross-sell recommendations'
+            }), 401
+
+        current_product_id = data.get('current_product_id')
+        cart_items = data.get('cart_items', [])
+        limit = data.get('limit', 8)
+
+        # Get cross-sell recommendations
+        cross_sell_recs = recommendation_engine.get_cross_sell_recommendations(
+            customer_id=customer_id,
+            current_product_id=current_product_id,
+            cart_items=cart_items,
+            limit=limit
+        )
+
+        # Convert to JSON-serializable format
+        recommendations_data = []
+        for rec in cross_sell_recs:
+            recommendations_data.append({
+                'product_id': rec.product_id,
+                'product_name': rec.product_name,
+                'category': rec.category,
+                'brand': rec.brand,
+                'price': rec.price,
+                'price_formatted': rec.price_formatted,
+                'description': rec.description,
+                'stock_quantity': rec.stock_quantity,
+                'stock_status': rec.stock_status,
+                'recommendation_score': rec.recommendation_score,
+                'recommendation_reason': rec.recommendation_reason,
+                'recommendation_type': rec.recommendation_type.value
+            })
+
+        return jsonify({
+            'success': True,
+            'cross_sell_recommendations': recommendations_data,
+            'total_recommendations': len(recommendations_data),
+            'customer_id': customer_id,
+            'generated_at': datetime.now().isoformat()
+        })
+
+    except Exception as e:
+        app_logger.error(f"❌ Cross-sell recommendations error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to generate cross-sell recommendations',
+            'message': str(e)
+        }), 500
+
+
+@app.route('/api/support/upsell', methods=['POST'])
+def get_upsell_recommendations():
+    """⬆️ Get upsell recommendations for customer support"""
+    try:
+        data = request.get_json()
+        customer_id = session.get('customer_id') if session.get('user_authenticated') else None
+
+        if not customer_id:
+            return jsonify({
+                'success': False,
+                'error': 'Authentication required for upsell recommendations'
+            }), 401
+
+        current_product_id = data.get('current_product_id')
+        current_price = data.get('current_price')
+        limit = data.get('limit', 6)
+
+        # Get upsell recommendations
+        upsell_recs = recommendation_engine.get_upsell_recommendations(
+            customer_id=customer_id,
+            current_product_id=current_product_id,
+            current_price=current_price,
+            limit=limit
+        )
+
+        # Convert to JSON-serializable format
+        recommendations_data = []
+        for rec in upsell_recs:
+            recommendations_data.append({
+                'product_id': rec.product_id,
+                'product_name': rec.product_name,
+                'category': rec.category,
+                'brand': rec.brand,
+                'price': rec.price,
+                'price_formatted': rec.price_formatted,
+                'description': rec.description,
+                'stock_quantity': rec.stock_quantity,
+                'stock_status': rec.stock_status,
+                'recommendation_score': rec.recommendation_score,
+                'recommendation_reason': rec.recommendation_reason,
+                'recommendation_type': rec.recommendation_type.value
+            })
+
+        return jsonify({
+            'success': True,
+            'upsell_recommendations': recommendations_data,
+            'total_recommendations': len(recommendations_data),
+            'customer_id': customer_id,
+            'generated_at': datetime.now().isoformat()
+        })
+
+    except Exception as e:
+        app_logger.error(f"❌ Upsell recommendations error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to generate upsell recommendations',
+            'message': str(e)
+        }), 500
+
+
+@app.route('/api/support/cart-recovery', methods=['POST'])
+def get_cart_recovery_recommendations():
+    """🛒 Get cart abandonment recovery recommendations"""
+    try:
+        data = request.get_json()
+        customer_id = session.get('customer_id') if session.get('user_authenticated') else None
+
+        if not customer_id:
+            return jsonify({
+                'success': False,
+                'error': 'Authentication required for cart recovery recommendations'
+            }), 401
+
+        abandoned_items = data.get('abandoned_items', [])
+        limit = data.get('limit', 8)
+
+        # Get cart recovery recommendations
+        recovery_recs = recommendation_engine.get_abandoned_cart_recommendations(
+            customer_id=customer_id,
+            abandoned_items=abandoned_items,
+            limit=limit
+        )
+
+        # Convert to JSON-serializable format
+        recommendations_data = []
+        for rec in recovery_recs:
+            recommendations_data.append({
+                'product_id': rec.product_id,
+                'product_name': rec.product_name,
+                'category': rec.category,
+                'brand': rec.brand,
+                'price': rec.price,
+                'price_formatted': rec.price_formatted,
+                'description': rec.description,
+                'stock_quantity': rec.stock_quantity,
+                'stock_status': rec.stock_status,
+                'recommendation_score': rec.recommendation_score,
+                'recommendation_reason': rec.recommendation_reason,
+                'recommendation_type': rec.recommendation_type.value
+            })
+
+        return jsonify({
+            'success': True,
+            'cart_recovery_recommendations': recommendations_data,
+            'total_recommendations': len(recommendations_data),
+            'customer_id': customer_id,
+            'generated_at': datetime.now().isoformat()
+        })
+
+    except Exception as e:
+        app_logger.error(f"❌ Cart recovery recommendations error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to generate cart recovery recommendations',
             'message': str(e)
         }), 500
 

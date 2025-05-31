@@ -361,10 +361,29 @@ class OrderManagementSystem:
                 }
 
             # Create delivery info
+            # Handle different delivery address formats
+            if 'full_address' not in delivery_address:
+                # Build full address from components
+                address_parts = []
+                if 'street' in delivery_address:
+                    address_parts.append(delivery_address['street'])
+                if 'city' in delivery_address:
+                    address_parts.append(delivery_address['city'])
+                if 'state' in delivery_address:
+                    address_parts.append(delivery_address['state'])
+                if 'country' in delivery_address:
+                    address_parts.append(delivery_address['country'])
+                full_address = ', '.join(address_parts)
+            else:
+                full_address = delivery_address['full_address']
+
+            # Handle missing lga field
+            lga = delivery_address.get('lga', delivery_address.get('city', 'Municipal'))
+
             delivery_info = DeliveryInfo(
                 state=delivery_address['state'],
-                lga=delivery_address['lga'],
-                full_address=delivery_address['full_address'],
+                lga=lga,
+                full_address=full_address,
                 delivery_fee=order_calc['delivery_fee'],
                 estimated_delivery_days=order_calc['delivery_days'],
                 delivery_zone=order_calc['delivery_zone']
@@ -378,7 +397,7 @@ class OrderManagementSystem:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                     # Get customer info
                     cursor.execute("""
-                        SELECT name, email, phone FROM customers WHERE customer_id = %s
+                        SELECT name, email, phone, lga FROM customers WHERE customer_id = %s
                     """, (customer_id,))
                     customer_info = cursor.fetchone()
 
@@ -409,7 +428,7 @@ class OrderManagementSystem:
                     order_summary = OrderSummary(
                         order_id=formatted_order_id,  # Use formatted ID for display
                         customer_id=customer_id,
-                        customer_name=customer_info['name'],
+                        customer_name=customer_info.get('name', 'Unknown Customer'),
                         items=order_calc['order_items'],
                         subtotal=order_calc['subtotal'],
                         delivery_fee=order_calc['delivery_fee'],

@@ -27,6 +27,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import redis
 from groq import Groq
+import logging
 import decimal
 import time
 
@@ -177,6 +178,22 @@ Current Date & Time Context (West Africa Time):
 
         return context
 
+# Import the enhanced recommendation engine
+try:
+    from .recommendation_engine import ProductRecommendationEngine, CustomerSupportContext
+    from .order_ai_assistant import OrderAIAssistant
+    logger.info("✅ Successfully imported enhanced components")
+except ImportError:
+    try:
+        from recommendation_engine import ProductRecommendationEngine, CustomerSupportContext
+        from order_ai_assistant import OrderAIAssistant
+        logger.info("✅ Successfully imported enhanced components (direct)")
+    except ImportError:
+        logger.warning("⚠️ Enhanced components not available, using basic functionality")
+        ProductRecommendationEngine = None
+        CustomerSupportContext = None
+        OrderAIAssistant = None
+
 class EnhancedDatabaseQuerying:
     """
     🚀 Enhanced Database Querying System for Nigerian E-commerce
@@ -195,6 +212,30 @@ class EnhancedDatabaseQuerying:
         # Initialize Groq client
         self.groq_client = Groq(api_key=os.getenv('GROQ_API_KEY'))
 
+        # Initialize enhanced recommendation engine
+        try:
+            if ProductRecommendationEngine:
+                self.recommendation_engine = ProductRecommendationEngine()
+                logger.info("✅ Enhanced ProductRecommendationEngine initialized")
+            else:
+                self.recommendation_engine = None
+                logger.warning("⚠️ ProductRecommendationEngine not available")
+        except Exception as e:
+            logger.error(f"❌ Error initializing ProductRecommendationEngine: {e}")
+            self.recommendation_engine = None
+
+        # Initialize Order AI Assistant
+        try:
+            if OrderAIAssistant:
+                self.order_assistant = OrderAIAssistant()
+                logger.info("✅ OrderAIAssistant initialized")
+            else:
+                self.order_assistant = None
+                logger.warning("⚠️ OrderAIAssistant not available")
+        except Exception as e:
+            logger.error(f"❌ Error initializing OrderAIAssistant: {e}")
+            self.order_assistant = None
+
         # Initialize Redis for conversation memory
         try:
             self.redis_client = redis.Redis(
@@ -204,11 +245,14 @@ class EnhancedDatabaseQuerying:
                 decode_responses=True
             )
             self.redis_client.ping()
-            logger.info("✅ Redis connection established")
+            logger.info("✅ Redis conversation memory initialized")
         except Exception as e:
-            logger.warning(f"⚠️ Redis unavailable, using memory fallback: {e}")
+            logger.warning(f"⚠️ Redis unavailable: {e}")
             self.redis_client = None
-            self._memory_store = {}
+
+        # Enhanced conversation tracking
+        self.conversation_context = {}
+        self.customer_mood_cache = {}
 
         # Nigerian business intelligence helper
         self.ni_intelligence = NigerianBusinessIntelligence()
@@ -1154,264 +1198,185 @@ RESPONSE STYLE:
 """
 
     def generate_nigerian_response(self, query_context: QueryContext, conversation_history: List[Dict], session_context: Dict[str, Any] = None) -> str:
-        """
-          Generate Nigerian business-aware natural language response with enhanced emotional intelligence
-        """
-
-        # 🎭 STEP 1: Analyze user sentiment and emotional state
-        sentiment_data = self.detect_user_sentiment(query_context.user_query)
-        empathetic_style = self.get_empathetic_response_style(sentiment_data, query_context)
-
-        logger.info(f"🎭 Detected emotion: {sentiment_data['emotion']} (intensity: {sentiment_data['intensity']})")
-
-        # Continue with normal processing - scope already checked in process_enhanced_query
-        # Prepare execution results summary
-        results_summary = ""
-        if query_context.execution_result:
-            results_count = len(query_context.execution_result)
-            results_summary = f"Found {results_count} records. "
-
-            # DEBUG: Log the actual database result being passed to AI
-            logger.info(f"🔍 DEBUG: Database result passed to AI: {safe_json_dumps(query_context.execution_result, max_items=3)}")
-
-            # Format monetary values in Naira
-            for result in query_context.execution_result[:3]:  # Show first 3 results
-                for key, value in result.items():
-                    if key in ['total_amount', 'revenue', 'total_revenue'] and isinstance(value, (int, float)):
-                        result[f'{key}_formatted'] = self.ni_intelligence.format_naira(value)
-
-        # Get Nigerian time context
-        time_context = self.ni_intelligence.get_nigerian_timezone_context()
-
-        # Prepare conversation context
-        conversation_context = ""
-        if conversation_history:
-            conversation_context = f"Recent conversation history: {safe_json_dumps(conversation_history[-2:])}"
-
-        # Extract authentication status from session_context
-        customer_verified = session_context.get('customer_verified', False) if session_context else False
-        customer_id = session_context.get('customer_id', 'None') if session_context else 'None'
-        customer_name = session_context.get('customer_name', 'valued customer') if session_context else 'valued customer'
-
-        # 🆕 NEW CUSTOMER WITH NO ORDERS HANDLING
-        if (customer_verified and
-            query_context.query_type == QueryType.ORDER_ANALYTICS and
-            (not query_context.execution_result or len(query_context.execution_result) == 0)):
-            # This is an authenticated new customer with no orders yet
-            response_prompt = f"""
-You are a helpful customer support agent for raqibtech.com. You're speaking with {customer_name} (Customer ID: {customer_id}), a newly registered customer.
-
-🎭 EMOTIONAL INTELLIGENCE CONTEXT:
-User's Current Emotion: {sentiment_data['emotion']} (Intensity: {sentiment_data['intensity']})
-Empathy Required: {sentiment_data['empathy_needed']}
-Emotional Keywords Detected: {sentiment_data['keywords']}
-
-{empathetic_style}
-
-PLATFORM: raqibtech.com (Nigerian e-commerce platform)
-CONTEXT: This is a NEW CUSTOMER who just registered and has no order history yet.
-
-CUSTOMER'S QUESTION: "{query_context.user_query}"
-
-🌟 NEW CUSTOMER WELCOME GUIDELINES:
-1. 🎭 Respond according to their emotional state with appropriate emojis
-2. 🎉 Welcome them warmly to raqibtech.com as a new member
-3. 💡 Clearly explain they have no orders yet because they just joined
-4. 🛍️ Encourage them to start shopping with these highlights:
-   - 🏪 Amazing product catalog: Electronics, Fashion, Beauty, Computing, Automotive, Books
-   - 💰 Competitive prices in Nigerian Naira (₦)
-   - 📦 Nigeria-wide delivery (all 36 states + FCT)
-   - 💳 Multiple payment options: Pay on Delivery, Bank Transfer, Card, RaqibTechPay
-   - 🏆 Account tier progression: Bronze → Silver → Gold → Platinum
-5. 🎯 Suggest popular categories based on their preferences if available
-6. ✨ Mention new member benefits and exclusive deals
-7. 🤗 Offer to help them find their first purchase
-8. 📞 Provide customer support contact for assistance
-9. 🌟 End with excitement about helping them start their shopping journey
-
-🆕 PRODUCT RECOMMENDATIONS:
-10. 📱 Electronics: Latest Samsung, Tecno, Infinix phones; LG, Sony TVs
-11. 👗 Fashion: Trendy Ankara designs, Nike, Adidas sportswear
-12. 💄 Beauty: MAC cosmetics, Nigerian shea butter, skincare essentials
-13. 💻 Computing: HP, Dell laptops, gaming accessories, monitors
-14. 🚗 Automotive: Car accessories, batteries, tires, spare parts
-15. 📚 Books: Nigerian literature, educational materials, children's books
-
-Keep response warm, encouraging, and under 120 words. Make them excited to start shopping!
-
-Respond as a welcoming, enthusiastic customer support friend:
-"""
-        # 🔧 GUEST USER HANDLING: Provide different context for guest vs authenticated users
-        elif not customer_verified and query_context.query_type == QueryType.ORDER_ANALYTICS:
-            # For guest users asking about orders, provide platform information instead
-            response_prompt = f"""
-You are a helpful customer support guide for raqibtech.com. You're speaking with a guest user who isn't logged in.
-
-🎭 EMOTIONAL INTELLIGENCE CONTEXT:
-User's Current Emotion: {sentiment_data['emotion']} (Intensity: {sentiment_data['intensity']})
-Empathy Required: {sentiment_data['empathy_needed']}
-Emotional Keywords Detected: {sentiment_data['keywords']}
-
-{empathetic_style}
-
-PLATFORM: raqibtech.com (Nigerian e-commerce platform)
-GUEST USER CONTEXT: This user is not authenticated and cannot access personal order data.
-
-CUSTOMER'S QUESTION: "{query_context.user_query}"
-
-STRICT SCOPE RESTRICTIONS:
-- ONLY respond to raqibtech.com customer support related questions
-- DO NOT provide general knowledge, news, politics, or unrelated information
-- If asked about non-platform topics, redirect to raqibtech.com services
-- Focus exclusively on e-commerce, orders, payments, account, and platform help
-
-🌟 GUEST USER RESPONSE GUIDELINES:
-1. 🎭 Respond according to their emotional state with appropriate emojis
-2. 🔒 Explain that personal order tracking requires logging in or providing order ID
-3. 🛍️ Instead, provide helpful information about raqibtech.com's services:
-   - Nigeria-wide delivery (all 36 states + FCT)
-   - Payment options: Pay on Delivery, Bank Transfer, Card, RaqibTechPay
-   - Account tiers: Bronze, Silver, Gold, Platinum with increasing benefits
-   - 24/7 customer support availability
-4. 💡 Guide them on how to:
-   - Create an account for personalized service
-   - Track orders with order ID (if they have one)
-   - Contact support for immediate help
-5. 😊 Be warm, helpful, and encouraging about signing up
-6. 🎯 Focus on platform capabilities rather than personal data
-7. ✨ End with encouragement to join the platform for better service
-
-🆕 PRODUCT CATALOG GUIDANCE:
-8. 🏪 For product questions, showcase our amazing catalog:
-   - Electronics: Samsung, Apple, Tecno, Infinix phones, laptops, TVs
-   - Fashion: Ankara dresses, traditional wear, Nike, Adidas
-   - Beauty: Nigerian shea butter, MAC cosmetics, skincare
-   - Computing: HP, Dell laptops, monitors, accessories
-   - Automotive: Car parts, batteries, tires, accessories
-   - Books: Nigerian literature, textbooks, children's books
-9. 💰 Mention competitive prices in Nigerian Naira (₦)
-10. 📦 Highlight our extensive inventory and fast delivery
-11. 🎁 Encourage browsing our product categories
-
-Keep responses under 100 words but pack them with helpful information and appropriate emotion.
-
-Respond as a caring, helpful customer support guide:
-"""
-        else:
-            # Standard response prompt for authenticated users or general queries
-            response_prompt = f"""
-You are a caring, empathetic customer support agent for raqibtech.com. You are having a real-time conversation with a {customer_name}.
-
-🎭 EMOTIONAL INTELLIGENCE CONTEXT:
-User's Current Emotion: {sentiment_data['emotion']} (Intensity: {sentiment_data['intensity']})
-Empathy Required: {sentiment_data['empathy_needed']}
-Emotional Keywords Detected: {sentiment_data['keywords']}
-
-{empathetic_style}
-
-PLATFORM: raqibtech.com (Nigerian e-commerce platform)
-CONVERSATION TYPE: Live customer support chat
-
-STRICT SCOPE RESTRICTIONS:
-- ONLY respond to raqibtech.com customer support related questions
-- DO NOT provide general knowledge, news, politics, entertainment, or unrelated information
-- If asked about non-platform topics, politely redirect to raqibtech.com services
-- Focus exclusively on e-commerce, orders, payments, account, platform help, and Nigerian business context
-- Never answer questions about presidents, celebrities, general facts, homework, etc.
-
-CUSTOMER AUTHENTICATION STATUS:
-- Authenticated: {customer_verified}
-- Customer ID: {customer_id}
-- Customer Name: {customer_name}
-
-CONVERSATION HISTORY: {safe_json_dumps(conversation_history[-3:]) if conversation_history else "This is the start of the conversation"}
-
-CUSTOMER'S CURRENT MESSAGE: "{query_context.user_query}"
-AVAILABLE DATABASE INFO: {safe_json_dumps(query_context.execution_result, max_items=3) if query_context.execution_result else "No data found"}
-
-🌟 ENHANCED EMOTIONAL RESPONSE GUIDELINES:
-1. 🎭 ALWAYS respond according to the detected emotional state using appropriate emojis and tone
-2. 💝 If empathy is needed, start with emotional acknowledgment before providing information
-3. 😊 Use emojis throughout the response to match the customer's emotional state and brighten their day
-4. 🤗 Be a reliable support friend - warm, caring, and genuinely helpful
-5. 🌟 End responses with encouraging, positive energy and offer continued support
-6. 💙 If customer shows frustration, apologize sincerely and focus on immediate solutions
-7. 🎉 If customer is happy, share their joy and maintain the positive energy
-8. 💡 If customer is confused, be extra patient and break things down clearly with helpful emojis
-9. ⚡ If customer is impatient, acknowledge urgency and provide quick, actionable solutions
-10.   Maintain Nigerian business context while being emotionally intelligent
-
-CRITICAL: Do not give me any information about topics not related to raqibtech.com customer support. Do not justify your answers about non-platform topics. If the question is not about raqibtech.com services, politely redirect to platform-related assistance.
-
-TECHNICAL RESPONSE LOGIC:
-- If customer is NOT authenticated and asking about orders: Guide them warmly to log in or provide order ID
-- If customer IS authenticated and database has their order data: Use that data to help them enthusiastically
-- If database shows "Guest user - authentication required": Ask customer to log in with friendly guidance
-- If customer is asking about orders but you only have guest fallback data: Ask for authentication with understanding
-- Use database information directly to answer customer questions ONLY if it's legitimate customer data
-- If database shows order_status for a legitimate order: provide that exact status with appropriate emotional response
-- If customer provided order ID and you found real database results: use that information with matching emotion
-- Don't show random orders to guests - guide them to proper authentication with empathy
-- Keep responses under 100 words but pack them with emotion and helpfulness
-- Format currency as ₦ for Nigerian Naira
-
-🆕 PRODUCT INFORMATION HANDLING:
-- For product queries: Use database results to provide detailed product information with prices in ₦
-- Include product names, brands, categories, prices, and stock status when available
-- For inventory queries: Show stock levels and availability status with appropriate urgency
-- For category browsing: List products by category with brief descriptions and prices
-- For brand searches: Highlight brand-specific products with competitive pricing
-- For price comparisons: Show products in price ranges (Budget ₦0-50K, Mid-range ₦50K-200K, Premium ₦200K+)
-- Always mention Nigeria-wide delivery and multiple payment options
-- Use product database results to make personalized recommendations
-- If no specific products found: Guide to browse categories or suggest popular items
-
-🆕 SHOPPING AND ORDER ASSISTANCE:
-21. For ORDER_PLACEMENT queries: Get product details for ordering assistance
-22. For PRODUCT_RECOMMENDATIONS queries: Use collaborative filtering and popularity data
-23. For PRICE_INQUIRY queries: Focus on price comparisons and budget-friendly options
-24. For STOCK_CHECK queries: Prioritize availability status and alternative suggestions
-25. For SHOPPING_ASSISTANCE queries: Provide category browsing and general product information
-26. Include customer tier discounts and delivery information when relevant
-27. Format results to help customers make informed purchasing decisions
-28. Always check stock availability before suggesting products
-29. Include estimated delivery times and payment options in shopping assistance
-
-EMOJI USAGE BY EMOTION:
-- Frustrated: 😔, 💙, 🤗, ✨ (calming, supportive)
-- Worried: 🤗, 💙, ✨, 🌟 (comforting, reassuring)
-- Confused: 😊, 💡, 🎯, ✨ (helpful, clarifying)
-- Happy: 😊, 🎉, ✨, 🌟, 💚 (joyful, celebratory)
-- Impatient: ⚡, 🚀, 💨, ⏰ (urgent, action-oriented)
-- Neutral: 😊, ✨, 💙, 🌟 (warm, friendly)
-
-ORDER STATUS MEANINGS WITH EMOTIONAL CONTEXT:
-- "Pending": Order received and being prepared (use reassuring tone with ⏳, ✨)
-- "Processing": Order is being processed and prepared for delivery (use excited tone with 🚀, 📦)
-- "Delivered": Order has been delivered to customer (use celebratory tone with 🎉, ✅)
-- "Returned": Order was returned (use understanding tone with 🤗, 💙)
-
-Respond as a caring, emotionally intelligent customer support friend (no quotes, no signatures):
-"""
-
+        """🇳🇬 Generate Nigerian-style empathetic response with intelligent recommendations"""
         try:
+            customer_id = session_context.get('customer_id') if session_context else None
+
+            # Get intelligent recommendations for product-related queries
+            recommendations_data = None
+            if query_context.query_type in [QueryType.PRODUCT_PERFORMANCE, QueryType.PRODUCT_RECOMMENDATIONS,
+                                          QueryType.SHOPPING_ASSISTANCE, QueryType.PRODUCT_INFO_GENERAL]:
+                if customer_id:
+                    recommendations_data = self.get_intelligent_product_recommendations(
+                        customer_id, query_context.user_query, query_context)
+
+            # Build context for AI response generation
+            enhanced_context = {
+                'query_result': query_context.execution_result,
+                'query_type': query_context.query_type.value,
+                'user_query': query_context.user_query,
+                'conversation_history': conversation_history[-3:],  # Last 3 exchanges
+                'nigerian_time_context': NigerianBusinessIntelligence.get_nigerian_timezone_context(),
+                'session_context': session_context or {},
+                'recommendations': recommendations_data,
+                'customer_mood': None,
+                'support_context': None
+            }
+
+            # Add support context if available
+            if customer_id and recommendations_data and 'support_context' in recommendations_data:
+                enhanced_context['support_context'] = recommendations_data['support_context']
+                enhanced_context['customer_mood'] = recommendations_data['support_context'].get('customer_mood', 'neutral')
+
+            # Generate response with enhanced context
+            system_prompt = self._build_enhanced_system_prompt(enhanced_context)
+
+            # Generate AI response
             response = self.groq_client.chat.completions.create(
-                model="meta-llama/llama-4-scout-17b-16e-instruct",  # Keep for complex emotional understanding
+                model="llama-3.3-70b-versatile",
                 messages=[
-                    {"role": "system", "content": response_prompt},
-                    {"role": "user", "content": f"Generate emotionally intelligent response for: {query_context.user_query}"}
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"""
+                    Based on the customer query: "{query_context.user_query}"
+
+                    Query results: {safe_json_dumps(query_context.execution_result, max_items=3)}
+
+                    {f"Intelligent recommendations available: {recommendations_data['total_recommendations']} products across {len(recommendations_data.get('recommendations', {}))} categories" if recommendations_data and recommendations_data.get('success') else ""}
+
+                    Provide a helpful, empathetic Nigerian customer support response.
+                    """}
                 ],
-                temperature=0.7,  # Increased for more creative emotional responses
-                max_tokens=500    # Increased for more detailed emotional responses
+                temperature=0.7,
+                max_tokens=2000
             )
 
             ai_response = response.choices[0].message.content.strip()
-            logger.info(f"  Generated emotionally intelligent Nigerian response with {sentiment_data['emotion']} tone")
+
+            # Enhance response with recommendation details if available
+            if recommendations_data and recommendations_data.get('success') and recommendations_data.get('recommendations'):
+                ai_response = self._enhance_response_with_recommendations(ai_response, recommendations_data)
+
             return ai_response
 
         except Exception as e:
-            logger.error(f"❌ Response generation error: {e}")
-            return self._get_fallback_emotional_response(query_context, sentiment_data)
+            logger.error(f"❌ Error generating Nigerian response: {e}")
+            return self._get_fallback_emotional_response(query_context, {'sentiment': 'neutral'})
+
+    def _build_enhanced_system_prompt(self, context: Dict[str, Any]) -> str:
+        """🎯 Build enhanced system prompt with recommendation context"""
+
+        mood_guidance = ""
+        if context.get('customer_mood'):
+            mood = context['customer_mood']
+            if mood == "frustrated":
+                mood_guidance = """
+                CUSTOMER MOOD: FRUSTRATED - Be genuinely empathetic and solution-focused.
+                - Acknowledge their feelings with sincere understanding
+                - Focus on solving their immediate problem first
+                - Keep responses concise and helpful
+                - Offer one clear, quality solution
+                """
+            elif mood == "curious":
+                mood_guidance = """
+                CUSTOMER MOOD: CURIOUS - Be helpful and informative but concise.
+                - Answer their question directly
+                - Provide relevant context without overwhelming
+                - Suggest 1-2 related options if helpful
+                """
+            elif mood == "urgent":
+                mood_guidance = """
+                CUSTOMER MOOD: URGENT - Be direct and action-oriented.
+                - Address their need immediately
+                - Provide the fastest solution
+                - Skip unnecessary details
+                - Give clear next steps
+                """
+
+        recommendations_guidance = ""
+        if context.get('recommendations') and context['recommendations'].get('success'):
+            recs = context['recommendations']['recommendations']
+            recommendations_guidance = f"""
+            RECOMMENDATIONS AVAILABLE: {context['recommendations']['total_recommendations']} products
+            - Only mention 2-3 most relevant products maximum
+            - Integrate naturally into conversation, don't create separate sections
+            - Focus on how they help solve the customer's specific need
+            - Include price in Nigerian Naira format
+            """
+
+        return f"""
+        You are a caring Nigerian e-commerce customer support agent who genuinely wants to help.
+
+        PERSONALITY:
+        - Warm, understanding, and emotionally intelligent
+        - Concise but caring - keep responses under 3 sentences when possible
+        - Focus on the customer's feelings and immediate needs first
+        - Nigerian cultural awareness with authentic warmth
+
+        {mood_guidance}
+
+        {recommendations_guidance}
+
+        RESPONSE STYLE:
+        1. 💙 Lead with genuine empathy - acknowledge their feelings
+        2. 🎯 Address their specific need directly and concisely
+        3. 🛍️ If relevant, mention 1-2 helpful products naturally
+        4. 💰 Use ₦ format for prices
+        5. 🤝 End with supportive next step
+
+        KEEP IT SIMPLE:
+        - Maximum 4-5 lines for most responses
+        - One main point per response
+        - Show genuine care, not just sales focus
+        - Use fewer emojis (max 3-4 per response)
+
+        Current query: {context.get('query_type', 'general')}
+        """
+
+    def _enhance_response_with_recommendations(self, base_response: str, recommendations_data: Dict[str, Any]) -> str:
+        """🎯 Enhance response with specific recommendation details"""
+        try:
+            if not recommendations_data.get('success') or not recommendations_data.get('recommendations'):
+                return base_response
+
+            recs = recommendations_data['recommendations']
+
+            # Only add 2-3 most relevant products naturally
+            relevant_products = []
+
+            # Get products from the first category (most relevant)
+            for category, products in recs.items():
+                if products and len(relevant_products) < 3:
+                    for product in products[:2]:  # Max 2 from each category
+                        if len(relevant_products) >= 3:
+                            break
+
+                        if isinstance(product, dict):
+                            name = product.get('product_name', 'Unknown Product')
+                            price = product.get('price_formatted', product.get('price', 'N/A'))
+                            relevant_products.append(f"{name} (₦{price})" if '₦' not in str(price) else f"{name} ({price})")
+                        else:
+                            name = getattr(product, 'product_name', 'Unknown Product')
+                            price = getattr(product, 'price_formatted', 'N/A')
+                            relevant_products.append(f"{name} ({price})")
+
+            # Add products naturally to response if any found
+            if relevant_products:
+                if len(relevant_products) == 1:
+                    addition = f" You might like {relevant_products[0]}."
+                elif len(relevant_products) == 2:
+                    addition = f" You might like {relevant_products[0]} or {relevant_products[1]}."
+                else:
+                    addition = f" You might like {relevant_products[0]}, {relevant_products[1]} or {relevant_products[2]}."
+
+                enhanced_response = base_response + addition
+            else:
+                enhanced_response = base_response
+
+            return enhanced_response
+
+        except Exception as e:
+            logger.error(f"❌ Error enhancing response with recommendations: {e}")
+            return base_response
 
     def _get_fallback_emotional_response(self, query_context: QueryContext, sentiment_data: Dict[str, Any]) -> str:
         """Generate fallback emotional response for error scenarios"""
@@ -1651,14 +1616,34 @@ How can I help you with your raqibtech.com experience today? 🌟"""
 
             # 🆕 STEP 1.5: Check if this is a SHOPPING/ORDER ACTION that needs execution
             try:
-                from order_ai_assistant import order_ai_assistant
+                # Try multiple import methods to ensure we get the order_ai_assistant
+                import sys
+                import os
+
+                # Method 1: Try direct import
+                from src.order_ai_assistant import order_ai_assistant
                 order_ai_available = True
-            except ImportError:
+                logger.info("✅ order_ai_assistant imported successfully with src import")
+            except ImportError as e1:
+                logger.warning(f"⚠️ src import failed: {e1}")
                 try:
-                    from .order_ai_assistant import order_ai_assistant
+                    # Method 2: Add src to path and import
+                    src_path = os.path.join(os.path.dirname(__file__), '..', 'src')
+                    if src_path not in sys.path:
+                        sys.path.append(src_path)
+                    from order_ai_assistant import order_ai_assistant
                     order_ai_available = True
-                except ImportError:
-                    order_ai_available = False
+                    logger.info("✅ order_ai_assistant imported after adding src to path")
+                except ImportError as e2:
+                    logger.warning(f"⚠️ Path import failed: {e2}")
+                    try:
+                        # Method 3: Relative import
+                        from .order_ai_assistant import order_ai_assistant
+                        order_ai_available = True
+                        logger.info("✅ order_ai_assistant imported with relative import")
+                    except ImportError as e3:
+                        logger.error(f"❌ All import methods failed: {e3}")
+                        order_ai_available = False
 
             logger.info(f"🔍 Shopping check: order_ai_available={order_ai_available}, session_context={bool(session_context)}, user_authenticated={session_context.get('user_authenticated') if session_context else False}")
 
@@ -1749,7 +1734,7 @@ How can I help you with your raqibtech.com experience today? 🌟"""
                             except Exception as e:
                                 logger.warning(f"⚠️ Could not query Samsung Galaxy A24: {e}")
 
-                        
+
 
 # 1. NEW PRIORITY: Handle specific product names in order requests
                         #    Example: "place the order for the Samsung Galaxy A24 128GB for me"
@@ -1846,9 +1831,29 @@ How can I help you with your raqibtech.com experience today? 🌟"""
                         logger.info(f"🎯 Total product context for shopping: {len(product_context)} products")
 
                         # Process through Order AI Assistant
-                        shopping_result = order_ai_assistant.process_shopping_conversation(
-                            user_query, customer_id, product_context
-                        )
+                        logger.info(f"🛒 Calling order_ai_assistant.process_shopping_conversation for customer {customer_id}")
+                        logger.info(f"📝 Query: {user_query[:100]}...")
+                        logger.info(f"📦 Product context: {len(product_context)} products")
+
+                        try:
+                            shopping_result = order_ai_assistant.process_shopping_conversation(
+                                user_query, customer_id, product_context
+                            )
+                            logger.info(f"🎯 Shopping result: success={shopping_result.get('success', False)}, action={shopping_result.get('action', 'unknown')}")
+
+                            # If order was placed, verify it in database
+                            if shopping_result.get('success') and shopping_result.get('action') == 'order_placed':
+                                order_id = shopping_result.get('order_id')
+                                logger.info(f"✅ ORDER PLACED! Verifying order {order_id} in database...")
+                                self._verify_order_in_database(order_id, customer_id)
+
+                        except Exception as shopping_error:
+                            logger.error(f"❌ Error in shopping conversation: {shopping_error}")
+                            shopping_result = {
+                                'success': False,
+                                'message': f"Shopping system error: {str(shopping_error)}",
+                                'action': 'system_error'
+                            }
 
                         if shopping_result['success']:
                             # Generate enhanced response with shopping context
@@ -1951,6 +1956,51 @@ How can I help you with your raqibtech.com experience today? 🌟"""
                 'execution_time': f"{execution_time:.3f}s",
                 'error': str(e)
             }
+
+
+    def _verify_order_in_database(self, order_id: str, customer_id: int):
+        """Verify that an order was actually saved to the database"""
+        try:
+            with self.get_database_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    # Check if order exists in database
+                    cursor.execute("""
+                        SELECT order_id, customer_id, order_status, total_amount, created_at
+                        FROM orders
+                        WHERE customer_id = %s
+                        ORDER BY created_at DESC
+                        LIMIT 5
+                    """, (customer_id,))
+
+                    recent_orders = cursor.fetchall()
+                    logger.info(f"📋 Found {len(recent_orders)} recent orders for customer {customer_id}")
+
+                    for order in recent_orders:
+                        logger.info(f"   Order {order['order_id']}: {order['order_status']} - ₦{order['total_amount']} ({order['created_at']})")
+
+                    # Check if the specific order exists (either by formatted ID or database ID)
+                    if order_id.startswith('RQB'):
+                        # This is a formatted order ID, extract the numeric part
+                        numeric_part = order_id.replace('RQB', '').replace(datetime.now().strftime('%Y%m%d'), '')
+                        try:
+                            db_order_id = int(numeric_part)
+                            cursor.execute("SELECT * FROM orders WHERE order_id = %s", (db_order_id,))
+                        except:
+                            cursor.execute("SELECT * FROM orders WHERE customer_id = %s ORDER BY created_at DESC LIMIT 1", (customer_id,))
+                    else:
+                        cursor.execute("SELECT * FROM orders WHERE customer_id = %s ORDER BY created_at DESC LIMIT 1", (customer_id,))
+
+                    order_record = cursor.fetchone()
+                    if order_record:
+                        logger.info(f"✅ ORDER VERIFIED IN DATABASE: {order_record['order_id']} for customer {customer_id}")
+                        return True
+                    else:
+                        logger.error(f"❌ ORDER NOT FOUND IN DATABASE! Order {order_id} for customer {customer_id}")
+                        return False
+
+        except Exception as e:
+            logger.error(f"❌ Error verifying order in database: {e}")
+            return False
 
     def _generate_shopping_response(self, shopping_result: Dict[str, Any]) -> str:
         """🛒 Generate enhanced response for shopping actions"""
@@ -2062,4 +2112,263 @@ Need help with shopping? I can assist you with:
 • 💳 Payment assistance
 
 How can I help you today? 😊"""
+
+    def analyze_customer_support_context(self, user_query: str, customer_id: int = None):
+        """🎯 Analyze customer support context for intelligent recommendations"""
+        try:
+            query_lower = user_query.lower()
+
+            # Determine support category
+            if any(term in query_lower for term in ['broken', 'defective', 'not working', 'issue', 'problem', 'complaint']):
+                support_category = "product_issue"
+                problem_category = "quality"
+            elif any(term in query_lower for term in ['order', 'delivery', 'shipping', 'delayed', 'missing']):
+                support_category = "order_problem"
+                problem_category = "delivery"
+            elif any(term in query_lower for term in ['payment', 'refund', 'charge', 'billing']):
+                support_category = "order_problem"
+                problem_category = "payment"
+            elif any(term in query_lower for term in ['return', 'exchange', 'warranty']):
+                support_category = "product_issue"
+                problem_category = "returns"
+            else:
+                support_category = "general_inquiry"
+                problem_category = "general"
+
+            # Determine customer mood
+            if any(term in query_lower for term in ['angry', 'frustrated', 'terrible', 'awful', 'hate', 'worst']):
+                customer_mood = "frustrated"
+                resolution_priority = "high"
+            elif any(term in query_lower for term in ['urgent', 'asap', 'immediately', 'emergency']):
+                customer_mood = "urgent"
+                resolution_priority = "high"
+            elif any(term in query_lower for term in ['curious', 'wondering', 'interested', 'tell me', 'how']):
+                customer_mood = "curious"
+                resolution_priority = "medium"
+            elif any(term in query_lower for term in ['thanks', 'appreciate', 'good', 'excellent']):
+                customer_mood = "satisfied"
+                resolution_priority = "low"
+            else:
+                customer_mood = "neutral"
+                resolution_priority = "medium"
+
+            # Extract mentioned products
+            mentioned_products = []
+            for brand in NIGERIAN_POPULAR_BRANDS:
+                if brand.lower() in query_lower:
+                    mentioned_products.append(brand)
+
+            # Determine conversation stage
+            conversation_stage = "initial"  # Default for new queries
+            if customer_id and customer_id in self.conversation_context:
+                context = self.conversation_context[customer_id]
+                if context.get('interaction_count', 0) > 1:
+                    conversation_stage = "followup"
+                elif context.get('has_recommendations', False):
+                    conversation_stage = "solution"
+
+            if CustomerSupportContext:
+                return CustomerSupportContext(
+                    support_query=user_query,
+                    support_category=support_category,
+                    customer_mood=customer_mood,
+                    conversation_stage=conversation_stage,
+                    mentioned_products=mentioned_products,
+                    problem_category=problem_category,
+                    resolution_priority=resolution_priority
+                )
+            else:
+                # Return a simple dict if the class is not available
+                return {
+                    'support_query': user_query,
+                    'support_category': support_category,
+                    'customer_mood': customer_mood,
+                    'conversation_stage': conversation_stage,
+                    'mentioned_products': mentioned_products,
+                    'problem_category': problem_category,
+                    'resolution_priority': resolution_priority
+                }
+
+        except Exception as e:
+            logger.error(f"❌ Error analyzing support context: {e}")
+            # Return basic context
+            if CustomerSupportContext:
+                return CustomerSupportContext(
+                    support_query=user_query,
+                    support_category="general_inquiry",
+                    customer_mood="neutral",
+                    conversation_stage="initial",
+                    mentioned_products=[],
+                    problem_category="general",
+                    resolution_priority="medium"
+                )
+            else:
+                return {
+                    'support_query': user_query,
+                    'support_category': "general_inquiry",
+                    'customer_mood': "neutral",
+                    'conversation_stage': "initial",
+                    'mentioned_products': [],
+                    'problem_category': "general",
+                    'resolution_priority': "medium"
+                }
+
+    def get_intelligent_product_recommendations(self, customer_id: int, user_query: str,
+                                              query_context: QueryContext) -> Dict[str, Any]:
+        """🎯 Get intelligent product recommendations based on customer support context"""
+        try:
+            if not self.recommendation_engine:
+                return self._get_basic_product_recommendations(customer_id, user_query, query_context)
+
+            # Analyze support context
+            support_context = self.analyze_customer_support_context(user_query, customer_id)
+
+            recommendations = {}
+
+            # Get context-aware recommendations
+            if hasattr(support_context, 'support_category'):
+                support_recommendations = self.recommendation_engine.get_customer_support_recommendations(
+                    customer_id, support_context, limit=8)
+                if support_recommendations:
+                    recommendations['support_focused'] = support_recommendations
+
+            # Get comprehensive recommendations for comparison
+            comprehensive_recs = self.recommendation_engine.get_comprehensive_recommendations(
+                customer_id, limit=15)
+
+            if comprehensive_recs:
+                # Filter based on context
+                context_mood = getattr(support_context, 'customer_mood', 'neutral') if hasattr(support_context, 'customer_mood') else support_context.get('customer_mood', 'neutral')
+
+                if context_mood == "frustrated":
+                    # Prioritize premium products for frustrated customers
+                    recommendations['satisfaction_recovery'] = comprehensive_recs.get('upgrade_tier', [])[:4]
+                    recommendations['reliable_alternatives'] = comprehensive_recs.get('for_you', [])[:4]
+                elif context_mood == "curious":
+                    # Show trending and diverse options
+                    recommendations['trending_now'] = comprehensive_recs.get('trending', [])[:6]
+                    recommendations['explore_categories'] = comprehensive_recs.get('popular', [])[:4]
+                else:
+                    # Standard personalized recommendations
+                    recommendations['personalized'] = comprehensive_recs.get('for_you', [])[:6]
+                    recommendations['popular_choices'] = comprehensive_recs.get('popular', [])[:4]
+
+            # Add cross-sell and upsell for shopping contexts
+            if any(term in user_query.lower() for term in ['buy', 'purchase', 'add to cart', 'checkout']):
+                # Track browsing and get cross-sell recommendations
+                if hasattr(support_context, 'mentioned_products') and support_context.mentioned_products:
+                    product_name = support_context.mentioned_products[0] if support_context.mentioned_products else None
+                elif support_context.get('mentioned_products'):
+                    product_name = support_context['mentioned_products'][0] if support_context['mentioned_products'] else None
+                else:
+                    product_name = None
+
+                if product_name:
+                    # Find product ID for cross-sell
+                    product_id = self._find_product_id_by_name(product_name)
+                    if product_id:
+                        cross_sell_recs = self.recommendation_engine.get_cross_sell_recommendations(
+                            customer_id, product_id, limit=4)
+                        if cross_sell_recs:
+                            recommendations['frequently_bought_together'] = cross_sell_recs
+
+                        upsell_recs = self.recommendation_engine.get_upsell_recommendations(
+                            customer_id, product_id, limit=3)
+                        if upsell_recs:
+                            recommendations['premium_alternatives'] = upsell_recs
+
+            # Update conversation context
+            if customer_id:
+                if customer_id not in self.conversation_context:
+                    self.conversation_context[customer_id] = {'interaction_count': 0}
+
+                self.conversation_context[customer_id]['interaction_count'] += 1
+                self.conversation_context[customer_id]['has_recommendations'] = bool(recommendations)
+                self.conversation_context[customer_id]['last_query'] = user_query
+                self.conversation_context[customer_id]['last_mood'] = getattr(support_context, 'customer_mood', 'neutral') if hasattr(support_context, 'customer_mood') else support_context.get('customer_mood', 'neutral')
+
+            return {
+                'success': True,
+                'recommendations': recommendations,
+                'support_context': support_context.__dict__ if hasattr(support_context, '__dict__') else support_context,
+                'total_recommendations': sum(len(recs) for recs in recommendations.values()),
+                'context_aware': True
+            }
+
+        except Exception as e:
+            logger.error(f"❌ Error getting intelligent recommendations: {e}")
+            return self._get_basic_product_recommendations(customer_id, user_query, query_context)
+
+    def _find_product_id_by_name(self, product_name: str) -> Optional[int]:
+        """🔍 Find product ID by name similarity"""
+        try:
+            with self.get_database_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute("""
+                        SELECT product_id FROM products
+                        WHERE product_name ILIKE %s OR brand ILIKE %s
+                        LIMIT 1
+                    """, (f"%{product_name}%", f"%{product_name}%"))
+
+                    result = cursor.fetchone()
+                    return result['product_id'] if result else None
+
+        except Exception as e:
+            logger.error(f"❌ Error finding product ID: {e}")
+            return None
+
+    def _get_basic_product_recommendations(self, customer_id: int, user_query: str,
+                                         query_context: QueryContext) -> Dict[str, Any]:
+        """📦 Basic product recommendations fallback"""
+        try:
+            with self.get_database_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+
+                    # Get popular products as fallback
+                    cursor.execute("""
+                        SELECT p.product_id, p.product_name, p.category, p.brand,
+                               p.price, p.description, p.stock_quantity,
+                               COUNT(o.order_id) as popularity
+                        FROM products p
+                        LEFT JOIN orders o ON p.product_id = o.product_id
+                        WHERE p.in_stock = true AND p.stock_quantity > 0
+                        GROUP BY p.product_id, p.product_name, p.category, p.brand,
+                                 p.price, p.description, p.stock_quantity
+                        ORDER BY popularity DESC
+                        LIMIT 10
+                    """)
+
+                    products = cursor.fetchall()
+
+                    basic_recommendations = []
+                    for product in products:
+                        basic_recommendations.append({
+                            'product_id': product['product_id'],
+                            'product_name': product['product_name'],
+                            'category': product['category'],
+                            'brand': product['brand'],
+                            'price': float(product['price']),
+                            'price_formatted': NigerianBusinessIntelligence.format_naira(product['price']),
+                            'description': product['description'] or "",
+                            'stock_quantity': product['stock_quantity'],
+                            'popularity': product['popularity'],
+                            'recommendation_reason': f"Popular choice • {product['popularity']} orders"
+                        })
+
+                    return {
+                        'success': True,
+                        'recommendations': {'popular': basic_recommendations},
+                        'total_recommendations': len(basic_recommendations),
+                        'context_aware': False
+                    }
+
+        except Exception as e:
+            logger.error(f"❌ Error getting basic recommendations: {e}")
+            return {
+                'success': False,
+                'recommendations': {},
+                'total_recommendations': 0,
+                'context_aware': False,
+                'error': str(e)
+            }
 

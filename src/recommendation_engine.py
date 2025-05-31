@@ -53,6 +53,15 @@ class RecommendationType(Enum):
     SEASONAL_TRENDING = "seasonal_trending"
     CROSS_SELL = "cross_sell"
     UP_SELL = "up_sell"
+    SIMILAR_PRODUCTS = "similar_products"
+    BOUGHT_TOGETHER = "bought_together"
+    RECENTLY_VIEWED = "recently_viewed"
+    ABANDONED_CART_RECOVERY = "abandoned_cart_recovery"
+    CUSTOMER_SUPPORT_CONTEXTUAL = "customer_support_contextual"
+    PRICE_DROP_ALERT = "price_drop_alert"
+    BACK_IN_STOCK = "back_in_stock"
+    BROWSING_CONTINUATION = "browsing_continuation"
+    PROBLEM_SOLVING = "problem_solving"
 
 @dataclass
 class RecommendationResult:
@@ -87,6 +96,17 @@ class CustomerProfile:
     total_orders: int
     last_order_date: Optional[datetime]
     price_sensitivity: str  # "budget", "mid_range", "premium"
+
+@dataclass
+class CustomerSupportContext:
+    """Context for customer support recommendations"""
+    support_query: str
+    support_category: str  # "product_issue", "order_problem", "general_inquiry"
+    customer_mood: str  # "frustrated", "curious", "satisfied", "urgent"
+    conversation_stage: str  # "initial", "diagnosis", "solution", "followup"
+    mentioned_products: List[str]
+    problem_category: str  # "quality", "delivery", "payment", "returns"
+    resolution_priority: str  # "high", "medium", "low"
 
 class NigerianMarketIntelligence:
     """Nigerian market-specific intelligence and trends"""
@@ -175,6 +195,9 @@ class ProductRecommendationEngine:
             self.redis_client = None
 
         self.market_intelligence = NigerianMarketIntelligence()
+
+        # Cache for browsing behavior
+        self.browsing_cache = {}
 
     def get_database_connection(self):
         """Get database connection"""
@@ -780,3 +803,534 @@ class ProductRecommendationEngine:
             return f"₦{amount/1_000:.1f}K"
         else:
             return f"₦{amount:,.0f}"
+
+    def track_customer_browsing(self, customer_id: int, product_id: int, action: str = "view"):
+        """🔍 Track customer browsing behavior for better recommendations"""
+        try:
+            timestamp = datetime.now()
+            browsing_key = f"browsing_{customer_id}"
+
+            if browsing_key not in self.browsing_cache:
+                self.browsing_cache[browsing_key] = []
+
+            self.browsing_cache[browsing_key].append({
+                'product_id': product_id,
+                'action': action,
+                'timestamp': timestamp
+            })
+
+            # Keep only last 50 browsing actions
+            self.browsing_cache[browsing_key] = self.browsing_cache[browsing_key][-50:]
+
+            # Store in Redis if available
+            if self.redis_client:
+                self.redis_client.lpush(f"browsing:{customer_id}",
+                                      f"{product_id}:{action}:{timestamp.isoformat()}")
+                self.redis_client.ltrim(f"browsing:{customer_id}", 0, 49)
+
+        except Exception as e:
+            logger.error(f"❌ Error tracking browsing behavior: {e}")
+
+    def get_customer_support_recommendations(self, customer_id: int, support_context: CustomerSupportContext,
+                                           limit: int = 10) -> List[RecommendationResult]:
+        """🎯 Context-aware recommendations for customer support scenarios"""
+        try:
+            customer_profile = self.get_customer_profile(customer_id)
+            recommendations = []
+
+            # Problem-solving recommendations based on support context
+            if support_context.support_category == "product_issue":
+                # Recommend alternative products or upgrades
+                recommendations.extend(self._get_problem_solving_recommendations(
+                    customer_profile, support_context, limit // 2))
+
+            elif support_context.support_category == "order_problem":
+                # Recommend similar products or replacement options
+                recommendations.extend(self._get_order_replacement_recommendations(
+                    customer_profile, support_context, limit // 2))
+
+            elif support_context.support_category == "general_inquiry":
+                # Recommend based on inquiry context
+                recommendations.extend(self._get_inquiry_based_recommendations(
+                    customer_profile, support_context, limit // 2))
+
+            # Add mood-based recommendations
+            if support_context.customer_mood == "frustrated":
+                # Offer premium alternatives or satisfaction guarantees
+                recommendations.extend(self._get_satisfaction_recovery_recommendations(
+                    customer_profile, support_context, limit // 2))
+            elif support_context.customer_mood == "curious":
+                # Educational or exploratory products
+                recommendations.extend(self._get_educational_recommendations(
+                    customer_profile, support_context, limit // 2))
+
+            # Sort by relevance and remove duplicates
+            seen_products = set()
+            unique_recommendations = []
+            for rec in sorted(recommendations, key=lambda x: x.recommendation_score, reverse=True):
+                if rec.product_id not in seen_products:
+                    seen_products.add(rec.product_id)
+                    unique_recommendations.append(rec)
+
+            return unique_recommendations[:limit]
+
+        except Exception as e:
+            logger.error(f"❌ Error getting customer support recommendations: {e}")
+            return []
+
+    def get_cross_sell_recommendations(self, customer_id: int, current_product_id: int = None,
+                                     cart_items: List[Dict] = None, limit: int = 8) -> List[RecommendationResult]:
+        """🛒 Cross-sell recommendations for complementary products"""
+        try:
+            with self.get_database_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+
+                    # Get products frequently bought together
+                    product_ids = []
+                    if current_product_id:
+                        product_ids.append(current_product_id)
+                    if cart_items:
+                        product_ids.extend([item.get('product_id') for item in cart_items if item.get('product_id')])
+
+                    if not product_ids:
+                        return []
+
+                    # Find products frequently bought with current products
+                    placeholders = ','.join(['%s'] * len(product_ids))
+                    cursor.execute(f"""
+                        WITH target_orders AS (
+                            SELECT DISTINCT order_id, customer_id
+                            FROM orders
+                            WHERE product_id IN ({placeholders})
+                        ),
+                        complementary_products AS (
+                            SELECT p.product_id, p.product_name, p.category, p.brand,
+                                   p.price, p.description, p.stock_quantity, p.in_stock,
+                                   COUNT(DISTINCT o.order_id) as co_purchase_frequency,
+                                   AVG(o.total_amount) as avg_order_value
+                            FROM target_orders to_orders
+                            JOIN orders o ON to_orders.order_id = o.order_id
+                            JOIN products p ON o.product_id = p.product_id
+                            WHERE p.product_id NOT IN ({placeholders})
+                            AND p.in_stock = true AND p.stock_quantity > 0
+                            GROUP BY p.product_id, p.product_name, p.category, p.brand,
+                                     p.price, p.description, p.stock_quantity, p.in_stock
+                            HAVING COUNT(DISTINCT o.order_id) >= 2
+                            ORDER BY co_purchase_frequency DESC, avg_order_value DESC
+                            LIMIT %s
+                        )
+                        SELECT * FROM complementary_products
+                    """, tuple(product_ids + product_ids + [limit]))
+
+                    products = cursor.fetchall()
+
+                    recommendations = []
+                    for product in products:
+                        stock_status = self._get_stock_status(product['stock_quantity'])
+
+                        recommendations.append(RecommendationResult(
+                            product_id=product['product_id'],
+                            product_name=product['product_name'],
+                            category=product['category'],
+                            brand=product['brand'],
+                            price=float(product['price']),
+                            price_formatted=self._format_naira(product['price']),
+                            description=product['description'] or "",
+                            stock_quantity=product['stock_quantity'],
+                            stock_status=stock_status,
+                            recommendation_score=float(product['co_purchase_frequency']) * 1.5,
+                            recommendation_reason=f"Frequently bought together • {product['co_purchase_frequency']} co-purchases",
+                            recommendation_type=RecommendationType.CROSS_SELL
+                        ))
+
+                    return recommendations
+
+        except Exception as e:
+            logger.error(f"❌ Error getting cross-sell recommendations: {e}")
+            return []
+
+    def get_upsell_recommendations(self, customer_id: int, current_product_id: int = None,
+                                 current_price: float = None, limit: int = 6) -> List[RecommendationResult]:
+        """⬆️ Upsell recommendations for higher-value products"""
+        try:
+            customer_profile = self.get_customer_profile(customer_id)
+
+            with self.get_database_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+
+                    # Get current product info if not provided
+                    if current_product_id and not current_price:
+                        cursor.execute("SELECT price, category FROM products WHERE product_id = %s",
+                                     (current_product_id,))
+                        product_info = cursor.fetchone()
+                        if product_info:
+                            current_price = float(product_info['price'])
+                            category = product_info['category']
+                        else:
+                            return []
+
+                    if not current_price:
+                        current_price = customer_profile.average_order_value or 100000  # Default 100K
+
+                    # Find higher-value products in same/related categories
+                    min_upsell_price = current_price * 1.2  # At least 20% higher
+                    max_upsell_price = current_price * 3.0   # Not more than 3x
+
+                    # Adjust based on customer tier and price sensitivity
+                    if customer_profile.price_sensitivity == "premium":
+                        max_upsell_price = current_price * 5.0
+                    elif customer_profile.price_sensitivity == "budget":
+                        max_upsell_price = current_price * 1.5
+
+                    cursor.execute("""
+                        SELECT p.product_id, p.product_name, p.category, p.brand,
+                               p.price, p.description, p.stock_quantity, p.in_stock,
+                               COUNT(o.order_id) as popularity,
+                               AVG(CASE WHEN c.account_tier = %s THEN 1 ELSE 0 END) as tier_preference
+                        FROM products p
+                        LEFT JOIN orders o ON p.product_id = o.product_id
+                        LEFT JOIN customers c ON o.customer_id = c.customer_id
+                        WHERE p.price BETWEEN %s AND %s
+                        AND p.in_stock = true AND p.stock_quantity > 0
+                        AND (%s IS NULL OR p.product_id != %s)
+                        GROUP BY p.product_id, p.product_name, p.category, p.brand,
+                                 p.price, p.description, p.stock_quantity, p.in_stock
+                        ORDER BY tier_preference DESC, popularity DESC, p.price ASC
+                        LIMIT %s
+                    """, (customer_profile.account_tier, min_upsell_price, max_upsell_price,
+                          current_product_id, current_product_id, limit))
+
+                    products = cursor.fetchall()
+
+                    recommendations = []
+                    for product in products:
+                        stock_status = self._get_stock_status(product['stock_quantity'])
+
+                        # Calculate value proposition
+                        price_increase = ((float(product['price']) - current_price) / current_price) * 100
+
+                        recommendations.append(RecommendationResult(
+                            product_id=product['product_id'],
+                            product_name=product['product_name'],
+                            category=product['category'],
+                            brand=product['brand'],
+                            price=float(product['price']),
+                            price_formatted=self._format_naira(product['price']),
+                            description=product['description'] or "",
+                            stock_quantity=product['stock_quantity'],
+                            stock_status=stock_status,
+                            recommendation_score=float(product['popularity']) * (1 + float(product['tier_preference'])),
+                            recommendation_reason=f"Premium upgrade • {price_increase:.0f}% better value",
+                            recommendation_type=RecommendationType.UP_SELL
+                        ))
+
+                    return recommendations
+
+        except Exception as e:
+            logger.error(f"❌ Error getting upsell recommendations: {e}")
+            return []
+
+    def get_abandoned_cart_recommendations(self, customer_id: int,
+                                         abandoned_items: List[Dict] = None,
+                                         limit: int = 8) -> List[RecommendationResult]:
+        """🛒 Cart abandonment recovery recommendations"""
+        try:
+            customer_profile = self.get_customer_profile(customer_id)
+            recommendations = []
+
+            if abandoned_items:
+                # Recommendations based on abandoned items
+                for item in abandoned_items[:3]:  # Focus on top 3 abandoned items
+                    product_id = item.get('product_id')
+
+                    # Get similar but discounted products
+                    similar_recs = self.get_similar_products_recommendations(
+                        customer_id, product_id, price_filter="lower", limit=2)
+                    recommendations.extend(similar_recs)
+
+                    # Get cross-sell for abandoned items
+                    cross_sell_recs = self.get_cross_sell_recommendations(
+                        customer_id, product_id, limit=2)
+                    recommendations.extend(cross_sell_recs)
+
+            # Add general appeal recommendations
+            popular_recs = self.get_popular_products(limit=4, state=customer_profile.state)
+            recommendations.extend(popular_recs)
+
+            # Sort by relevance and mark as cart recovery
+            for rec in recommendations:
+                rec.recommendation_type = RecommendationType.ABANDONED_CART_RECOVERY
+                rec.recommendation_reason = f"Complete your purchase • {rec.recommendation_reason}"
+
+            return recommendations[:limit]
+
+        except Exception as e:
+            logger.error(f"❌ Error getting cart abandonment recommendations: {e}")
+            return []
+
+    def get_similar_products_recommendations(self, customer_id: int, product_id: int,
+                                           price_filter: str = "any", limit: int = 8) -> List[RecommendationResult]:
+        """🔄 Similar products recommendations"""
+        try:
+            with self.get_database_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+
+                    # Get current product info
+                    cursor.execute("""
+                        SELECT category, brand, price FROM products WHERE product_id = %s
+                    """, (product_id,))
+
+                    current_product = cursor.fetchone()
+                    if not current_product:
+                        return []
+
+                    # Build price filter condition
+                    price_condition = ""
+                    price_params = []
+
+                    if price_filter == "lower":
+                        price_condition = "AND p.price < %s"
+                        price_params.append(float(current_product['price']) * 0.9)  # 10% lower
+                    elif price_filter == "higher":
+                        price_condition = "AND p.price > %s"
+                        price_params.append(float(current_product['price']) * 1.1)  # 10% higher
+                    elif price_filter == "similar":
+                        price_condition = "AND p.price BETWEEN %s AND %s"
+                        base_price = float(current_product['price'])
+                        price_params.extend([base_price * 0.8, base_price * 1.2])  # ±20%
+
+                    cursor.execute(f"""
+                        SELECT p.product_id, p.product_name, p.category, p.brand,
+                               p.price, p.description, p.stock_quantity, p.in_stock,
+                               COUNT(o.order_id) as popularity,
+                               CASE
+                                   WHEN p.category = %s AND p.brand = %s THEN 3.0
+                                   WHEN p.category = %s THEN 2.0
+                                   WHEN p.brand = %s THEN 1.5
+                                   ELSE 1.0
+                               END as similarity_score
+                        FROM products p
+                        LEFT JOIN orders o ON p.product_id = o.product_id
+                        WHERE p.product_id != %s
+                        AND p.in_stock = true AND p.stock_quantity > 0
+                        {price_condition}
+                        GROUP BY p.product_id, p.product_name, p.category, p.brand,
+                                 p.price, p.description, p.stock_quantity, p.in_stock
+                        ORDER BY similarity_score DESC, popularity DESC
+                        LIMIT %s
+                    """, (current_product['category'], current_product['brand'],
+                          current_product['category'], current_product['brand'],
+                          product_id) + tuple(price_params) + (limit,))
+
+                    products = cursor.fetchall()
+
+                    recommendations = []
+                    for product in products:
+                        stock_status = self._get_stock_status(product['stock_quantity'])
+
+                        # Determine recommendation reason
+                        if product['category'] == current_product['category'] and product['brand'] == current_product['brand']:
+                            reason = f"Same brand and category"
+                        elif product['category'] == current_product['category']:
+                            reason = f"Similar {product['category']} product"
+                        elif product['brand'] == current_product['brand']:
+                            reason = f"Same {product['brand']} brand"
+                        else:
+                            reason = "Similar features"
+
+                        recommendations.append(RecommendationResult(
+                            product_id=product['product_id'],
+                            product_name=product['product_name'],
+                            category=product['category'],
+                            brand=product['brand'],
+                            price=float(product['price']),
+                            price_formatted=self._format_naira(product['price']),
+                            description=product['description'] or "",
+                            stock_quantity=product['stock_quantity'],
+                            stock_status=stock_status,
+                            recommendation_score=float(product['similarity_score']) * (1 + float(product['popularity']) * 0.1),
+                            recommendation_reason=reason,
+                            recommendation_type=RecommendationType.SIMILAR_PRODUCTS
+                        ))
+
+                    return recommendations
+
+        except Exception as e:
+            logger.error(f"❌ Error getting similar products recommendations: {e}")
+            return []
+
+    def _get_problem_solving_recommendations(self, customer_profile: CustomerProfile,
+                                           support_context: CustomerSupportContext,
+                                           limit: int) -> List[RecommendationResult]:
+        """🔧 Problem-solving recommendations for product issues"""
+        try:
+            recommendations = []
+
+            # If customer mentioned specific products, recommend alternatives
+            if support_context.mentioned_products:
+                for product_name in support_context.mentioned_products[:2]:
+                    # Find products with similar names
+                    similar_recs = self._find_products_by_name_similarity(product_name, limit=2)
+                    for rec in similar_recs:
+                        rec.recommendation_reason = f"Alternative to resolve {support_context.problem_category} issue"
+                        rec.recommendation_type = RecommendationType.PROBLEM_SOLVING
+                    recommendations.extend(similar_recs)
+
+            # Recommend highly-rated products in customer's favorite categories
+            if customer_profile.favorite_categories and len(recommendations) < limit:
+                reliable_products = self._get_highly_rated_products(
+                    customer_profile.favorite_categories[0], limit - len(recommendations))
+                for rec in reliable_products:
+                    rec.recommendation_reason = f"Highly reliable {rec.category} option"
+                    rec.recommendation_type = RecommendationType.PROBLEM_SOLVING
+                recommendations.extend(reliable_products)
+
+            return recommendations[:limit]
+
+        except Exception as e:
+            logger.error(f"❌ Error getting problem-solving recommendations: {e}")
+            return []
+
+    def _get_satisfaction_recovery_recommendations(self, customer_profile: CustomerProfile,
+                                                 support_context: CustomerSupportContext,
+                                                 limit: int) -> List[RecommendationResult]:
+        """😊 Satisfaction recovery recommendations for frustrated customers"""
+        try:
+            # Get premium products with good reviews to rebuild confidence
+            tier_recs = self.get_tier_progression_recommendations(customer_profile, limit)
+
+            for rec in tier_recs:
+                rec.recommendation_reason = "Premium quality to ensure satisfaction"
+                rec.recommendation_type = RecommendationType.CUSTOMER_SUPPORT_CONTEXTUAL
+
+            return tier_recs
+
+        except Exception as e:
+            logger.error(f"❌ Error getting satisfaction recovery recommendations: {e}")
+            return []
+
+    def _find_products_by_name_similarity(self, product_name: str, limit: int = 5) -> List[RecommendationResult]:
+        """🔍 Find products with similar names"""
+        try:
+            with self.get_database_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+
+                    # Use fuzzy matching with ILIKE
+                    search_terms = product_name.split()
+                    where_conditions = []
+                    params = []
+
+                    for term in search_terms:
+                        where_conditions.append("p.product_name ILIKE %s")
+                        params.append(f"%{term}%")
+
+                    where_clause = " OR ".join(where_conditions)
+
+                    cursor.execute(f"""
+                        SELECT p.product_id, p.product_name, p.category, p.brand,
+                               p.price, p.description, p.stock_quantity, p.in_stock
+                        FROM products p
+                        WHERE ({where_clause})
+                        AND p.in_stock = true AND p.stock_quantity > 0
+                        ORDER BY p.product_name
+                        LIMIT %s
+                    """, params + [limit])
+
+                    products = cursor.fetchall()
+
+                    recommendations = []
+                    for product in products:
+                        stock_status = self._get_stock_status(product['stock_quantity'])
+
+                        recommendations.append(RecommendationResult(
+                            product_id=product['product_id'],
+                            product_name=product['product_name'],
+                            category=product['category'],
+                            brand=product['brand'],
+                            price=float(product['price']),
+                            price_formatted=self._format_naira(product['price']),
+                            description=product['description'] or "",
+                            stock_quantity=product['stock_quantity'],
+                            stock_status=stock_status,
+                            recommendation_score=1.0,
+                            recommendation_reason="Similar product alternative",
+                            recommendation_type=RecommendationType.SIMILAR_PRODUCTS
+                        ))
+
+                    return recommendations
+
+        except Exception as e:
+            logger.error(f"❌ Error finding similar products: {e}")
+            return []
+
+    def _get_highly_rated_products(self, category: str, limit: int) -> List[RecommendationResult]:
+        """⭐ Get highly-rated products in a category"""
+        try:
+            with self.get_database_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+
+                    cursor.execute("""
+                        SELECT p.product_id, p.product_name, p.category, p.brand,
+                               p.price, p.description, p.stock_quantity, p.in_stock,
+                               COUNT(o.order_id) as order_count
+                        FROM products p
+                        LEFT JOIN orders o ON p.product_id = o.product_id
+                        WHERE p.category = %s
+                        AND p.in_stock = true AND p.stock_quantity > 0
+                        GROUP BY p.product_id, p.product_name, p.category, p.brand,
+                                 p.price, p.description, p.stock_quantity, p.in_stock
+                        HAVING COUNT(o.order_id) >= 3  -- At least 3 orders (indicates reliability)
+                        ORDER BY order_count DESC
+                        LIMIT %s
+                    """, (category, limit))
+
+                    products = cursor.fetchall()
+
+                    recommendations = []
+                    for product in products:
+                        stock_status = self._get_stock_status(product['stock_quantity'])
+
+                        recommendations.append(RecommendationResult(
+                            product_id=product['product_id'],
+                            product_name=product['product_name'],
+                            category=product['category'],
+                            brand=product['brand'],
+                            price=float(product['price']),
+                            price_formatted=self._format_naira(product['price']),
+                            description=product['description'] or "",
+                            stock_quantity=product['stock_quantity'],
+                            stock_status=stock_status,
+                            recommendation_score=float(product['order_count']),
+                            recommendation_reason=f"Highly rated • {product['order_count']} satisfied customers",
+                            recommendation_type=RecommendationType.CONTENT_BASED
+                        ))
+
+                    return recommendations
+
+        except Exception as e:
+            logger.error(f"❌ Error getting highly-rated products: {e}")
+            return []
+
+    def _get_order_replacement_recommendations(self, customer_profile: CustomerProfile,
+                                             support_context: CustomerSupportContext,
+                                             limit: int) -> List[RecommendationResult]:
+        """📦 Order replacement recommendations"""
+        # For order problems, recommend similar products or direct replacements
+        return self.get_content_based_recommendations(customer_profile, limit)
+
+    def _get_inquiry_based_recommendations(self, customer_profile: CustomerProfile,
+                                         support_context: CustomerSupportContext,
+                                         limit: int) -> List[RecommendationResult]:
+        """❓ Inquiry-based recommendations"""
+        # For general inquiries, provide personalized recommendations
+        return self.get_content_based_recommendations(customer_profile, limit)
+
+    def _get_educational_recommendations(self, customer_profile: CustomerProfile,
+                                       support_context: CustomerSupportContext,
+                                       limit: int) -> List[RecommendationResult]:
+        """📚 Educational recommendations for curious customers"""
+        # Recommend diverse products to satisfy curiosity
+        popular_recs = self.get_popular_products(limit)
+        for rec in popular_recs:
+            rec.recommendation_reason = f"Discover new products • {rec.recommendation_reason}"
+        return popular_recs

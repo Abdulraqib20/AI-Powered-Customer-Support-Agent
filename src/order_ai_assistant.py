@@ -25,34 +25,42 @@ import requests
 import uuid
 import re
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Import our existing systems
 try:
     from .order_management import OrderManagementSystem, PaymentMethod
     from .recommendation_engine import ProductRecommendationEngine
-except ImportError:
+    logger.info("✅ Successfully imported OrderManagementSystem and ProductRecommendationEngine with relative imports")
+except ImportError as e1:
+    logger.warning(f"⚠️ Relative import failed: {e1}")
     # Fallback for when imported directly
     try:
         from order_management import OrderManagementSystem, PaymentMethod
         from recommendation_engine import ProductRecommendationEngine
-    except ImportError:
-        # Create mock classes if imports fail
+        logger.info("✅ Successfully imported OrderManagementSystem and ProductRecommendationEngine with direct imports")
+    except ImportError as e2:
+        logger.error(f"❌ Direct import failed: {e2}")
+        # Create mock classes if imports fail - but log this as an error
+        logger.error("❌ CRITICAL: Using mock OrderManagementSystem - orders will NOT be saved to database!")
+
         class OrderManagementSystem:
             def check_product_availability(self, product_id, quantity):
+                logger.error("❌ MOCK: check_product_availability called - real system not available")
                 return {'available': True, 'product_info': {'product_name': 'Mock Product'}}
             def create_order(self, *args, **kwargs):
-                return {'success': True, 'order_id': 'MOCK123', 'database_order_id': 123}
+                logger.error("❌ MOCK: create_order called - NO DATABASE INSERTION HAPPENING!")
+                return {'success': False, 'error': 'OrderManagementSystem not available - import failed'}
 
         class ProductRecommendationEngine:
             def __init__(self):
-                pass
+                logger.warning("⚠️ Using mock ProductRecommendationEngine")
 
         class PaymentMethod:
             PAY_ON_DELIVERY = "Pay on Delivery"
             RAQIB_TECH_PAY = "RaqibTechPay"
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 @dataclass
 class CartItem:
@@ -81,9 +89,22 @@ class OrderAIAssistant:
     """🤖 AI Assistant for Smart Order Management"""
 
     def __init__(self):
-        self.order_system = OrderManagementSystem()
-        self.recommendation_engine = ProductRecommendationEngine()
+        try:
+            self.order_system = OrderManagementSystem()
+            logger.info("✅ OrderManagementSystem initialized successfully")
+        except Exception as e:
+            logger.error(f"❌ CRITICAL: Failed to initialize OrderManagementSystem: {e}")
+            raise Exception(f"OrderAIAssistant cannot function without OrderManagementSystem: {e}")
+
+        try:
+            self.recommendation_engine = ProductRecommendationEngine()
+            logger.info("✅ ProductRecommendationEngine initialized successfully")
+        except Exception as e:
+            logger.warning(f"⚠️ ProductRecommendationEngine initialization failed: {e}")
+            self.recommendation_engine = None
+
         self.active_carts = {}  # In-memory cart storage (use Redis in production)
+        logger.info("✅ OrderAIAssistant initialized successfully")
 
     def parse_order_intent(self, user_message: str) -> Dict[str, Any]:
         """🧠 Parse user message to determine shopping intent"""
@@ -289,11 +310,10 @@ class OrderAIAssistant:
                     'action': 'empty_cart'
                 }
 
-            # 🆕 ENHANCED LOGGING FOR ORDER PLACEMENT
-            logger.info(f"🎯 PLACING ORDER for customer {customer_id}")
+            # 🆕 ENHANCED LOGGING FOR CALCULATION
+            logger.info(f"💰 CALCULATING ORDER PREVIEW for customer {customer_id}")
             logger.info(f"📦 Cart items: {len(self.active_carts[cart_key]['items'])}")
-            logger.info(f"🚚 Delivery: {delivery_address}")
-            logger.info(f"💳 Payment: {payment_method}")
+            logger.info(f"🚚 Delivery state: {delivery_state}")
 
             cart = self.active_carts[cart_key]
 
