@@ -1484,34 +1484,56 @@
                             </div>
                         </div>
 
-                        <!-- Quick Order Lookup for Authenticated Users -->
+                        <!-- Integrated Shopping & Order Management -->
                         <div class="row mb-4">
-                            <div class="col-lg-6">
+                            <div class="col-lg-8">
                                 <div class="card">
                                     <div class="card-header">
                                         <h6 class="mb-0">
-                                            <i class="bi bi-search text-primary me-2"></i>
-                                            Quick Order Lookup
+                                            <i class="bi bi-cart-plus text-success me-2"></i>
+                                            Quick Shopping & Reorder
                                         </h6>
                                     </div>
                                     <div class="card-body">
-                                        <div class="mb-3">
-                                            <label class="form-label">Order ID</label>
-                                            <input type="text" class="form-control" id="orderIdInput"
-                                                   placeholder="Enter your order ID (e.g., 12345)">
+                                        <div class="row">
+                                            <div class="col-md-6 mb-3">
+                                                <label class="form-label">What would you like to order?</label>
+                                                <input type="text" class="form-control" id="quickShopInput"
+                                                       placeholder="e.g., iPhone 14, Samsung TV, Laptop">
+                                                <small class="text-muted">Describe the product you want to buy</small>
+                                            </div>
+                                            <div class="col-md-3 mb-3">
+                                                <label class="form-label">Quantity</label>
+                                                <input type="number" class="form-control" id="quickShopQuantity"
+                                                       value="1" min="1" max="10">
+                                            </div>
+                                            <div class="col-md-3 mb-3">
+                                                <label class="form-label">Delivery State</label>
+                                                <select class="form-select" id="quickShopState">
+                                                    <option value="{{ session.get('customer_state', 'Lagos') }}">{{ session.get('customer_state', 'Lagos') }}</option>
+                                                    <option value="Lagos">Lagos</option>
+                                                    <option value="Abuja">Abuja</option>
+                                                    <option value="Kano">Kano</option>
+                                                    <option value="Rivers">Rivers</option>
+                                                    <option value="Oyo">Oyo</option>
+                                                </select>
+                                            </div>
                                         </div>
-                                        <div class="d-grid gap-2">
-                                            <button class="btn btn-primary" onclick="trackSpecificOrder()">
-                                                <i class="bi bi-search me-1"></i>Track This Order
+                                        <div class="d-grid gap-2 d-md-flex">
+                                            <button class="btn btn-primary" onclick="quickOrderProduct()">
+                                                <i class="bi bi-cart-check me-1"></i>Order Now
                                             </button>
-                                            <button class="btn btn-outline-secondary" onclick="trackOrderViaChat()">
-                                                <i class="bi bi-chat-dots me-1"></i>Ask AI Assistant
+                                            <button class="btn btn-outline-secondary" onclick="askAIForProduct()">
+                                                <i class="bi bi-robot me-1"></i>Ask AI Assistant
+                                            </button>
+                                            <button class="btn btn-outline-info" onclick="browsePopularProducts()">
+                                                <i class="bi bi-stars me-1"></i>Popular Items
                                             </button>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-lg-6">
+                            <div class="col-lg-4">
                                 <div class="card bg-light">
                                     <div class="card-body">
                                         <h6 class="mb-3">
@@ -1536,6 +1558,18 @@
                                                 Order was returned
                                             </li>
                                         </ul>
+
+                                        <div class="mt-3 pt-3 border-top">
+                                            <h6 class="small text-muted mb-2">Quick Actions</h6>
+                                            <div class="d-grid gap-1">
+                                                <button class="btn btn-outline-primary btn-sm" onclick="reorderPreviousItem()">
+                                                    <i class="bi bi-arrow-clockwise me-1"></i>Reorder Last Item
+                                                </button>
+                                                <button class="btn btn-outline-secondary btn-sm" onclick="trackOrderViaChat()">
+                                                    <i class="bi bi-search me-1"></i>Track Specific Order
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1548,9 +1582,9 @@
                                 <div class="alert alert-info">
                                     <h6 class="alert-heading">
                                         <i class="bi bi-info-circle me-2"></i>
-                                        Login Required for Full Order Tracking
+                                        Login Required for Full Order Tracking & Shopping
                                     </h6>
-                                    <p class="mb-2">To view your complete order history and manage your orders, please log in to your account.</p>
+                                    <p class="mb-2">To view your complete order history, place new orders, and access personalized features, please log in to your account.</p>
                                     <div class="d-flex gap-2">
                                         <a href="/login" class="btn btn-primary btn-sm">
                                             <i class="bi bi-box-arrow-in-right me-1"></i>Login
@@ -1563,20 +1597,23 @@
                             </div>
                         </div>
 
-                        <!-- Basic Order Lookup for Non-Authenticated Users -->
+                        <!-- Basic Order Tracking for Non-Authenticated Users -->
                         <div class="row mb-4">
                             <div class="col-lg-6">
                                 <div class="card">
                                     <div class="card-header">
-                                        <h6 class="mb-0">Quick Order Lookup</h6>
+                                        <h6 class="mb-0">
+                                            <i class="bi bi-search text-primary me-2"></i>
+                                            Track Your Order
+                                        </h6>
                                     </div>
                                     <div class="card-body">
                                         <div class="mb-3">
                                             <label class="form-label">Order ID</label>
-                                            <input type="text" class="form-control" id="orderIdInput"
-                                                   placeholder="Enter your order ID (e.g., 12345)">
+                                            <input type="text" class="form-control" id="guestOrderIdInput"
+                                                   placeholder="Enter your order ID (e.g., 34301)">
                                         </div>
-                                        <button class="btn btn-primary w-100" onclick="trackOrderViaChat()">
+                                        <button class="btn btn-primary w-100" onclick="trackGuestOrder()">
                                             <i class="bi bi-search me-1"></i>Track My Order
                                         </button>
                                         <p class="small text-muted mt-2">
@@ -3548,7 +3585,7 @@ async function viewOrderDetails(orderId) {
     console.log(`👁️ Viewing details for order: ${orderId}`);
 
     try {
-        // Show loading state
+        // Get or create modal instance (prevent duplicate instances)
         const modalElement = document.getElementById('orderTrackingModal');
         if (!modalElement) {
             console.error('❌ Modal element not found');
@@ -3556,7 +3593,20 @@ async function viewOrderDetails(orderId) {
             return;
         }
 
-        const modal = new bootstrap.Modal(modalElement);
+        // Clean up any existing modal instance to prevent conflicts
+        const existingModalInstance = bootstrap.Modal.getInstance(modalElement);
+        if (existingModalInstance) {
+            console.log('🧹 Cleaning up existing modal instance');
+            existingModalInstance.dispose();
+        }
+
+        // Create fresh modal instance
+        const modal = new bootstrap.Modal(modalElement, {
+            backdrop: true,
+            keyboard: true,
+            focus: true
+        });
+
         const modalBody = document.querySelector('#orderTrackingModal .modal-body');
 
         if (!modalBody) {
@@ -3564,6 +3614,31 @@ async function viewOrderDetails(orderId) {
             showAlert('Modal structure incomplete. Please refresh the page.', 'error');
             return;
         }
+
+        // Add cleanup listener to prevent memory leaks
+        modalElement.addEventListener('hidden.bs.modal', function cleanupModalHandler(event) {
+            console.log('🧹 Modal closed - performing cleanup');
+
+            // Remove this event listener to prevent accumulation
+            modalElement.removeEventListener('hidden.bs.modal', cleanupModalHandler);
+
+            // Clear any pending timeouts or intervals
+            if (window.modalRefreshTimeout) {
+                clearTimeout(window.modalRefreshTimeout);
+                window.modalRefreshTimeout = null;
+            }
+
+            // Reset modal content to prevent stale data
+            if (modalBody) {
+                modalBody.innerHTML = `
+                    <div class="text-center py-4">
+                        <p class="text-muted">Modal closed. Click Details to reopen.</p>
+                    </div>
+                `;
+            }
+
+            console.log('✅ Modal cleanup complete');
+        }, { once: true }); // Ensure it only runs once
 
         modalBody.innerHTML = `
             <div class="text-center py-4">
@@ -3576,25 +3651,40 @@ async function viewOrderDetails(orderId) {
 
         modal.show();
 
-        // Fetch order details
-        const response = await fetch(`/api/orders/status/${orderId}`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
+        // Fetch order details with timeout to prevent hanging
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+        try {
+            const response = await fetch(`/api/orders/status/${orderId}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                throw new Error(`Failed to fetch order details (${response.status})`);
             }
-        });
 
-        if (!response.ok) {
-            throw new Error(`Failed to fetch order details (${response.status})`);
-        }
+            const data = await response.json();
 
-        const data = await response.json();
+            if (data.success && data.order) {
+                console.log('✅ Order details loaded successfully');
+                displayEnhancedOrderModal(data.order);
+            } else {
+                throw new Error(data.message || data.error || 'Order details not available');
+            }
 
-        if (data.success && data.order) {
-            console.log('✅ Order details loaded successfully');
-            displayEnhancedOrderModal(data.order);
-        } else {
-            throw new Error(data.message || data.error || 'Order details not available');
+        } catch (fetchError) {
+            clearTimeout(timeoutId);
+            if (fetchError.name === 'AbortError') {
+                throw new Error('Request timed out. Please try again.');
+            }
+            throw fetchError;
         }
 
     } catch (error) {
@@ -3858,7 +3948,123 @@ function showOrderErrorModal(orderId, errorMessage) {
 // Helper functions for order actions
 async function refreshOrderDetails(orderId) {
     console.log(`🔄 Refreshing order details for: ${orderId}`);
-    await viewOrderDetails(orderId);
+
+    try {
+        // Clear any existing timeout to prevent conflicts
+        if (window.modalRefreshTimeout) {
+            clearTimeout(window.modalRefreshTimeout);
+            window.modalRefreshTimeout = null;
+        }
+
+        // Show loading state in the modal body
+        const modalBody = document.querySelector('#orderTrackingModal .modal-body');
+        if (modalBody) {
+            modalBody.innerHTML = `
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Refreshing order details...</span>
+                    </div>
+                    <p class="mt-2 text-muted">Refreshing order information...</p>
+                </div>
+            `;
+
+            // Set a timeout to prevent infinite loading
+            window.modalRefreshTimeout = setTimeout(() => {
+                console.log('⏰ Refresh timeout reached');
+                if (modalBody) {
+                    modalBody.innerHTML = `
+                        <div class="text-center py-4">
+                            <i class="bi bi-exclamation-triangle text-warning" style="font-size: 2rem;"></i>
+                            <h6 class="mt-3">Refresh Timeout</h6>
+                            <p class="text-muted">The refresh is taking longer than expected.</p>
+                            <button class="btn btn-primary btn-sm" onclick="viewOrderDetails('${orderId}')">
+                                Try Again
+                            </button>
+                        </div>
+                    `;
+                }
+            }, 15000); // 15 second timeout
+
+            // Use the fetch with AbortController from viewOrderDetails
+            const controller = new AbortController();
+            const fetchTimeoutId = setTimeout(() => controller.abort(), 10000);
+
+            try {
+                const response = await fetch(`/api/orders/status/${orderId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    signal: controller.signal
+                });
+
+                clearTimeout(fetchTimeoutId);
+                clearTimeout(window.modalRefreshTimeout);
+                window.modalRefreshTimeout = null;
+
+                if (!response.ok) {
+                    throw new Error(`Failed to refresh order details (${response.status})`);
+                }
+
+                const data = await response.json();
+
+                if (data.success && data.order) {
+                    console.log('✅ Order details refreshed successfully');
+                    displayEnhancedOrderModal(data.order);
+                } else {
+                    throw new Error(data.message || data.error || 'Order details not available');
+                }
+
+            } catch (fetchError) {
+                clearTimeout(fetchTimeoutId);
+                clearTimeout(window.modalRefreshTimeout);
+                window.modalRefreshTimeout = null;
+
+                if (fetchError.name === 'AbortError') {
+                    throw new Error('Refresh timed out. Please try again.');
+                }
+                throw fetchError;
+            }
+
+        } else {
+            // Fallback: Just refresh normally if modal body not found
+            await viewOrderDetails(orderId);
+        }
+    } catch (error) {
+        console.error('❌ Error refreshing order details:', error);
+
+        // Clear any pending timeouts
+        if (window.modalRefreshTimeout) {
+            clearTimeout(window.modalRefreshTimeout);
+            window.modalRefreshTimeout = null;
+        }
+
+        const errorMessage = error.message.includes('SQL') || error.message.includes('database')
+            ? 'Unable to refresh order details. Please contact support.'
+            : error.message;
+
+        showAlert(`Refresh failed: ${errorMessage}`, 'error');
+
+        // Show error in modal
+        const modalBody = document.querySelector('#orderTrackingModal .modal-body');
+        if (modalBody) {
+            modalBody.innerHTML = `
+                <div class="text-center py-4">
+                    <i class="bi bi-exclamation-triangle text-warning" style="font-size: 2rem;"></i>
+                    <h6 class="mt-3">Refresh Failed</h6>
+                    <p class="text-muted">${errorMessage}</p>
+                    <div class="mt-3">
+                        <button class="btn btn-primary btn-sm me-2" onclick="viewOrderDetails('${orderId}')">
+                            <i class="bi bi-arrow-clockwise me-1"></i>Try Again
+                        </button>
+                        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">
+                            <i class="bi bi-x me-1"></i>Close
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+    }
 }
 
 function contactSupportAboutOrder(orderId) {
@@ -3877,7 +4083,10 @@ async function requestOrderCancellation(orderId) {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
-                }
+                },
+                body: JSON.stringify({
+                    reason: 'Customer requested cancellation via order details'
+                })
             });
 
             const data = await response.json();
@@ -4248,6 +4457,210 @@ function resetRefreshButton() {
         return false;
     }
 }
+
+// New Shopping & Checkout Functions
+async function quickOrderProduct() {
+    const productQuery = document.getElementById('quickShopInput').value.trim();
+    const quantity = parseInt(document.getElementById('quickShopQuantity').value) || 1;
+    const deliveryState = document.getElementById('quickShopState').value;
+
+    if (!productQuery) {
+        showAlert('Please describe what you want to order', 'warning');
+        return;
+    }
+
+    try {
+        showAlert('Searching for products...', 'info');
+
+        // First, ask AI to find the product
+        const response = await fetch('/api/enhanced-query', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                query: `I want to order ${productQuery}, quantity ${quantity}, delivery to ${deliveryState}. Please help me place this order.`
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success && data.shopping_result) {
+            // Show checkout modal with product details
+            showCheckoutModal(data.shopping_result, quantity, deliveryState);
+        } else {
+            showAlert('Product not found or out of stock. Try asking our AI assistant for alternatives.', 'warning');
+        }
+    } catch (error) {
+        console.error('Quick order error:', error);
+        showAlert('Unable to process order. Please try again.', 'error');
+    }
+}
+
+function askAIForProduct() {
+    const productQuery = document.getElementById('quickShopInput').value.trim();
+    if (productQuery) {
+        addUserMessage(`I want to buy ${productQuery}. Can you help me find it and place an order?`);
+    } else {
+        addUserMessage('I want to shop for products. Can you help me find what I need?');
+    }
+}
+
+function browsePopularProducts() {
+    addUserMessage('Show me popular products available for purchase in Nigeria');
+}
+
+function reorderPreviousItem() {
+    addUserMessage('I want to reorder my last purchased item. Can you help me with that?');
+}
+
+function trackGuestOrder() {
+    const orderId = document.getElementById('guestOrderIdInput').value.trim();
+    if (orderId) {
+        addUserMessage(`Track my order ${orderId} - I want to know the current status, location, and estimated delivery time.`);
+    } else {
+        showAlert('Please enter your order ID', 'warning');
+    }
+}
+
+function showCheckoutModal(productData, quantity, deliveryState) {
+    // Populate checkout modal with product data
+    const modal = new bootstrap.Modal(document.getElementById('checkoutModal'));
+
+    // Update product information
+    document.getElementById('checkout-product-name').textContent = productData.product_name || 'Product';
+    document.getElementById('checkout-product-category').textContent = productData.category || 'Category';
+    document.getElementById('checkout-quantity').textContent = quantity;
+
+    const unitPrice = parseFloat(productData.price) || 0;
+    document.getElementById('checkout-unit-price').textContent = formatNaira(unitPrice);
+
+    // Update customer information (if authenticated)
+    const customerName = '{{ session.get("customer_name", "Customer") }}';
+    const customerEmail = '{{ session.get("customer_email", "email@example.com") }}';
+    const customerState = '{{ session.get("customer_state", "Lagos") }}';
+    const customerTier = '{{ session.get("customer_tier", "Bronze") }}';
+
+    document.getElementById('checkout-customer-name').textContent = customerName;
+    document.getElementById('checkout-customer-email').textContent = customerEmail;
+    document.getElementById('checkout-customer-state').textContent = customerState;
+    document.getElementById('checkout-customer-tier').textContent = customerTier;
+
+    // Update delivery information
+    document.getElementById('checkout-delivery-state').textContent = deliveryState;
+
+    // Calculate totals
+    const subtotal = unitPrice * quantity;
+    const deliveryFee = calculateDeliveryFee(deliveryState);
+    const discount = calculateTierDiscount(subtotal, customerTier);
+    const total = subtotal + deliveryFee - discount;
+
+    document.getElementById('checkout-subtotal').textContent = formatNaira(subtotal);
+    document.getElementById('checkout-delivery-fee').textContent = formatNaira(deliveryFee);
+    document.getElementById('checkout-total').textContent = formatNaira(total);
+
+    if (discount > 0) {
+        document.getElementById('checkout-discount-amount').textContent = formatNaira(discount);
+        document.getElementById('checkout-discount-row').style.display = 'flex';
+    }
+
+    // Store order data for confirmation
+    window.currentOrderData = {
+        product_id: productData.product_id,
+        product_name: productData.product_name,
+        quantity: quantity,
+        unit_price: unitPrice,
+        delivery_state: deliveryState,
+        total_amount: total
+    };
+
+    modal.show();
+}
+
+function calculateDeliveryFee(state) {
+    const fees = {
+        'Lagos': 2500,
+        'Abuja': 3000,
+        'Kano': 3500,
+        'Rivers': 3000,
+        'Oyo': 3000
+    };
+    return fees[state] || 3500;
+}
+
+function calculateTierDiscount(subtotal, tier) {
+    const discounts = {
+        'Bronze': 0,
+        'Silver': 0.05,
+        'Gold': 0.10,
+        'Platinum': 0.15
+    };
+    return subtotal * (discounts[tier] || 0);
+}
+
+function formatNaira(amount) {
+    return `₦${amount.toLocaleString('en-NG', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+}
+
+// Checkout confirmation
+document.addEventListener('DOMContentLoaded', function() {
+    const confirmOrderBtn = document.getElementById('confirm-order-btn');
+    if (confirmOrderBtn) {
+        confirmOrderBtn.addEventListener('click', async function() {
+            if (!window.currentOrderData) {
+                showAlert('Order data missing. Please try again.', 'error');
+                return;
+            }
+
+            try {
+                const paymentMethod = document.getElementById('checkout-payment-method').value;
+
+                const orderPayload = {
+                    product_query: window.currentOrderData.product_name,
+                    quantity: window.currentOrderData.quantity,
+                    delivery_state: window.currentOrderData.delivery_state,
+                    payment_method: paymentMethod
+                };
+
+                const response = await fetch('/api/orders/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(orderPayload)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // Hide checkout modal
+                    bootstrap.Modal.getInstance(document.getElementById('checkoutModal')).hide();
+
+                    // Show success modal
+                    document.getElementById('success-order-id').textContent = result.order_id;
+                    document.getElementById('success-total-amount').textContent = formatNaira(result.total_amount);
+                    document.getElementById('success-payment-method').textContent = paymentMethod;
+                    document.getElementById('success-delivery-date').textContent = result.estimated_delivery;
+
+                    const successModal = new bootstrap.Modal(document.getElementById('orderSuccessModal'));
+                    successModal.show();
+
+                    // Refresh orders list
+                    setTimeout(() => {
+                        loadMyOrders();
+                    }, 2000);
+                } else {
+                    showAlert(result.message || 'Order failed. Please try again.', 'error');
+                }
+            } catch (error) {
+                console.error('Order confirmation error:', error);
+                showAlert('Unable to process order. Please try again.', 'error');
+            }
+        });
+    }
+});
+
+// ... existing code ...
 </script>
 
 <!-- Include Checkout Modal -->
@@ -4581,6 +4994,210 @@ function resetRefreshButton() {
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Integrated Checkout Modal -->
+<div class="modal fade" id="checkoutModal" tabindex="-1" aria-labelledby="checkoutModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="checkoutModalLabel">
+                    <i class="fas fa-shopping-cart me-2"></i>Order Confirmation
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Order Summary Section -->
+                <div class="row">
+                    <div class="col-md-8">
+                        <!-- Product Details -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0"><i class="fas fa-box me-2"></i>Product Details</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-flex align-items-center">
+                                    <div class="product-image me-3">
+                                        <div class="bg-light rounded p-3" style="width: 80px; height: 80px;">
+                                            <i class="fas fa-mobile-alt fa-2x text-muted"></i>
+                                        </div>
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <h6 class="mb-1" id="checkout-product-name">Product Name</h6>
+                                        <p class="text-muted mb-1" id="checkout-product-category">Category</p>
+                                        <div class="d-flex justify-content-between">
+                                            <span>Quantity: <span id="checkout-quantity">1</span></span>
+                                            <span class="fw-bold" id="checkout-unit-price">₦0.00</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Customer Information -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0"><i class="fas fa-user me-2"></i>Customer Information</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-sm-6">
+                                        <strong>Name:</strong> <span id="checkout-customer-name">Customer Name</span>
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <strong>Email:</strong> <span id="checkout-customer-email">email@example.com</span>
+                                    </div>
+                                    <div class="col-sm-6 mt-2">
+                                        <strong>State:</strong> <span id="checkout-customer-state">Lagos</span>
+                                    </div>
+                                    <div class="col-sm-6 mt-2">
+                                        <strong>Account Tier:</strong>
+                                        <span class="badge" id="checkout-customer-tier">Bronze</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Delivery Information -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0"><i class="fas fa-truck me-2"></i>Delivery Information</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-sm-6">
+                                        <strong>Delivery State:</strong> <span id="checkout-delivery-state">Lagos</span>
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <strong>Estimated Delivery:</strong> <span id="checkout-delivery-days">3 days</span>
+                                    </div>
+                                </div>
+                                <div class="mt-2">
+                                    <strong>Payment Method:</strong>
+                                    <select class="form-select" id="checkout-payment-method">
+                                        <option value="Pay on Delivery">Pay on Delivery</option>
+                                        <option value="Bank Transfer">Bank Transfer</option>
+                                        <option value="Card">Card Payment</option>
+                                        <option value="RaqibTechPay">RaqibTechPay</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Order Total Section -->
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header bg-success text-white">
+                                <h6 class="mb-0"><i class="fas fa-calculator me-2"></i>Order Summary</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span>Subtotal:</span>
+                                    <span id="checkout-subtotal">₦0.00</span>
+                                </div>
+
+                                <div class="d-flex justify-content-between mb-2 text-success" id="checkout-discount-row" style="display: none !important;">
+                                    <span>Discount (<span id="checkout-discount-rate">0</span>%):</span>
+                                    <span>-₦<span id="checkout-discount-amount">0.00</span></span>
+                                </div>
+
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span>Delivery Fee:</span>
+                                    <span id="checkout-delivery-fee">₦0.00</span>
+                                </div>
+
+                                <hr>
+                                <div class="d-flex justify-content-between fw-bold fs-5">
+                                    <span>Total:</span>
+                                    <span class="text-success" id="checkout-total">₦0.00</span>
+                                </div>
+
+                                <div class="mt-3">
+                                    <small class="text-muted">
+                                        <i class="fas fa-shield-alt me-1"></i>
+                                        Secure checkout powered by RaqibTech
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Nigerian Payment Methods Info -->
+                        <div class="card mt-3">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <i class="fas fa-credit-card me-2"></i>Payment Options
+                                </h6>
+                                <div class="payment-methods">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <i class="fas fa-truck text-primary me-2"></i>
+                                        <small>Pay on Delivery (Most Popular)</small>
+                                    </div>
+                                    <div class="d-flex align-items-center mb-2">
+                                        <i class="fas fa-university text-success me-2"></i>
+                                        <small>Bank Transfer</small>
+                                    </div>
+                                    <div class="d-flex align-items-center mb-2">
+                                        <i class="fas fa-credit-card text-info me-2"></i>
+                                        <small>Card Payment</small>
+                                    </div>
+                                    <div class="d-flex align-items-center">
+                                        <i class="fas fa-mobile-alt text-warning me-2"></i>
+                                        <small>RaqibTechPay</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-2"></i>Cancel
+                </button>
+                <button type="button" class="btn btn-primary" id="confirm-order-btn">
+                    <i class="fas fa-check me-2"></i>Confirm Order
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Order Success Modal -->
+<div class="modal fade" id="orderSuccessModal" tabindex="-1" aria-labelledby="orderSuccessModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="orderSuccessModalLabel">
+                    <i class="fas fa-check-circle me-2"></i>Order Confirmed!
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <div class="mb-3">
+                    <i class="fas fa-check-circle text-success" style="font-size: 4rem;"></i>
+                </div>
+                <h4 class="text-success mb-3">Order Successfully Placed!</h4>
+                <p class="mb-3">Your order <strong id="success-order-id">#RQB20250101</strong> has been confirmed.</p>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    You'll receive SMS and email confirmation shortly.
+                </div>
+                <div class="order-details">
+                    <p><strong>Total Amount:</strong> <span id="success-total-amount">₦0.00</span></p>
+                    <p><strong>Payment Method:</strong> <span id="success-payment-method">Pay on Delivery</span></p>
+                    <p><strong>Estimated Delivery:</strong> <span id="success-delivery-date">January 15, 2025</span></p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">
+                    <i class="fas fa-check me-2"></i>Great!
+                </button>
             </div>
         </div>
     </div>

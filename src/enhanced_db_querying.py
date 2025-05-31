@@ -550,97 +550,6 @@ QUERY GENERATION RULES:
 3. If 'customer_id' is present in EXTRACTED ENTITIES (from conversation history), use it to filter customer-related queries.
 4. For "order history" queries with customer_id: SELECT o.*, c.name FROM orders o JOIN customers c ON o.customer_id = c.customer_id WHERE o.customer_id = [customer_id]
 5. If 'needs_customer_lookup' is true and order_id is available: First get customer_id from the order, then get all orders for that customer
-6. Use date functions for time-based queries (e.g., CURRENT_DATE, DATE_TRUNC)
-7. Format monetary values appropriately
-8. Consider Nigerian geographic divisions (states, LGAs)
-9. Handle partitioned tables correctly (orders table is partitioned by created_at). If querying by a specific 'order_id', a broad or no filter on `created_at` might be appropriate, as `order_id` should be unique.
-10. Use proper JOINs when needed
-11. Limit results appropriately (usually 10-50 rows unless a specific ID is queried)
-12. Order results logically
-13. Handle NULL values gracefully
-14. NEVER use CURRENT_USER - use actual customer_id values from context when available
-15. For delivery/tracking queries: Use order_status IN ('Pending', 'Processing', 'Returned', 'Delivered') and join with customer data
-
-🚨 CRITICAL PRODUCT NAME SEARCH RULES:
-16. **PRESERVE EXACT SPACING**: When searching for products, ALWAYS preserve exact spacing in product names
-    - CORRECT: "Tecno Camon 20 Pro 5G" → '%Tecno Camon 20 Pro 5G%'
-    - WRONG: "Tecno Camon 20 Pro 5G" → '%Tecno Camon20 Pro5G%' (DO NOT remove spaces!)
-    - Use the exact product name as mentioned by the user, including all spaces and special characters
-17. **PRODUCT QUERIES**: When users ask about products, prices, categories, brands, or inventory:
-    - Use products table for product information queries
-    - JOIN with orders table for purchase history and popularity analysis
-    - Include product details like brand, price, description, stock status
-    - For product searches: Use ILIKE for partial matches on product_name, brand, or category
-    - ALWAYS preserve original spacing in ILIKE patterns: ILIKE '%exact product name with spaces%'
-    - For price queries: Format prices in Naira and include currency symbol ₦
-    - For inventory queries: Check stock_quantity and in_stock status
-18. **MULTIPLE SEARCH PATTERNS**: For better product matching, use multiple ILIKE patterns:
-    - Search product_name, brand, and description fields
-    - Example: WHERE (p.product_name ILIKE '%Tecno Camon 20 Pro 5G%' OR p.brand ILIKE '%Tecno%' OR p.description ILIKE '%Camon 20%')
-
-19. **PRODUCT-ORDER RELATIONSHIPS**: For queries involving both products and orders:
-    - JOIN orders and products on product_id for detailed order information
-    - Include customer information when showing order details with products
-    - For popular products: COUNT orders by product_id and ORDER BY count DESC
-20. **CATEGORY AND BRAND QUERIES**: When filtering by categories or brands:
-    - Use exact matches for categories: Electronics, Fashion, Beauty, Computing, Automotive, Books
-    - Use ILIKE for brand searches to handle case variations
-    - Group by category for category-level analytics
-21. **STOCK AND AVAILABILITY**: For inventory and stock queries:
-    - Check both in_stock boolean and stock_quantity integer
-    - Show stock status: 'Out of Stock', 'Low Stock' (<=10), 'Medium Stock' (<=50), 'High Stock' (>50)
-    - Include stock_quantity in results for inventory management
-22. **PRICE AND REVENUE QUERIES**: For pricing and financial analysis:
-    - Use products.price for individual product pricing
-    - Use orders.total_amount for actual transaction amounts
-    - Calculate revenue by product: SUM(orders.total_amount) grouped by product_id
-    - Format all monetary values with ₦ symbol
-
-🔍 EXAMPLE PRODUCT SEARCH PATTERNS:
-- User: "Tecno Camon 20 Pro 5G" → ILIKE '%Tecno Camon 20 Pro 5G%' (preserve all spaces!)
-- User: "iPhone 14 Pro Max" → ILIKE '%iPhone 14 Pro Max%' (preserve all spaces!)
-- User: "Samsung Galaxy S22" → ILIKE '%Samsung Galaxy S22%' (preserve all spaces!)
-
-🆕 PRODUCT INFORMATION HANDLING:
-- For product queries: Use database results to provide detailed product information with prices in ₦
-- Include product names, brands, categories, prices, and stock status when available
-- For inventory queries: Show stock levels and availability status with appropriate urgency
-- For category browsing: List products by category with brief descriptions and prices
-- For brand searches: Highlight brand-specific products with competitive pricing
-- For price comparisons: Show products in price ranges (Budget ₦0-50K, Mid-range ₦50K-200K, Premium ₦200K+)
-- Always mention Nigeria-wide delivery and multiple payment options
-- Use product database results to make personalized recommendations
-- If no specific products found: Guide to browse categories or suggest popular items
-
-🆕 SHOPPING AND ORDER ASSISTANCE:
-23. For ORDER_PLACEMENT queries: Get product details for ordering assistance
-24. For PRODUCT_RECOMMENDATIONS queries: Use collaborative filtering and popularity data
-25. For PRICE_INQUIRY queries: Focus on price comparisons and budget-friendly options
-26. For STOCK_CHECK queries: Prioritize availability status and alternative suggestions
-27. For SHOPPING_ASSISTANCE queries: Provide category browsing and general product information
-28. Include customer tier discounts and delivery information when relevant
-29. Format results to help customers make informed purchasing decisions
-30. Always check stock availability before suggesting products
-31. Include estimated delivery times and payment options in shopping assistance
-
-IMPORTANT:
-1. Output ONLY the SQL query - nothing else
-2. No explanatory text, comments, or suggestions
-3. Start with SELECT, INSERT, UPDATE, DELETE, WITH, CREATE, ALTER, or DROP
-4. End with semicolon (;)
-5. Use proper PostgreSQL syntax
-6. Include appropriate WHERE clauses for Nigerian context
-7. Use date functions for time-based queries
-8. Format monetary values appropriately
-9. Handle NULL values gracefully
-10. Limit results appropriately (usually 10-50 rows)
-
-USER QUERY: "{user_query}"
-QUERY TYPE: {query_type.value}
-EXTRACTED ENTITIES: {json.dumps(entities)}
-GEOGRAPHIC CONTEXT: {json.dumps(geo_context)}
-
-Generate ONLY the SQL query - no explanations or markdown formatting.
 """
 
         try:
@@ -708,6 +617,22 @@ Generate ONLY the SQL query - no explanations or markdown formatting.
             # Ensure it ends with semicolon
             if not sql_query.endswith(';'):
                 sql_query += ';'
+
+            # 🆕 PARAMETER SUBSTITUTION: Replace placeholders with actual values from entities
+            if entities:
+                # Handle customer_id substitution - SAFE SCOPING FIX
+                customer_id = entities.get('customer_id')  # Define in proper scope
+                if customer_id is not None:
+                    sql_query = sql_query.replace('[customer_id]', str(customer_id))
+                    sql_query = sql_query.replace('{customer_id}', str(customer_id))
+                    logger.info(f"🔧 Substituted customer_id: {customer_id} in SQL query")
+
+                # Handle order_id substitution
+                order_id = entities.get('order_id')  # Define in proper scope
+                if order_id is not None:
+                    sql_query = sql_query.replace('[order_id]', f"'{order_id}'")
+                    sql_query = sql_query.replace('{order_id}', f"'{order_id}'")
+                    logger.info(f"🔧 Substituted order_id: {order_id} in SQL query")
 
             logger.info(f"🔍 Generated SQL: {sql_query}")
             return sql_query
@@ -777,9 +702,9 @@ Generate ONLY the SQL query - no explanations or markdown formatting.
             return "SELECT * FROM customers ORDER BY created_at DESC LIMIT 10;"
 
         elif query_type == QueryType.ORDER_ANALYTICS:
-            # 🔧 FIX: Proper guest user handling
+            # 🔧 FIX: Proper guest user handling with safe variable scoping
             customer_verified = entities.get('customer_verified', False)
-            customer_id = entities.get('customer_id')
+            customer_id = entities.get('customer_id')  # Always define in this scope
 
             # If we have customer_id from session (authenticated user), get their orders
             if customer_verified and customer_id:
@@ -794,8 +719,8 @@ Generate ONLY the SQL query - no explanations or markdown formatting.
                 LIMIT 20;
                 """
             # If we have customer_id from conversation history, use it for order history
-            elif entities.get('customer_id') and not customer_verified:
-                customer_id = entities['customer_id']
+            elif customer_id and not customer_verified:
+                # customer_id already defined above, no reassignment needed
                 return f"""
                 SELECT o.order_id, o.order_status, o.payment_method, o.total_amount,
                        o.delivery_date, o.created_at, c.name as customer_name
@@ -937,6 +862,7 @@ Generate ONLY the SQL query - no explanations or markdown formatting.
         # 🆕 NEW SHOPPING-RELATED FALLBACK QUERIES
         elif query_type == QueryType.PRODUCT_RECOMMENDATIONS:
             # Get popular products for recommendations
+            customer_verified = entities.get('customer_verified', False)
             customer_id = entities.get('customer_id')
             if customer_id and customer_verified:
                 return f"""
@@ -2196,6 +2122,21 @@ How can I help you with your raqibtech.com experience today? 🌟"""
 
             # Classify query intent
             query_type, entities = self.classify_query_intent(user_query, conversation_history)
+
+            # 🔧 CRITICAL FIX: Enhance entities with session context information
+            if session_context:
+                # Add customer information from session
+                if session_context.get('user_authenticated'):
+                    entities['customer_verified'] = True
+                    entities['customer_id'] = session_context.get('customer_id')
+                    entities['customer_name'] = session_context.get('customer_name')
+                    entities['customer_email'] = session_context.get('customer_email')
+                else:
+                    entities['customer_verified'] = False
+
+                # Add other session context information
+                entities['session_id'] = session_context.get('session_id')
+                entities['user_authenticated'] = session_context.get('user_authenticated', False)
 
             # Generate and execute SQL query
             sql_query = self.generate_sql_query(user_query, query_type, entities)
