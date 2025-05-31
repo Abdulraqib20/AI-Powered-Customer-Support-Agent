@@ -206,14 +206,26 @@
 }
 
 /* Chat Messages Area */
-.chat-modal-messages {
+/* .chat-modal-messages {
     flex: 1;
-    padding: 16px;
+    padding: 24px;
     overflow-y: auto;
     background: #f8f9fa;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 20px;
+    max-width: 100%;
+} */
+
+.chat-modal-messages {
+    flex: 1;
+    padding: 0; /* Remove padding for full width messages */
+    overflow-y: auto;
+    background: #f8f9fa; /* White background like ChatGPT */
+    display: flex;
+    flex-direction: column;
+    gap: 0; /* No gaps - messages touch each other */
+    max-width: 100%;
 }
 
 /* ===== WELCOME PAGE STYLES ===== */
@@ -299,11 +311,19 @@
 }
 
 /* Message Bubbles - Microsoft Fluent Style */
-.message {
+/* .message {
     display: flex;
     align-items: flex-start;
     gap: 12px;
     animation: messageSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+} */
+
+ .message {
+    display: flex;
+    flex-direction: column;
+    animation: messageSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 100%;
+    margin-bottom: 24px; /* More spacing between messages like ChatGPT */
 }
 
 @keyframes messageSlideIn {
@@ -318,10 +338,12 @@
 }
 
 .message.customer {
-    flex-direction: row-reverse;
+    align-items: flex-end; /* Align the entire message to the right */
+    margin-left: auto; /* Push message container to the right */
+    max-width: 80%; /* Limit width like ChatGPT */
 }
 
-.message-avatar {
+/* .message-avatar {
     width: 36px;
     height: 36px;
     border-radius: 8px;
@@ -332,42 +354,73 @@
     font-weight: 600;
     flex-shrink: 0;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
+} */
 
-.message.ai .message-avatar {
+/* .message.ai .message-avatar {
     background: linear-gradient(135deg, #2c3e50, #34495e);
     color: white;
+    margin-right: 10px;
+    margin-top: 8px;
+    padding: 10px;
 }
 
 .message.customer .message-avatar {
     background: linear-gradient(135deg, #18bc9c, #16a085);
     color: white;
-}
+    margin-left: 10px;
+    margin-top: 8px;
+} */
+
+/* .message.customer .message-content {
+    display: flex;
+    flex-direction: row-reverse;
+    align-items: flex-start;
+    gap: 12px;
+    max-width: 100%;
+} */
+
+/* .message-content {
+    max-width: calc(100% - 60px);
+    flex: 1;
+} */
 
 .message-content {
-    max-width: 280px;
+    max-width: 100%;
+    width: 100%;
     flex: 1;
 }
 
 .message-bubble {
     background: #ffffff;
     border: 1px solid #e9ecef;
-    border-radius: 12px;
-    padding: 12px 16px;
+    border-radius: 16px;
+    padding: 16px 20px; /* More padding like ChatGPT */
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-    font-size: 14px;
-    line-height: 1.5;
+    font-size: 13.5x; /* Slightly larger font */
+    line-height: 1.6; /* Better line height */
     word-wrap: break-word;
     position: relative;
     white-space: pre-wrap; /* Preserve whitespace formatting */
+    width: 100%; /* Full width within container */
+    box-sizing: border-box;
 }
 
 /* Enhanced AI Message Formatting */
 .message.ai .message-bubble {
     background: #f8f9fa;
-    border: 1px solid #dee2e6;
+    /* border: 1px solid #dee2e6;
     line-height: 1.6;
-    white-space: normal; /* Allow normal text flow for HTML content */
+    white-space: normal; */
+
+    border: none;
+    border-radius: 0; /* Remove border radius for full width */
+    padding: 24px; /* ChatGPT-style padding */
+    margin: 0; /* No margins for full width */
+    width: 100%;
+    box-sizing: border-box;
+    box-shadow: none;
+    line-height: 1.6;
+    white-space: normal;
 }
 
 .message.ai .message-bubble br {
@@ -389,24 +442,45 @@
     margin: 4px 0;
 }
 
+/* Customer message bubble adjustments */
+.message.customer .message-bubble {
+    max-width: fit-content; /* Adjust to content width */
+    margin-left: auto; /* Push bubble to the right */
+    background: linear-gradient(135deg, #2c3e50, #34495e);
+    color: white;
+    border-color: #2c3e50;
+}
 .message.customer .message-bubble {
     background: linear-gradient(135deg, #2c3e50, #34495e);
     color: white;
     border-color: #2c3e50;
-    white-space: pre-wrap; /* Preserve user input formatting */
 }
 
-.message-meta {
+.message:last-child .message-bubble {
+    border-bottom: none;
+}
+
+/* Hide customer message timestamp */
+.message.customer .message-meta {
+    display: none;
+}
+
+/* .message-meta {
     margin-top: 4px;
     font-size: 11px;
     color: #6c757d;
     display: flex;
     justify-content: space-between;
     align-items: center;
-}
-
-.message.customer .message-meta {
-    flex-direction: row-reverse;
+} */
+.message-meta {
+    margin-top: 8px;
+    font-size: 11px;
+    color: #6c757d;
+    display: flex;
+    justify-content: flex-start; /* Always align left */
+    align-items: center;
+    padding: 0 24px; /* Match bubble padding */
 }
 
 .response-time {
@@ -419,7 +493,7 @@
 }
 
 /* Welcome Message - Enhanced */
-.message.welcome .message-bubble {
+/* .message.welcome .message-bubble {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
     color: white;
     border: none;
@@ -428,6 +502,19 @@
     padding: 20px;
     position: relative;
     overflow: hidden;
+} */
+.message.welcome .message-bubble {
+    background: #f7f7f8; /* Match AI message background */
+    color: #000000; /* Black text */
+    border: none;
+    box-shadow: none;
+    border-radius: 0;
+    padding: 24px;
+    margin: 0;
+    width: 100%;
+    border-bottom: 1px solid #ececf1;
+    position: relative;
+    overflow: visible;
 }
 
 .message.welcome .message-bubble::before {
@@ -459,12 +546,15 @@
     margin-bottom: 12px;
 }
 
-.welcome-content p {
+/* .welcome-content p {
     font-size: 14px;
     line-height: 1.6;
     margin-bottom: 12px;
     color: #2C3E50;
     font-weight: 500;
+} */
+.welcome-content p {
+    color: #000000;
 }
 
 .welcome-quick-actions {
@@ -599,11 +689,21 @@
 }
 
 /* Typing Indicator */
-.typing-indicator {
+/* .typing-indicator {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
+} */
+.typing-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 24px; /* Match message padding */
+    background: #f7f7f8; /* Match AI background */
+    border-bottom: 1px solid #ececf1;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .typing-dots {
@@ -691,6 +791,20 @@
 
 /* Mobile Responsiveness */
 @media (max-width: 768px) {
+    .message.ai .message-bubble,
+    .message.customer .message-bubble,
+    .message.welcome .message-bubble {
+        padding: 16px; /* Slightly less padding on mobile */
+    }
+
+    .message-meta {
+        padding: 0 16px;
+    }
+
+    .typing-indicator {
+        padding: 16px;
+    }
+
     .chat-modal {
         width: 100%;
         height: 100%;
@@ -756,10 +870,10 @@
 /* ===== ENHANCED WELCOME MESSAGE STYLES ===== */
 
 /* AI Avatar Enhancement */
-.ai-avatar-icon {
+/* .ai-avatar-icon {
     font-size: 18px;
     animation: pulse 2s ease-in-out infinite;
-}
+} */
 
 @keyframes pulse {
     0%, 100% { transform: scale(1); }
@@ -2909,7 +3023,7 @@ class CustomerSupportPortal {
         typingDiv.className = 'message ai typing';
         typingDiv.id = 'typingIndicator';
         typingDiv.innerHTML = `
-            <div class="message-avatar">AI</div>
+            <div class="message-avatar"></div>
             <div class="message-content">
                 <div class="typing-indicator">
                     <span style="color: #6c757d; font-size: 12px;">raqibtech.com Assistant is typing</span>
