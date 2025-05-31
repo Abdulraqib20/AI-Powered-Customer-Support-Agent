@@ -559,7 +559,7 @@ QUERY GENERATION RULES:
 12. Order results logically
 13. Handle NULL values gracefully
 14. NEVER use CURRENT_USER - use actual customer_id values from context when available
-15. For delivery/tracking queries: Use order_status IN ('Processing', 'Delivered') and join with customer data
+15. For delivery/tracking queries: Use order_status IN ('Pending', 'Processing', 'Returned', 'Delivered') and join with customer data
 
 🚨 CRITICAL PRODUCT NAME SEARCH RULES:
 16. **PRESERVE EXACT SPACING**: When searching for products, ALWAYS preserve exact spacing in product names
@@ -1223,6 +1223,46 @@ Generate ONLY the SQL query - no explanations or markdown formatting.
         except Exception as e:
             logger.error(f"❌ History retrieval error: {e}")
             return []
+
+    def _get_user_friendly_error_message(self, error_message: str, user_query: str) -> str:
+        """
+        🛡️ Convert technical SQL errors into user-friendly messages
+        Following OWASP security guidelines to prevent information disclosure
+        """
+        error_lower = error_message.lower()
+
+        # Detect specific error types and provide appropriate user messages
+        if 'function' in error_lower and 'does not exist' in error_lower:
+            return "I'm having trouble processing your request right now. Our technical team has been notified. Please try rephrasing your question or contact our support team for assistance! 😊"
+
+        elif 'column' in error_lower and 'does not exist' in error_lower:
+            return "I couldn't find the specific information you're looking for. Please try rephrasing your question or let me know if you'd like help with something else! 🤔"
+
+        elif 'syntax error' in error_lower or 'invalid syntax' in error_lower:
+            return "I'm having difficulty understanding your request. Could you please rephrase it? I'm here to help! 💙"
+
+        elif 'permission denied' in error_lower or 'access denied' in error_lower:
+            return "I don't have access to that information right now. Please contact our support team for assistance with this request! 🔒"
+
+        elif 'timeout' in error_lower or 'connection' in error_lower:
+            return "Our system is experiencing high demand right now. Please try again in a moment, or contact our support team if the issue persists! ⏰"
+
+        elif 'string_agg' in error_lower or 'aggregate function' in error_lower:
+            return "I'm having trouble organizing the data for your request. Our technical team is working on this. Please try a simpler question or contact support! 📊"
+
+        elif 'data type' in error_lower or 'type cast' in error_lower:
+            return "There's a data formatting issue with your request. Please try rephrasing your question or contact our support team! 🔧"
+
+        else:
+            # Generic user-friendly message for unknown errors
+            return f"""I apologize, but I'm having trouble processing your request right now. 😔
+
+Here's what you can do:
+• Try rephrasing your question in a different way
+• Contact our support team at +234 (702) 5965-922
+• Send us an email at support@raqibtech.com
+
+I'm here to help you with product information, order tracking, and shopping assistance! 💙"""
 
     def detect_user_sentiment(self, user_query: str) -> Dict[str, Any]:
         """
@@ -2193,12 +2233,37 @@ How can I help you with your raqibtech.com experience today? 🌟"""
                     'results_count': len(results)
                 }
             else:
+                # **ENHANCED ERROR HANDLING**: Don't expose SQL errors to users
+                logger.error(f"❌ SQL programming error: {error_message}")
+
+                # Create user-friendly error message based on error type
+                user_friendly_message = self._get_user_friendly_error_message(error_message, user_query)
+
+                # Create query context for error logging
+                query_context = QueryContext(
+                    query_type=query_type,
+                    intent=query_type.value,
+                    entities=entities,
+                    sql_query=sql_query,
+                    execution_result=[],
+                    response=user_friendly_message,
+                    timestamp=datetime.now(),
+                    user_query=user_query,
+                    error_message=error_message  # Store technical error for logging
+                )
+
+                # Store error context for debugging (technical error not exposed to user)
+                try:
+                    self.store_conversation_context(query_context, user_id_for_history)
+                except Exception as e_store:
+                    logger.warning(f"⚠️ Failed to store error context: {e_store}")
+
                 return {
                     'success': False,
-                    'response': f"I encountered an issue processing your request: {error_message}. Please try rephrasing your question or contact our support team!",
+                    'response': user_friendly_message,
                     'query_type': 'error',
                     'execution_time': f"{time.time() - start_time:.3f}s",
-                    'error': error_message
+                    'error': "Query processing failed"  # Generic error for API response
                 }
 
         except Exception as e:

@@ -1225,6 +1225,136 @@
     background: rgba(44, 62, 80, 0.2);
     color: #2c3e50;
 }
+
+    .btn:disabled {
+        opacity: 0.6;
+    }
+
+    .alert {
+        border: none;
+        border-radius: 8px;
+    }
+
+    /* Enhanced Order Tracking Timeline Styles */
+    .tracking-timeline {
+        padding: 20px 0;
+    }
+
+    .timeline-item {
+        display: flex;
+        margin-bottom: 20px;
+        position: relative;
+    }
+
+    .timeline-item:not(:last-child)::after {
+        content: '';
+        position: absolute;
+        left: 20px;
+        top: 40px;
+        width: 2px;
+        height: calc(100% + 10px);
+        background-color: #e3e6f0;
+        z-index: 1;
+    }
+
+    .timeline-item.completed:not(:last-child)::after {
+        background-color: #1cc88a;
+    }
+
+    .timeline-marker {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background-color: #e3e6f0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 15px;
+        position: relative;
+        z-index: 2;
+        flex-shrink: 0;
+    }
+
+    .timeline-item.completed .timeline-marker {
+        background-color: #1cc88a;
+        color: white;
+    }
+
+    .timeline-item.current .timeline-marker {
+        background-color: #4e73df;
+        color: white;
+        animation: pulse 2s infinite;
+    }
+
+    .timeline-icon {
+        font-size: 16px;
+    }
+
+    .timeline-content {
+        flex: 1;
+        padding-top: 5px;
+    }
+
+    .timeline-title {
+        margin: 0 0 5px 0;
+        font-size: 16px;
+        font-weight: 600;
+        color: #5a5c69;
+    }
+
+    .timeline-item.completed .timeline-title {
+        color: #1cc88a;
+    }
+
+    .timeline-item.current .timeline-title {
+        color: #4e73df;
+    }
+
+    .timeline-description {
+        margin: 0;
+        color: #858796;
+        font-size: 14px;
+        line-height: 1.4;
+    }
+
+    @keyframes pulse {
+        0% {
+            box-shadow: 0 0 0 0 rgba(78, 115, 223, 0.7);
+        }
+        70% {
+            box-shadow: 0 0 0 10px rgba(78, 115, 223, 0);
+        }
+        100% {
+            box-shadow: 0 0 0 0 rgba(78, 115, 223, 0);
+        }
+    }
+
+    /* Enhanced order modal styles */
+    .modal-lg {
+        max-width: 900px;
+    }
+
+    .order-details-card {
+        border: none;
+        box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+        border-radius: 12px;
+    }
+
+    .status-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 14px;
+    }
+
+    .delivery-info-card {
+        background: linear-gradient(135deg, #f8f9fc 0%, #e9ecef 100%);
+        border: 1px solid #e3e6f0;
+        border-radius: 12px;
+    }
 </style>
 
 <!-- Session and User Info Header -->
@@ -1301,18 +1431,68 @@
                             <p class="text-muted">
                                 {% if session.get('user_authenticated') %}
                                     Your recent orders will appear here. You can also ask our AI assistant for help.
+                                    <br><small class="text-info">
+                                        <i class="bi bi-person-check me-1"></i>
+                                        Logged in as: {{ session.get('username', 'User') }}
+                                        (Customer ID: {{ session.get('customer_id', 'Unknown') }})
+                                    </small>
                                 {% else %}
                                     <a href="/login" class="text-decoration-none">Login</a> to see your order history, or ask our AI assistant for help.
                                 {% endif %}
                             </p>
                         </div>
 
-                        <!-- Order Tracking Form -->
+                        {% if session.get('user_authenticated') %}
+                        <!-- Authenticated User: Order History Display -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header d-flex justify-content-between align-items-center">
+                                        <h6 class="mb-0">
+                                            <i class="bi bi-clock-history text-info me-2"></i>
+                                            My Order History
+                                        </h6>
+                                        <button class="btn btn-outline-primary btn-sm" onclick="loadMyOrders()" id="refreshOrdersBtn">
+                                            <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+                                        </button>
+                                    </div>
+                                    <div class="card-body">
+                                        <!-- Order Loading State -->
+                                        <div id="orderLoadingState" class="text-center py-4" style="display: none;">
+                                            <div class="spinner-border text-primary" role="status">
+                                                <span class="visually-hidden">Loading orders...</span>
+                                            </div>
+                                            <p class="mt-2 text-muted">Loading your orders...</p>
+                                        </div>
+
+                                        <!-- Orders List Container -->
+                                        <div id="ordersListContainer">
+                                            <div class="text-center py-4 text-muted">
+                                                <i class="bi bi-box-seam" style="font-size: 2rem;"></i>
+                                                <p class="mt-2">Click "Refresh" to load your recent orders</p>
+                                            </div>
+                                        </div>
+
+                                        <!-- No Orders State -->
+                                        <div id="noOrdersState" class="text-center py-4" style="display: none;">
+                                            <i class="bi bi-inbox text-muted" style="font-size: 2rem;"></i>
+                                            <p class="mt-2 text-muted">No orders found</p>
+                                            <p class="small text-muted">Start shopping to see your orders here!</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Quick Order Lookup for Authenticated Users -->
                         <div class="row mb-4">
                             <div class="col-lg-6">
                                 <div class="card">
                                     <div class="card-header">
-                                        <h6 class="mb-0">Quick Order Lookup</h6>
+                                        <h6 class="mb-0">
+                                            <i class="bi bi-search text-primary me-2"></i>
+                                            Quick Order Lookup
+                                        </h6>
                                     </div>
                                     <div class="card-body">
                                         <div class="mb-3">
@@ -1320,9 +1500,14 @@
                                             <input type="text" class="form-control" id="orderIdInput"
                                                    placeholder="Enter your order ID (e.g., 12345)">
                                         </div>
-                                        <button class="btn btn-primary w-100" onclick="trackOrderViaChat()">
-                                            <i class="bi bi-search me-1"></i>Track My Order
-                                        </button>
+                                        <div class="d-grid gap-2">
+                                            <button class="btn btn-primary" onclick="trackSpecificOrder()">
+                                                <i class="bi bi-search me-1"></i>Track This Order
+                                            </button>
+                                            <button class="btn btn-outline-secondary" onclick="trackOrderViaChat()">
+                                                <i class="bi bi-chat-dots me-1"></i>Ask AI Assistant
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1355,6 +1540,82 @@
                                 </div>
                             </div>
                         </div>
+
+                        {% else %}
+                        <!-- Non-Authenticated User: Login Prompt and Basic Lookup -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <div class="alert alert-info">
+                                    <h6 class="alert-heading">
+                                        <i class="bi bi-info-circle me-2"></i>
+                                        Login Required for Full Order Tracking
+                                    </h6>
+                                    <p class="mb-2">To view your complete order history and manage your orders, please log in to your account.</p>
+                                    <div class="d-flex gap-2">
+                                        <a href="/login" class="btn btn-primary btn-sm">
+                                            <i class="bi bi-box-arrow-in-right me-1"></i>Login
+                                        </a>
+                                        <a href="/signup" class="btn btn-outline-primary btn-sm">
+                                            <i class="bi bi-person-plus me-1"></i>Create Account
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Basic Order Lookup for Non-Authenticated Users -->
+                        <div class="row mb-4">
+                            <div class="col-lg-6">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">Quick Order Lookup</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="mb-3">
+                                            <label class="form-label">Order ID</label>
+                                            <input type="text" class="form-control" id="orderIdInput"
+                                                   placeholder="Enter your order ID (e.g., 12345)">
+                                        </div>
+                                        <button class="btn btn-primary w-100" onclick="trackOrderViaChat()">
+                                            <i class="bi bi-search me-1"></i>Track My Order
+                                        </button>
+                                        <p class="small text-muted mt-2">
+                                            <i class="bi bi-info-circle me-1"></i>
+                                            This will open our AI assistant to help you track your order
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-lg-6">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="mb-3">
+                                            <i class="bi bi-info-circle text-info me-1"></i>
+                                            Order Status Guide
+                                        </h6>
+                                        <ul class="list-unstyled small">
+                                            <li class="mb-1">
+                                                <span class="badge bg-warning me-2">Pending</span>
+                                                Order received, being prepared
+                                            </li>
+                                            <li class="mb-1">
+                                                <span class="badge bg-info me-2">Processing</span>
+                                                Order being processed for delivery
+                                            </li>
+                                            <li class="mb-1">
+                                                <span class="badge bg-success me-2">Delivered</span>
+                                                Order delivered successfully
+                                            </li>
+                                            <li class="mb-1">
+                                                <span class="badge bg-secondary me-2">Returned</span>
+                                                Order was returned
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
 
@@ -2914,11 +3175,806 @@ function trackOrderViaChat() {
     }
 }
 
+// 📦 Enhanced Order Tracking Functions for Authenticated Users
+async function loadMyOrders() {
+    console.log('🔄 Loading orders...');
+
+    // Get authentication status from multiple sources with fallback
+    const sessionAuth = {{ 'true' if session.get('user_authenticated') else 'false' }};
+    const sessionCustomerId = {{ session.get('customer_id') or 'null' }};
+    const sessionUsername = '{{ session.get('username', '') }}';
+
+    // Check for existing JavaScript variables with different names to avoid conflicts
+    const existingAuth = typeof window.isAuthenticated !== 'undefined' ? window.isAuthenticated : false;
+    const existingCustomerId = typeof window.customerId !== 'undefined' ? window.customerId : null;
+    const existingUsername = typeof window.username !== 'undefined' ? window.username : '';
+
+    // Use session data as primary source with fallbacks
+    const isAuthenticated = sessionAuth;
+    const customerId = sessionCustomerId || existingCustomerId;
+    const username = sessionUsername || existingUsername;
+
+    console.log('🔐 Enhanced Session Debug Info:', {
+        sessionAuth: sessionAuth,
+        sessionCustomerId: sessionCustomerId,
+        sessionUsername: sessionUsername,
+        existingAuth: existingAuth,
+        existingCustomerId: existingCustomerId,
+        existingUsername: existingUsername,
+        finalAuth: isAuthenticated,
+        finalCustomerId: customerId,
+        finalUsername: username
+    });
+
+    // Get DOM elements first
+    const loadingState = document.getElementById('orderLoadingState');
+    const ordersContainer = document.getElementById('ordersListContainer');
+    const noOrdersState = document.getElementById('noOrdersState');
+    const refreshBtn = document.getElementById('refreshOrdersBtn');
+
+    // Ensure refresh button is enabled and reset, regardless of authentication
+    if (refreshBtn) {
+        refreshBtn.disabled = false;
+        refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Refresh';
+        console.log('✅ Refresh button reset to enabled state');
+    } else {
+        console.warn('⚠️ Refresh button not found in DOM');
+    }
+
+    // Check authentication
+    if (!isAuthenticated) {
+        console.error('❌ User not authenticated');
+        showAlert('Please log in to view your orders. <a href="/login" class="alert-link">Click here to login</a>', 'warning');
+
+        // Show login prompt instead of orders
+        if (ordersContainer) {
+            ordersContainer.innerHTML = `
+                <div class="text-center py-5">
+                    <i class="bi bi-person-x text-muted" style="font-size: 3rem;"></i>
+                    <h5 class="mt-3 text-muted">Authentication Required</h5>
+                    <p class="text-muted">Please log in to view your order history</p>
+                    <a href="/login" class="btn btn-primary">
+                        <i class="bi bi-box-arrow-in-right me-2"></i>Login to View Orders
+                    </a>
+                </div>
+            `;
+            ordersContainer.style.display = 'block';
+        }
+        if (loadingState) loadingState.style.display = 'none';
+        if (noOrdersState) noOrdersState.style.display = 'none';
+        return;
+    }
+
+    if (!customerId) {
+        console.error('❌ Customer ID not found in session');
+        showAlert('Session error: Customer ID missing. Please try logging in again. <a href="/login" class="alert-link">Login</a>', 'error');
+
+        if (ordersContainer) {
+            ordersContainer.innerHTML = `
+                <div class="text-center py-5">
+                    <i class="bi bi-exclamation-triangle text-warning" style="font-size: 3rem;"></i>
+                    <h5 class="mt-3 text-muted">Session Issue</h5>
+                    <p class="text-muted">Your session appears to be incomplete. Please log in again.</p>
+                    <a href="/login" class="btn btn-warning">
+                        <i class="bi bi-arrow-clockwise me-2"></i>Login Again
+                    </a>
+                </div>
+            `;
+            ordersContainer.style.display = 'block';
+        }
+        if (loadingState) loadingState.style.display = 'none';
+        if (noOrdersState) noOrdersState.style.display = 'none';
+        return;
+    }
+
+    // Show loading state and disable refresh button
+    if (loadingState) {
+        loadingState.style.display = 'block';
+        console.log('✅ Loading state shown');
+    } else {
+        console.warn('⚠️ Loading state element not found');
+    }
+
+    if (ordersContainer) {
+        ordersContainer.style.display = 'none';
+        console.log('✅ Orders container hidden');
+    } else {
+        console.warn('⚠️ Orders container element not found');
+    }
+
+    if (noOrdersState) {
+        noOrdersState.style.display = 'none';
+        console.log('✅ No orders state hidden');
+    } else {
+        console.warn('⚠️ No orders state element not found');
+    }
+
+    if (refreshBtn) {
+        refreshBtn.disabled = true;
+        refreshBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Loading...';
+    }
+
+    try {
+        console.log('🌐 Making API call to fetch orders...');
+        const response = await fetch('/api/orders/my-orders?limit=10', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        console.log('📡 API Response status:', response.status);
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        console.log('📊 API Response data:', data);
+
+        if (data.success && data.orders && data.orders.length > 0) {
+            console.log(`✅ Found ${data.orders.length} orders, displaying...`);
+            displayOrdersList(data.orders);
+        } else if (data.success && (!data.orders || data.orders.length === 0)) {
+            console.log('ℹ️ No orders found for user');
+            // Show no orders state
+            if (loadingState) loadingState.style.display = 'none';
+            if (noOrdersState) {
+                noOrdersState.style.display = 'block';
+                noOrdersState.innerHTML = `
+                    <div class="empty-state text-center py-5">
+                        <i class="bi bi-inbox text-muted" style="font-size: 3rem;"></i>
+                        <h5 class="mt-3 text-muted">No Orders Found</h5>
+                        <p class="text-muted">You haven't placed any orders yet. Start shopping to see your orders here!</p>
+                        <button class="btn btn-primary" onclick="sendQuickMessage('Show me your product catalog')">
+                            <i class="bi bi-shop me-2"></i>Browse Products
+                        </button>
+                    </div>
+                `;
+            }
+            if (ordersContainer) ordersContainer.style.display = 'none';
+        } else {
+            throw new Error(data.message || data.error || 'Failed to load orders');
+        }
+
+    } catch (error) {
+        console.error('❌ Error loading orders:', error);
+
+        // Show detailed error in orders container
+        if (ordersContainer) {
+            ordersContainer.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Error loading orders:</strong> ${error.message}
+                    <br><small class="text-muted">Check browser console for more details</small>
+                    <div class="mt-3">
+                        <button class="btn btn-sm btn-outline-danger" onclick="loadMyOrders()">
+                            <i class="bi bi-arrow-clockwise me-1"></i>Retry Loading
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary ms-2" onclick="window.location.reload()">
+                            <i class="bi bi-arrow-clockwise me-1"></i>Refresh Page
+                        </button>
+                        <button class="btn btn-sm btn-outline-info ms-2" onclick="console.log('Debug info:', {isAuthenticated: ${isAuthenticated}, customerId: ${customerId}, currentURL: window.location.href, timestamp: new Date().toISOString(), error: '${error.message}'})">
+                            <i class="bi bi-bug me-1"></i>Debug Info
+                        </button>
+                    </div>
+                </div>
+            `;
+            ordersContainer.style.display = 'block';
+        }
+
+        if (loadingState) loadingState.style.display = 'none';
+        if (noOrdersState) noOrdersState.style.display = 'none';
+
+        // Show user-friendly error message
+        showAlert(`Unable to load orders: ${error.message}`, 'error');
+    } finally {
+        // Always ensure refresh button is re-enabled
+        if (refreshBtn) {
+            refreshBtn.disabled = false;
+            refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Refresh';
+            console.log('✅ Refresh button re-enabled in finally block');
+        }
+        console.log('🔄 Order loading process completed');
+    }
+}
+
+function displayOrdersList(orders) {
+    console.log('📋 Displaying orders list:', orders);
+
+    const ordersContainer = document.getElementById('ordersListContainer');
+    const loadingState = document.getElementById('orderLoadingState');
+    const noOrdersState = document.getElementById('noOrdersState');
+
+    if (!ordersContainer) {
+        console.error('❌ Orders container not found!');
+        return;
+    }
+
+    console.log('✅ Orders container found:', ordersContainer);
+
+    // Hide loading and no orders states
+    if (loadingState) {
+        loadingState.style.display = 'none';
+        console.log('✅ Loading state hidden');
+    }
+    if (noOrdersState) {
+        noOrdersState.style.display = 'none';
+        console.log('✅ No orders state hidden');
+    }
+
+    // Generate orders HTML
+    const ordersHtml = orders.map(order => {
+        console.log('🔍 Processing order:', order);
+
+        const statusBadgeClass = getOrderStatusBadgeClass(order.status);
+
+        // Handle order date properly - fix date parsing
+        let orderDate = 'Invalid Date';
+        if (order.order_date) {
+            try {
+                // Handle both ISO string and date object formats
+                const date = new Date(order.order_date);
+                if (!isNaN(date.getTime())) {
+                    orderDate = date.toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                    });
+                } else {
+                    // Fallback to raw value if parsing fails
+                    orderDate = order.order_date.toString();
+                }
+            } catch (e) {
+                console.warn('Date parsing error:', e);
+                orderDate = order.order_date ? order.order_date.toString() : 'Unknown Date';
+            }
+        }
+
+        // Format products list with better handling
+        let productsText = 'No products found';
+        let productCount = 0;
+
+        if (order.products && Array.isArray(order.products) && order.products.length > 0) {
+            productCount = order.products.length;
+            const firstProduct = order.products[0];
+
+            if (productCount === 1) {
+                productsText = firstProduct.product_name || 'Unknown Product';
+            } else {
+                productsText = `${firstProduct.product_name || 'Unknown Product'} +${productCount - 1} more`;
+            }
+        } else if (order.items_count && order.items_count > 0) {
+            productsText = `${order.items_count} item${order.items_count > 1 ? 's' : ''}`;
+            productCount = order.items_count;
+        }
+
+        return `
+            <div class="order-card mb-3">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col-md-3">
+                            <h6 class="mb-1">📦 Order #${order.order_id}</h6>
+                            <small class="text-muted">${orderDate}</small>
+                        </div>
+                        <div class="col-md-3">
+                            <span class="badge ${statusBadgeClass}">${order.status || 'Pending'}</span>
+                            <div class="mt-1">
+                                <small class="text-muted">${productCount} item${productCount !== 1 ? 's' : ''}</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="products-section">
+                                <small class="text-muted d-block">Products:</small>
+                                <span class="fw-medium">${productsText}</span>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <strong class="text-success">₦${parseFloat(order.total_amount || 0).toLocaleString()}</strong>
+                        </div>
+                        <div class="col-md-1">
+                            <div class="btn-group-vertical" role="group">
+                                <button class="btn btn-sm btn-primary"
+                                        onclick="viewOrderDetails('${order.order_id}')"
+                                        title="View complete order details and tracking information">
+                                    <i class="bi bi-eye me-1"></i>Details
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    console.log('📝 Generated orders HTML length:', ordersHtml.length);
+
+    // Display orders or empty state
+    if (orders.length === 0) {
+        console.log('📋 No orders to display, showing empty state');
+        ordersContainer.innerHTML = `
+            <div class="empty-state text-center py-5">
+                <i class="bi bi-inbox text-muted"></i>
+                <h5 class="mt-3 text-muted">No Orders Found</h5>
+                <p class="text-muted">You haven't placed any orders yet. Start shopping to see your orders here!</p>
+                <button class="btn btn-primary" onclick="sendQuickMessage('Show me your product catalog')">
+                    <i class="bi bi-shop me-2"></i>Browse Products
+                </button>
+            </div>
+        `;
+    } else {
+        console.log(`📋 Setting orders HTML for ${orders.length} orders`);
+        ordersContainer.innerHTML = ordersHtml;
+    }
+
+    // **CRITICAL**: Ensure the orders container is visible
+    ordersContainer.style.display = 'block';
+    console.log('✅ Orders container made visible:', ordersContainer.style.display);
+
+    // Additional debugging
+    console.log('📋 Orders container final state:', {
+        innerHTML: ordersContainer.innerHTML.length + ' characters',
+        display: ordersContainer.style.display,
+        visible: ordersContainer.offsetHeight > 0,
+        childCount: ordersContainer.children.length
+    });
+}
+
+function getOrderStatusBadgeClass(status) {
+    switch (status?.toLowerCase()) {
+        case 'pending': return 'bg-warning text-dark';
+        case 'processing': return 'bg-info';
+        case 'delivered': return 'bg-success';
+        case 'returned': return 'bg-secondary';
+        case 'cancelled': return 'bg-danger';
+        default: return 'bg-light text-dark';
+    }
+}
+
+function trackSpecificOrder() {
+    const orderIdInput = document.getElementById('orderIdInput');
+    const orderId = orderIdInput?.value.trim();
+
+    if (!orderId) {
+        showAlert('Please enter an order ID', 'warning');
+        return;
+    }
+
+    // Use the consolidated viewOrderDetails function instead
+    viewOrderDetails(orderId);
+}
+
+async function viewOrderDetails(orderId) {
+    console.log(`👁️ Viewing details for order: ${orderId}`);
+
+    try {
+        // Show loading state
+        const modalElement = document.getElementById('orderTrackingModal');
+        if (!modalElement) {
+            console.error('❌ Modal element not found');
+            showAlert('Modal not found. Please refresh the page.', 'error');
+            return;
+        }
+
+        const modal = new bootstrap.Modal(modalElement);
+        const modalBody = document.querySelector('#orderTrackingModal .modal-body');
+
+        if (!modalBody) {
+            console.error('❌ Modal body not found');
+            showAlert('Modal structure incomplete. Please refresh the page.', 'error');
+            return;
+        }
+
+        modalBody.innerHTML = `
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading order details...</span>
+                </div>
+                <p class="mt-2 text-muted">Loading comprehensive order details...</p>
+            </div>
+        `;
+
+        modal.show();
+
+        // Fetch order details
+        const response = await fetch(`/api/orders/status/${orderId}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to fetch order details (${response.status})`);
+        }
+
+        const data = await response.json();
+
+        if (data.success && data.order) {
+            console.log('✅ Order details loaded successfully');
+            displayEnhancedOrderModal(data.order);
+        } else {
+            throw new Error(data.message || data.error || 'Order details not available');
+        }
+
+    } catch (error) {
+        console.error('❌ Error loading order details:', error);
+
+        // Show user-friendly error without exposing SQL details
+        const errorMessage = error.message.includes('SQL') || error.message.includes('database')
+            ? 'Unable to load order details. Please try again or contact support.'
+            : error.message;
+
+        showOrderErrorModal(orderId, errorMessage);
+    }
+}
+
+function displayEnhancedOrderModal(order) {
+    console.log('📋 Displaying enhanced order modal:', order);
+
+    const modalBody = document.querySelector('#orderTrackingModal .modal-body');
+    const modalTitle = document.querySelector('#orderTrackingModal .modal-title');
+
+    // Set modal title
+    modalTitle.innerHTML = `
+        <i class="bi bi-box-seam me-2"></i>
+        Order #${order.order_id} - Complete Details
+    `;
+
+    // Format order date
+    let orderDate = 'Unknown Date';
+    if (order.order_date) {
+        try {
+            const date = new Date(order.order_date);
+            if (!isNaN(date.getTime())) {
+                orderDate = date.toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                });
+            }
+        } catch (e) {
+            console.warn('Date parsing error:', e);
+            orderDate = order.order_date;
+        }
+    }
+
+    // Generate status badge
+    const statusBadgeClass = getOrderStatusBadgeClass(order.status);
+    const statusIcon = getOrderStatusIcon(order.status);
+
+    // Generate products list
+    let productsHtml = '';
+    if (order.products && order.products.length > 0) {
+        productsHtml = `
+            <div class="mb-4">
+                <h6><i class="bi bi-box me-2"></i>Order Items</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Product</th>
+                                <th>Category</th>
+                                <th>Brand</th>
+                                <th>Price</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${order.products.map(product => `
+                                <tr>
+                                    <td class="fw-medium">${product.product_name || 'Unknown Product'}</td>
+                                    <td><span class="badge bg-secondary">${product.category || 'N/A'}</span></td>
+                                    <td>${product.brand || 'N/A'}</td>
+                                    <td class="text-success fw-bold">₦${parseFloat(product.price || 0).toLocaleString()}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    } else {
+        productsHtml = `
+            <div class="alert alert-info mb-4">
+                <i class="bi bi-info-circle me-2"></i>
+                Product details not available for this order.
+            </div>
+        `;
+    }
+
+    // Generate tracking timeline
+    const trackingTimeline = generateTrackingTimeline(order.status, orderDate);
+
+    // Generate delivery information
+    const deliveryInfo = generateDeliveryInfo(order);
+
+    modalBody.innerHTML = `
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card border-0 bg-light">
+                    <div class="card-body">
+                        <h6 class="card-title">
+                            <i class="bi bi-info-circle text-primary me-2"></i>Order Status
+                        </h6>
+                        <div class="d-flex align-items-center mb-2">
+                            <span class="badge ${statusBadgeClass} me-2">${statusIcon} ${order.status || 'Pending'}</span>
+                        </div>
+                        <small class="text-muted">Order placed on ${orderDate}</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card border-0 bg-light">
+                    <div class="card-body">
+                        <h6 class="card-title">
+                            <i class="bi bi-currency-exchange text-success me-2"></i>Payment & Total
+                        </h6>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="fw-bold text-success">₦${parseFloat(order.total_amount || 0).toLocaleString()}</span>
+                            <span class="badge bg-info">${order.payment_method || 'Not specified'}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        ${productsHtml}
+
+        <div class="mb-4">
+            <h6><i class="bi bi-truck me-2"></i>Order Tracking Timeline</h6>
+            ${trackingTimeline}
+        </div>
+
+        ${deliveryInfo}
+
+        <div class="d-flex gap-2 mt-4">
+            <button class="btn btn-outline-primary btn-sm" onclick="refreshOrderDetails('${order.order_id}')">
+                <i class="bi bi-arrow-clockwise me-1"></i>Refresh Status
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" onclick="contactSupportAboutOrder('${order.order_id}')">
+                <i class="bi bi-headset me-1"></i>Contact Support
+            </button>
+            ${order.status === 'Pending' ? `
+                <button class="btn btn-outline-danger btn-sm" onclick="requestOrderCancellation('${order.order_id}')">
+                    <i class="bi bi-x-circle me-1"></i>Request Cancellation
+                </button>
+            ` : ''}
+        </div>
+    `;
+}
+
+function getOrderStatusIcon(status) {
+    switch (status?.toLowerCase()) {
+        case 'pending': return '⏳';
+        case 'processing': return '🔄';
+        case 'shipped': return '🚚';
+        case 'delivered': return '✅';
+        case 'returned': return '↩️';
+        case 'cancelled': return '❌';
+        default: return '📦';
+    }
+}
+
+function generateTrackingTimeline(currentStatus, orderDate) {
+    const statuses = [
+        { status: 'Pending', icon: '⏳', description: 'Order received and being prepared' },
+        { status: 'Processing', icon: '🔄', description: 'Order is being processed for shipment' },
+        { status: 'Shipped', icon: '🚚', description: 'Order has been shipped and is on the way' },
+        { status: 'Delivered', icon: '✅', description: 'Order has been delivered successfully' }
+    ];
+
+    const currentIndex = statuses.findIndex(s => s.status.toLowerCase() === currentStatus?.toLowerCase());
+
+    return `
+        <div class="tracking-timeline">
+            ${statuses.map((statusInfo, index) => {
+                const isCompleted = index <= currentIndex;
+                const isCurrent = index === currentIndex;
+
+                return `
+                    <div class="timeline-item ${isCompleted ? 'completed' : ''} ${isCurrent ? 'current' : ''}">
+                        <div class="timeline-marker">
+                            <span class="timeline-icon">${statusInfo.icon}</span>
+                        </div>
+                        <div class="timeline-content">
+                            <h6 class="timeline-title">${statusInfo.status}</h6>
+                            <p class="timeline-description">${statusInfo.description}</p>
+                            ${isCurrent ? `<small class="text-muted">Current status as of ${orderDate}</small>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+}
+
+function generateDeliveryInfo(order) {
+    if (!order.delivery_address && !order.state) {
+        return '';
+    }
+
+    return `
+        <div class="mb-4">
+            <h6><i class="bi bi-geo-alt me-2"></i>Delivery Information</h6>
+            <div class="card border-0 bg-light">
+                <div class="card-body">
+                    ${order.delivery_address ? `
+                        <p class="mb-2">
+                            <strong>Address:</strong><br>
+                            ${order.delivery_address}
+                        </p>
+                    ` : ''}
+                    ${order.state ? `
+                        <p class="mb-2">
+                            <strong>State:</strong> ${order.state}
+                            ${order.lga ? ` - ${order.lga}` : ''}
+                        </p>
+                    ` : ''}
+                    ${order.order_date ? `
+                        <p class="mb-0">
+                            <strong>Expected Delivery:</strong>
+                            <span class="text-primary">${order.order_date}</span>
+                        </p>
+                    ` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function showOrderErrorModal(orderId, errorMessage) {
+    const modalBody = document.querySelector('#orderTrackingModal .modal-body');
+    const modalTitle = document.querySelector('#orderTrackingModal .modal-title');
+
+    if (!modalBody || !modalTitle) {
+        console.error('❌ Modal elements not found for error display');
+        showAlert(`Error loading order #${orderId}: ${errorMessage}`, 'error');
+        return;
+    }
+
+    modalTitle.innerHTML = `
+        <i class="bi bi-exclamation-triangle text-warning me-2"></i>
+        Order #${orderId} - Unable to Load
+    `;
+
+    modalBody.innerHTML = `
+        <div class="text-center py-5">
+            <i class="bi bi-exclamation-triangle text-warning" style="font-size: 3rem;"></i>
+            <h5 class="mt-3 text-muted">Unable to Load Order Details</h5>
+            <p class="text-muted">${errorMessage}</p>
+
+            <div class="mt-4">
+                <button class="btn btn-primary me-2" onclick="viewOrderDetails('${orderId}')">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Try Again
+                </button>
+                <button class="btn btn-outline-secondary" onclick="contactSupportAboutOrder('${orderId}')">
+                    <i class="bi bi-headset me-1"></i>Contact Support
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+// Helper functions for order actions
+async function refreshOrderDetails(orderId) {
+    console.log(`🔄 Refreshing order details for: ${orderId}`);
+    await viewOrderDetails(orderId);
+}
+
+function contactSupportAboutOrder(orderId) {
+    console.log(`📞 Contacting support about order: ${orderId}`);
+    sendQuickMessage(`I need help with my order #${orderId}. Can you provide me with the current status and any updates?`);
+}
+
+async function requestOrderCancellation(orderId) {
+    console.log(`❌ Requesting cancellation for order: ${orderId}`);
+
+    const confirmed = confirm(`Are you sure you want to request cancellation for order #${orderId}? This action cannot be undone.`);
+
+    if (confirmed) {
+        try {
+            const response = await fetch(`/api/orders/cancel/${orderId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showAlert('Cancellation request submitted successfully', 'success');
+                // Refresh the order details
+                setTimeout(() => {
+                    viewOrderDetails(orderId);
+                }, 1000);
+            } else {
+                throw new Error(data.message || 'Failed to submit cancellation request');
+            }
+
+        } catch (error) {
+            console.error('❌ Error requesting cancellation:', error);
+            const errorMessage = error.message.includes('SQL') || error.message.includes('database')
+                ? 'Unable to process cancellation request. Please contact support.'
+                : error.message;
+            showAlert(`Error: ${errorMessage}`, 'error');
+        }
+    }
+}
+
+function cancelOrderPrompt(orderId) {
+    const confirmCancel = confirm(`Are you sure you want to cancel order #${orderId}?`);
+    if (confirmCancel) {
+        cancelOrderById(orderId);
+    }
+}
+
+async function cancelOrderById(orderId) {
+    console.log(`❌ Cancelling order: ${orderId}`);
+
+    try {
+        const response = await fetch(`/api/orders/cancel/${orderId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                reason: 'Customer requested cancellation'
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showAlert('Order cancelled successfully', 'success');
+            // Refresh orders list
+            setTimeout(() => loadMyOrders(), 1000);
+        } else {
+            throw new Error(data.message || 'Failed to cancel order');
+        }
+
+    } catch (error) {
+        console.error('❌ Error cancelling order:', error);
+        showAlert(`Error cancelling order: ${error.message}`, 'danger');
+    }
+}
+
+function showAlert(message, type = 'info') {
+    const alertHtml = `
+        <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+            <i class="bi bi-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-triangle' : 'info-circle'} me-2"></i>
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+
+    // Find a container to show the alert
+    const container = document.getElementById('ordersListContainer') || document.querySelector('.tab-content');
+    if (container) {
+        container.insertAdjacentHTML('afterbegin', alertHtml);
+
+        // Auto-remove alert after 5 seconds
+        setTimeout(() => {
+            const alert = container.querySelector('.alert');
+            if (alert) {
+                alert.remove();
+            }
+        }, 5000);
+    }
+}
+
 function handleChatKeyPress(event) {
     if (event.key === 'Enter') {
         event.preventDefault();
         sendChatMessage();
     }
+}
+
+// Add missing handleModalClick function to prevent errors
+function handleModalClick(event) {
+    // Prevent event propagation to avoid closing modal when clicking inside
+    event.stopPropagation();
+    console.log('🖱️ Modal content clicked - preventing close');
 }
 
 async function createNewChat() {
@@ -2961,13 +4017,24 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add small delay to ensure all elements are ready
     setTimeout(() => {
         try {
-    window.customerPortal = new CustomerSupportPortal();
+            window.customerPortal = new CustomerSupportPortal();
 
-    const isAuthenticated = {{ 'true' if session.get('user_authenticated') else 'false' }};
-    const currentConversationId = '{{ current_conversation_id if current_conversation_id else '' }}';
+            const isAuthenticated = {{ 'true' if session.get('user_authenticated') else 'false' }};
+            const currentConversationId = '{{ current_conversation_id if current_conversation_id else '' }}';
 
             console.log(`🔍 Auth: ${isAuthenticated}, ConvID: ${currentConversationId}`);
             console.log('✅ Floating modal chat system ready!');
+
+            // 🔧 Enhanced refresh button setup
+            if (isAuthenticated) {
+                console.log('👤 User authenticated - setting up refresh button enhancements');
+                setupRefreshButtonEnhancements();
+
+                // Test button after setup
+                setTimeout(() => {
+                    testRefreshButton();
+                }, 500);
+            }
 
             // 🔧 DEBUG: Add click test for floating button
             const floatingBtn = document.getElementById('floatingChatBtn');
@@ -2990,13 +4057,534 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('❌ Error initializing chat system:', error);
         }
     }, 200);
+
+    // Additional setup for refresh button after longer delay
+    setTimeout(() => {
+        const refreshBtn = document.getElementById('refreshOrdersBtn');
+        if (refreshBtn) {
+            console.log('🔧 Final refresh button check and setup');
+            resetRefreshButton();
+        }
+    }, 1000);
 });
 
 console.log('✅ Modal system loaded and ready');
+
+// Global debugging functions for console access
+window.debugRefreshButton = function() {
+    console.log('🐛 === REFRESH BUTTON DEBUG INFO ===');
+
+    const refreshBtn = document.getElementById('refreshOrdersBtn');
+    console.log('Button element:', refreshBtn);
+
+    if (refreshBtn) {
+        console.log('Button properties:', {
+            id: refreshBtn.id,
+            disabled: refreshBtn.disabled,
+            innerHTML: refreshBtn.innerHTML,
+            style: refreshBtn.style.cssText,
+            onclick: refreshBtn.onclick,
+            eventListeners: refreshBtn.cloneNode().outerHTML
+        });
+
+        console.log('Parent elements:', {
+            parent: refreshBtn.parentElement,
+            parentVisible: refreshBtn.parentElement ? window.getComputedStyle(refreshBtn.parentElement).display : 'N/A'
+        });
+    }
+
+    // Test authentication variables
+    const sessionAuth = {{ 'true' if session.get('user_authenticated') else 'false' }};
+    const sessionCustomerId = {{ session.get('customer_id') or 'null' }};
+
+    console.log('Authentication status:', {
+        sessionAuth: sessionAuth,
+        sessionCustomerId: sessionCustomerId,
+        jsAuth: typeof isAuthenticated !== 'undefined' ? isAuthenticated : 'undefined',
+        jsCustomerId: typeof customerId !== 'undefined' ? customerId : 'undefined'
+    });
+
+    console.log('🐛 === END DEBUG INFO ===');
+    return refreshBtn;
+};
+
+window.fixRefreshButton = function() {
+    console.log('🔧 === FIXING REFRESH BUTTON ===');
+
+    const result = resetRefreshButton();
+    if (result) {
+        console.log('✅ Refresh button fixed successfully');
+        // Test the fix
+        setTimeout(() => {
+            testRefreshButton();
+        }, 100);
+    } else {
+        console.log('❌ Failed to fix refresh button');
+    }
+
+    return result;
+};
+
+window.testRefresh = function() {
+    console.log('🧪 === TESTING REFRESH FUNCTIONALITY ===');
+
+    // Test the button
+    const buttonTest = testRefreshButton();
+
+    // Test the function directly
+    console.log('🧪 Testing loadMyOrders function directly...');
+    try {
+        loadMyOrders();
+        console.log('✅ loadMyOrders called successfully');
+    } catch (error) {
+        console.error('❌ loadMyOrders failed:', error);
+    }
+
+    return buttonTest;
+};
+
+console.log('🐛 Debug functions available: debugRefreshButton(), fixRefreshButton(), testRefresh()');
+
+// Enhanced refresh button responsiveness and debugging
+function testRefreshButton() {
+    console.log('🧪 Testing refresh button responsiveness...');
+
+    const refreshBtn = document.getElementById('refreshOrdersBtn');
+    if (!refreshBtn) {
+        console.error('❌ Refresh button not found!');
+        return false;
+    }
+
+    console.log('✅ Refresh button found:', {
+        id: refreshBtn.id,
+        disabled: refreshBtn.disabled,
+        innerHTML: refreshBtn.innerHTML,
+        onclick: refreshBtn.onclick,
+        eventListeners: refreshBtn.hasAttribute('onclick')
+    });
+
+    // Test click simulation
+    try {
+        refreshBtn.click();
+        console.log('✅ Button click simulation successful');
+        return true;
+    } catch (error) {
+        console.error('❌ Button click simulation failed:', error);
+        return false;
+    }
+}
+
+// Enhanced button event handling to prevent issues
+function setupRefreshButtonEnhancements() {
+    console.log('🔧 Setting up refresh button enhancements...');
+
+    const refreshBtn = document.getElementById('refreshOrdersBtn');
+    if (!refreshBtn) {
+        console.warn('⚠️ Refresh button not found during setup');
+        return;
+    }
+
+    // Remove any existing event listeners and add a robust one
+    refreshBtn.removeAttribute('onclick');
+
+    // Add enhanced click handler with debouncing
+    let isLoading = false;
+    refreshBtn.addEventListener('click', async function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        console.log('🖱️ Refresh button clicked');
+
+        // Prevent multiple simultaneous calls
+        if (isLoading) {
+            console.log('⚠️ Already loading, ignoring click');
+            return;
+        }
+
+        isLoading = true;
+
+        try {
+            await loadMyOrders();
+        } catch (error) {
+            console.error('❌ Error in refresh button handler:', error);
+        } finally {
+            isLoading = false;
+        }
+    });
+
+    // Add visual feedback
+    refreshBtn.addEventListener('mousedown', function() {
+        this.style.transform = 'scale(0.95)';
+    });
+
+    refreshBtn.addEventListener('mouseup', function() {
+        this.style.transform = 'scale(1)';
+    });
+
+    refreshBtn.addEventListener('mouseleave', function() {
+        this.style.transform = 'scale(1)';
+    });
+
+    console.log('✅ Refresh button enhancements applied');
+}
+
+// Function to reset refresh button if it gets stuck
+function resetRefreshButton() {
+    console.log('🔄 Resetting refresh button...');
+
+    const refreshBtn = document.getElementById('refreshOrdersBtn');
+    if (refreshBtn) {
+        refreshBtn.disabled = false;
+        refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Refresh';
+        refreshBtn.style.transform = 'scale(1)';
+        console.log('✅ Refresh button reset successfully');
+
+        // Re-setup enhancements
+        setupRefreshButtonEnhancements();
+
+        return true;
+    } else {
+        console.error('❌ Refresh button not found for reset');
+        return false;
+    }
+}
 </script>
 
 <!-- Include Checkout Modal -->
 {% include 'checkout.html' %}
+
+<!-- Custom Styles for Enhanced Order Tracking -->
+<style>
+    .order-card {
+        transition: all 0.2s ease;
+        border: 1px solid #e3e6f0;
+    }
+
+    .order-card:hover {
+        border-color: #5a5c69;
+        box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+        transform: translateY(-1px);
+    }
+
+    .raqibtech-branding {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 15px;
+        padding: 20px;
+        color: white;
+        margin-bottom: 20px;
+    }
+
+    .brand-title {
+        margin-bottom: 8px;
+    }
+
+    .brand-logo {
+        font-size: 1.5rem;
+        margin-right: 8px;
+    }
+
+    .brand-text {
+        font-weight: bold;
+        font-size: 1.8rem;
+    }
+
+    .brand-domain {
+        color: #ffd700;
+        font-weight: normal;
+    }
+
+    .brand-subtitle {
+        margin-bottom: 12px;
+        opacity: 0.9;
+    }
+
+    .brand-stats .badge {
+        margin-right: 8px;
+        margin-bottom: 4px;
+    }
+
+    .account-dashboard {
+        background: linear-gradient(135deg, #f8f9fc 0%, #e9ecef 100%);
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid #e3e6f0;
+    }
+
+    .dashboard-actions {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 15px;
+        margin-top: 15px;
+    }
+
+    .dashboard-action-btn {
+        background: white;
+        border: 1px solid #e3e6f0;
+        border-radius: 8px;
+        padding: 12px;
+        text-align: left;
+        transition: all 0.2s ease;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .dashboard-action-btn:hover {
+        border-color: #5a5c69;
+        box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+        background-color: #f8f9fc;
+    }
+
+    .action-icon {
+        font-size: 1.5rem;
+    }
+
+    .action-text strong {
+        display: block;
+        color: #5a5c69;
+        font-size: 0.9rem;
+    }
+
+    .action-text small {
+        color: #858796;
+        font-size: 0.75rem;
+    }
+
+    .auth-prompt-card {
+        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        border: 1px solid #2196f3;
+        border-radius: 12px;
+    }
+
+    .order-status-badge {
+        font-size: 0.8rem;
+        padding: 0.4rem 0.8rem;
+    }
+
+    .order-tracking-section {
+        animation: fadeIn 0.3s ease-in;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .spinner-border-sm {
+        width: 1rem;
+        height: 1rem;
+    }
+
+    .empty-state {
+        padding: 3rem 1rem;
+        text-align: center;
+        color: #6c757d;
+    }
+
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+
+    .products-section {
+        background-color: #f8f9fc;
+        border-radius: 8px;
+        padding: 12px;
+        border: 1px solid #e3e6f0;
+    }
+
+    .products-list .badge {
+        font-size: 0.75rem;
+        font-weight: normal;
+    }
+
+    .order-tracking-section {
+        border-left: 4px solid #667eea;
+    }
+
+    .order-card .btn-group-vertical .btn {
+        border-radius: 4px;
+        margin-bottom: 2px;
+    }
+
+    .order-card .btn-group .btn {
+        flex: 1;
+    }
+
+    .order-status-badge {
+        font-weight: 600;
+        letter-spacing: 0.5px;
+    }
+
+    .modal-body .table th {
+        border-top: none;
+        font-weight: 600;
+        color: #5a5c69;
+        font-size: 0.85rem;
+    }
+
+    .modal-body .table td {
+        vertical-align: middle;
+    }
+
+    .btn:disabled {
+        opacity: 0.6;
+    }
+
+    .alert {
+        border: none;
+        border-radius: 8px;
+    }
+
+    /* Enhanced Order Tracking Timeline Styles */
+    .tracking-timeline {
+        padding: 20px 0;
+    }
+
+    .timeline-item {
+        display: flex;
+        margin-bottom: 20px;
+        position: relative;
+    }
+
+    .timeline-item:not(:last-child)::after {
+        content: '';
+        position: absolute;
+        left: 20px;
+        top: 40px;
+        width: 2px;
+        height: calc(100% + 10px);
+        background-color: #e3e6f0;
+        z-index: 1;
+    }
+
+    .timeline-item.completed:not(:last-child)::after {
+        background-color: #1cc88a;
+    }
+
+    .timeline-marker {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background-color: #e3e6f0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 15px;
+        position: relative;
+        z-index: 2;
+        flex-shrink: 0;
+    }
+
+    .timeline-item.completed .timeline-marker {
+        background-color: #1cc88a;
+        color: white;
+    }
+
+    .timeline-item.current .timeline-marker {
+        background-color: #4e73df;
+        color: white;
+        animation: pulse 2s infinite;
+    }
+
+    .timeline-icon {
+        font-size: 16px;
+    }
+
+    .timeline-content {
+        flex: 1;
+        padding-top: 5px;
+    }
+
+    .timeline-title {
+        margin: 0 0 5px 0;
+        font-size: 16px;
+        font-weight: 600;
+        color: #5a5c69;
+    }
+
+    .timeline-item.completed .timeline-title {
+        color: #1cc88a;
+    }
+
+    .timeline-item.current .timeline-title {
+        color: #4e73df;
+    }
+
+    .timeline-description {
+        margin: 0;
+        color: #858796;
+        font-size: 14px;
+        line-height: 1.4;
+    }
+
+    @keyframes pulse {
+        0% {
+            box-shadow: 0 0 0 0 rgba(78, 115, 223, 0.7);
+        }
+        70% {
+            box-shadow: 0 0 0 10px rgba(78, 115, 223, 0);
+        }
+        100% {
+            box-shadow: 0 0 0 0 rgba(78, 115, 223, 0);
+        }
+    }
+
+    /* Enhanced order modal styles */
+    .modal-lg {
+        max-width: 900px;
+    }
+
+    .order-details-card {
+        border: none;
+        box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+        border-radius: 12px;
+    }
+
+    .status-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 14px;
+    }
+
+    .delivery-info-card {
+        background: linear-gradient(135deg, #f8f9fc 0%, #e9ecef 100%);
+        border: 1px solid #e3e6f0;
+        border-radius: 12px;
+    }
+</style>
+
+<!-- Order Tracking Modal -->
+<div class="modal fade" id="orderTrackingModal" tabindex="-1" aria-labelledby="orderTrackingModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="orderTrackingModalLabel">
+                    <i class="bi bi-box-seam me-2"></i>Order Tracking Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Order tracking content will be dynamically loaded here -->
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading order details...</span>
+                    </div>
+                    <p class="mt-2 text-muted">Loading comprehensive order information...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 {% endblock %}
 

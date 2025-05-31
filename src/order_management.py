@@ -504,17 +504,26 @@ class OrderManagementSystem:
                             "source": "cache"
                         }
 
-            # Query database
+            # Query database - using correct column names
             with self.get_database_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    # Get order information
                     query = """
-                        SELECT o.order_id, o.customer_id, o.order_status, o.payment_method,
-                               o.total_amount, o.delivery_date, o.created_at, o.updated_at,
-                               c.name as customer_name, c.state, c.lga, c.address,
-                               p.product_name, p.category, p.brand, p.price
+                        SELECT DISTINCT
+                            o.order_id,
+                            o.customer_id,
+                            o.order_status as status,
+                            o.payment_method,
+                            o.total_amount,
+                            o.delivery_date as order_date,
+                            o.created_at,
+                            o.updated_at,
+                            c.name as customer_name,
+                            c.state,
+                            c.lga,
+                            c.address as delivery_address
                         FROM orders o
                         JOIN customers c ON o.customer_id = c.customer_id
-                        LEFT JOIN products p ON o.product_id = p.product_id
                         WHERE o.order_id = %s
                     """
 
@@ -524,17 +533,52 @@ class OrderManagementSystem:
                         params.append(customer_id)
 
                     cursor.execute(query, params)
-                    order_data = cursor.fetchone()
+                    order_row = cursor.fetchone()
 
-                    if not order_data:
+                    if not order_row:
                         return {
                             "success": False,
                             "error": "Order not found or access denied"
                         }
 
+                    order_data = dict(order_row)
+
+                    # Get products for this order
+                    cursor.execute("""
+                        SELECT DISTINCT
+                            p.product_id,
+                            p.product_name,
+                            p.category,
+                            p.brand,
+                            p.price,
+                            1 as quantity
+                        FROM orders o
+                        LEFT JOIN products p ON o.product_id = p.product_id
+                        WHERE o.order_id = %s
+                    """, (order_id,))
+
+                    products = [dict(row) for row in cursor.fetchall()]
+                    order_data['products'] = products
+                    order_data['items_count'] = len(products)
+
+                    # Ensure proper field formatting
+                    if order_data.get('order_date'):
+                        if isinstance(order_data['order_date'], str):
+                            order_data['order_date'] = order_data['order_date']
+                        else:
+                            order_data['order_date'] = order_data['order_date'].isoformat() if order_data['order_date'] else None
+
+                    # Ensure status is properly set
+                    if not order_data.get('status'):
+                        order_data['status'] = 'Pending'
+
+                    # Cache the result
+                    if self.redis_client:
+                        self.redis_client.setex(f"order:{order_id}", 300, json.dumps(order_data, default=str))
+
                     return {
                         "success": True,
-                        "order": dict(order_data),
+                        "order": order_data,
                         "source": "database"
                     }
 
@@ -653,22 +697,69 @@ class OrderManagementSystem:
             }
 
     def get_customer_orders(self, customer_id: int, limit: int = 20) -> Dict[str, Any]:
-        """📋 Get customer's order history"""
+        """📋 Get customer's order history with enhanced product information"""
         try:
             with self.get_database_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    # Get order summary information - using correct column names
                     cursor.execute("""
-                        SELECT o.order_id, o.order_status, o.payment_method, o.total_amount,
-                               o.delivery_date, o.created_at, o.updated_at,
-                               p.product_name, p.category, p.brand
+                        SELECT DISTINCT
+                            o.order_id,
+                            o.order_status as status,
+                            o.payment_method,
+                            o.total_amount,
+                            o.delivery_date as order_date,
+                            o.created_at,
+                            o.updated_at,
+                            COUNT(DISTINCT o.product_id) as items_count,
+                            c.address as delivery_address
                         FROM orders o
-                        LEFT JOIN products p ON o.product_id = p.product_id
+                        JOIN customers c ON o.customer_id = c.customer_id
                         WHERE o.customer_id = %s
+                        GROUP BY o.order_id, o.order_status, o.payment_method, o.total_amount,
+                                 o.delivery_date, o.created_at, o.updated_at, c.address
                         ORDER BY o.created_at DESC
                         LIMIT %s
                     """, (customer_id, limit))
 
-                    orders = [dict(row) for row in cursor.fetchall()]
+                    orders = []
+                    for order_row in cursor.fetchall():
+                        order_dict = dict(order_row)
+
+                        # Get products for this order
+                        cursor.execute("""
+                            SELECT DISTINCT
+                                p.product_id,
+                                p.product_name,
+                                p.category,
+                                p.brand,
+                                p.price,
+                                1 as quantity
+                            FROM orders o
+                            LEFT JOIN products p ON o.product_id = p.product_id
+                            WHERE o.order_id = %s AND o.customer_id = %s
+                        """, (order_dict['order_id'], customer_id))
+
+                        products = [dict(row) for row in cursor.fetchall()]
+                        order_dict['products'] = products
+
+                        # Ensure proper field formatting
+                        if order_dict.get('order_date'):
+                            # Convert to proper datetime format
+                            if isinstance(order_dict['order_date'], str):
+                                order_dict['order_date'] = order_dict['order_date']
+                            else:
+                                order_dict['order_date'] = order_dict['order_date'].isoformat() if order_dict['order_date'] else None
+
+                        # Ensure status is properly set
+                        if not order_dict.get('status'):
+                            order_dict['status'] = 'Pending'
+
+                        # Ensure items_count is set
+                        if not order_dict.get('items_count'):
+                            order_dict['items_count'] = len(products)
+
+                        orders.append(order_dict)
 
                     return {
                         "success": True,
@@ -769,3 +860,129 @@ class OrderManagementSystem:
                 "success": False,
                 "error": f"Failed to retrieve analytics: {str(e)}"
             }
+
+    def format_potential_order_summary(self, cart_summary, delivery_address, payment_method):
+        """🧾 Format a potential order summary for checkout confirmation"""
+        try:
+            items_text = ""
+            for item in cart_summary.get('items', []):
+                items_text += f"• {item['product_name']} - ₦{item['price']:,.2f} x{item['quantity']} = ₦{item['subtotal']:,.2f}\n"
+
+            # Handle delivery address formatting
+            if isinstance(delivery_address, dict):
+                address_str = delivery_address.get('full_address', str(delivery_address))
+            else:
+                address_str = str(delivery_address)
+
+            # Handle payment method formatting
+            if hasattr(payment_method, 'value'):
+                payment_str = payment_method.value
+            else:
+                payment_str = str(payment_method)
+
+            summary = f"""🛍️ **Order Summary**
+
+{items_text}
+📦 Total Items: {cart_summary.get('total_items', 0)}
+💰 Subtotal: ₦{cart_summary.get('subtotal', 0):,.2f}
+
+📍 **Delivery Address:** {address_str}
+💳 **Payment Method:** {payment_str}
+
+Ready to place your order? 🚀"""
+
+            return summary.strip()
+        except Exception as e:
+            logger.error(f"❌ Error formatting order summary: {e}")
+            return f"Order Summary: {cart_summary.get('total_items', 0)} items, ₦{cart_summary.get('subtotal', 0):,.2f} total"
+
+    def place_order(self, customer_id, cart_items, delivery_address, payment_method, notes=""):
+        """🛒 Place an order using the existing create_order method"""
+        try:
+            # Convert cart_items to the format expected by create_order
+            items_for_order = []
+            for item in cart_items:
+                items_for_order.append({
+                    'product_id': item['product_id'],
+                    'quantity': item['quantity']
+                })
+
+            # Handle payment method conversion
+            if hasattr(payment_method, 'value'):
+                payment_method_str = payment_method.value
+            else:
+                payment_method_str = str(payment_method)
+
+            # Call the existing create_order method
+            result = self.create_order(
+                customer_id=customer_id,
+                items=items_for_order,
+                delivery_address=delivery_address,
+                payment_method=payment_method_str
+            )
+
+            if result.get('success'):
+                order_id = result.get('order_id')
+                order_details = result.get('order_details', {})
+                logger.info(f"✅ Order {order_id} placed successfully for customer {customer_id}")
+                return order_id, order_details, None
+            else:
+                error_msg = result.get('error', 'Unknown error occurred')
+                logger.error(f"❌ Failed to place order for customer {customer_id}: {error_msg}")
+                return None, None, error_msg
+
+        except Exception as e:
+            logger.error(f"❌ Error placing order: {e}")
+            return None, None, str(e)
+
+    def format_order_summary(self, order_details):
+        """🎉 Format order details into a readable confirmation summary"""
+        try:
+            items_text = ""
+
+            # Handle different order_details formats
+            if 'items' in order_details:
+                items = order_details['items']
+            elif 'order_items' in order_details:
+                items = order_details['order_items']
+            else:
+                # Try to extract from individual order details
+                items = [{
+                    'product_name': order_details.get('product_name', 'Unknown Product'),
+                    'quantity': 1,
+                    'subtotal': order_details.get('total_amount', 0)
+                }]
+
+            for item in items:
+                if isinstance(item, dict):
+                    product_name = item.get('product_name', 'Unknown Product')
+                    quantity = item.get('quantity', 1)
+                    subtotal = item.get('subtotal', item.get('price', 0))
+                    items_text += f"• {product_name} x{quantity} - ₦{subtotal:,.2f}\n"
+                else:
+                    # Handle OrderItem objects if they exist
+                    items_text += f"• {getattr(item, 'product_name', 'Unknown')} x{getattr(item, 'quantity', 1)} - ₦{getattr(item, 'subtotal', 0):,.2f}\n"
+
+            # Handle delivery address formatting
+            delivery_address = order_details.get('delivery_address', 'Not specified')
+            if isinstance(delivery_address, dict):
+                delivery_str = delivery_address.get('full_address', str(delivery_address))
+            else:
+                delivery_str = str(delivery_address)
+
+            summary = f"""🎉 **Order Confirmation**
+
+📋 Order ID: {order_details.get('order_id', 'Unknown')}
+{items_text}
+💰 Total: ₦{order_details.get('total_amount', 0):,.2f}
+📍 Delivery: {delivery_str}
+💳 Payment: {order_details.get('payment_method', 'Not specified')}
+📦 Status: {order_details.get('status', order_details.get('order_status', 'Pending'))}
+
+Your order has been successfully placed! 🚀
+We'll send you updates as it progresses."""
+
+            return summary.strip()
+        except Exception as e:
+            logger.error(f"❌ Error formatting order confirmation: {e}")
+            return f"Order {order_details.get('order_id', 'Unknown')} confirmed - ₦{order_details.get('total_amount', 0):,.2f}"
