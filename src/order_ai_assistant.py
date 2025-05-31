@@ -1120,6 +1120,104 @@ class OrderAIAssistant:
             logger.error(f"❌ Error getting customer address: {e}")
             return None
 
+    def _format_placed_order_summary(self, order_summary: Any) -> str:
+        """🎉 Format order confirmation with actual product details"""
+        try:
+            # Handle different order_summary formats
+            if hasattr(order_summary, 'items') and order_summary.items:
+                # Handle OrderSummary object with items
+                items_text = ""
+                for item in order_summary.items:
+                    if hasattr(item, 'product_name'):
+                        items_text += f"• {item.product_name} x{item.quantity} - ₦{item.subtotal:,.2f}\n"
+                    else:
+                        items_text += f"• {item.get('product_name', 'Product')} x{item.get('quantity', 1)} - ₦{item.get('subtotal', 0):,.2f}\n"
+
+                order_id = getattr(order_summary, 'order_id', 'Unknown')
+                total_amount = getattr(order_summary, 'total_amount', 0)
+                payment_method = getattr(order_summary, 'payment_method', 'Not specified')
+                delivery_info = getattr(order_summary, 'delivery_info', None)
+
+                delivery_str = "Not specified"
+                if delivery_info:
+                    if hasattr(delivery_info, 'full_address'):
+                        delivery_str = delivery_info.full_address
+                    elif hasattr(delivery_info, 'state'):
+                        delivery_str = f"{delivery_info.state}, Nigeria"
+
+            elif isinstance(order_summary, dict):
+                # Handle dictionary format
+                items_text = ""
+                items = order_summary.get('items', order_summary.get('order_items', []))
+
+                for item in items:
+                    if isinstance(item, dict):
+                        product_name = item.get('product_name', 'Product')
+                        quantity = item.get('quantity', 1)
+                        subtotal = item.get('subtotal', item.get('price', 0))
+                        items_text += f"• {product_name} x{quantity} - ₦{subtotal:,.2f}\n"
+                    else:
+                        # Handle object items
+                        items_text += f"• {getattr(item, 'product_name', 'Product')} x{getattr(item, 'quantity', 1)} - ₦{getattr(item, 'subtotal', 0):,.2f}\n"
+
+                order_id = order_summary.get('order_id', 'Unknown')
+                total_amount = order_summary.get('total_amount', 0)
+                payment_method = order_summary.get('payment_method', 'Not specified')
+                delivery_info = order_summary.get('delivery_info', order_summary.get('delivery_address', 'Not specified'))
+
+                delivery_str = str(delivery_info) if delivery_info else "Not specified"
+
+            else:
+                # Fallback for unexpected formats
+                logger.warning(f"Unexpected order_summary format: {type(order_summary)}")
+                return f"🎉 Order {getattr(order_summary, 'order_id', 'Unknown')} placed successfully! ₦{getattr(order_summary, 'total_amount', 0):,.2f}"
+
+            # Format the payment method properly
+            if hasattr(payment_method, 'value'):
+                payment_method_str = payment_method.value
+            elif hasattr(payment_method, 'name'):
+                payment_method_str = payment_method.name
+            else:
+                payment_method_str = str(payment_method)
+
+            summary = f"""🎉 **Order Confirmation**
+
+📋 Order ID: {order_id}
+{items_text}
+💰 Total: ₦{float(total_amount):,.2f}
+📍 Delivery: {delivery_str}
+💳 Payment: {payment_method_str}
+📦 Status: Pending
+
+Your order has been successfully placed! 🚀
+We'll send you updates as it progresses.
+
+🎯 **What's next?**
+• Track your order status
+• Continue shopping
+• Contact support if needed
+
+Thank you for shopping with raqibtech.com! 💙"""
+
+            return summary.strip()
+
+        except Exception as e:
+            logger.error(f"❌ Error formatting placed order summary: {e}")
+            # Provide a safe fallback
+            order_id = getattr(order_summary, 'order_id', 'Unknown') if hasattr(order_summary, 'order_id') else order_summary.get('order_id', 'Unknown') if isinstance(order_summary, dict) else 'Unknown'
+            total_amount = getattr(order_summary, 'total_amount', 0) if hasattr(order_summary, 'total_amount') else order_summary.get('total_amount', 0) if isinstance(order_summary, dict) else 0
+
+            return f"""🎉 **Order Confirmation**
+
+📋 Order ID: {order_id}
+💰 Total: ₦{float(total_amount):,.2f}
+📦 Status: Pending
+
+Your order has been successfully placed! 🚀
+We'll send you updates as it progresses.
+
+Thank you for shopping with raqibtech.com! 💙"""
+
 # Global instance for use in Flask app
 # Note: This will be created with a memory system when needed
 # For now, we'll make it None to avoid import errors

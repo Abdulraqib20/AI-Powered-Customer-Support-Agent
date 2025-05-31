@@ -507,32 +507,26 @@ class OrderManagementSystem:
             # Query database - using correct column names
             with self.get_database_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                    # Get order information
-                    query = """
+                    # Get order details with proper date fields
+                    cursor.execute("""
                         SELECT DISTINCT
                             o.order_id,
-                            o.customer_id,
                             o.order_status as status,
                             o.payment_method,
                             o.total_amount,
                             o.delivery_date as order_date,
                             o.created_at,
                             o.updated_at,
-                            c.name as customer_name,
+                            c.address as delivery_address,
                             c.state,
                             c.lga,
-                            c.address as delivery_address
+                            c.name as customer_name
                         FROM orders o
                         JOIN customers c ON o.customer_id = c.customer_id
                         WHERE o.order_id = %s
-                    """
+                        """ + (" AND o.customer_id = %s" if customer_id else ""),
+                        (order_id, customer_id) if customer_id else (order_id,))
 
-                    params = [order_id]
-                    if customer_id:
-                        query += " AND o.customer_id = %s"
-                        params.append(customer_id)
-
-                    cursor.execute(query, params)
                     order_row = cursor.fetchone()
 
                     if not order_row:
@@ -712,12 +706,14 @@ class OrderManagementSystem:
                             o.created_at,
                             o.updated_at,
                             COUNT(DISTINCT o.product_id) as items_count,
-                            c.address as delivery_address
+                            c.address as delivery_address,
+                            c.state,
+                            c.lga
                         FROM orders o
                         JOIN customers c ON o.customer_id = c.customer_id
                         WHERE o.customer_id = %s
                         GROUP BY o.order_id, o.order_status, o.payment_method, o.total_amount,
-                                 o.delivery_date, o.created_at, o.updated_at, c.address
+                                 o.delivery_date, o.created_at, o.updated_at, c.address, c.state, c.lga
                         ORDER BY o.created_at DESC
                         LIMIT %s
                     """, (customer_id, limit))
