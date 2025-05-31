@@ -3447,24 +3447,40 @@ function displayOrdersList(orders) {
         const statusBadgeClass = getOrderStatusBadgeClass(order.status);
 
         // Handle order date properly - fix date parsing
-        let orderDate = 'Invalid Date';
-        if (order.order_date) {
+        let orderPlacedDate = 'Unknown Date';
+        let expectedDeliveryDate = 'Not specified';
+
+        // 🔧 FIX: Use created_at for order placement date
+        if (order.created_at) {
             try {
-                // Handle both ISO string and date object formats
-                const date = new Date(order.order_date);
+                const date = new Date(order.created_at);
                 if (!isNaN(date.getTime())) {
-                    orderDate = date.toLocaleDateString('en-US', {
+                    orderPlacedDate = date.toLocaleDateString('en-US', {
                         year: 'numeric',
                         month: 'short',
                         day: 'numeric'
                     });
-                } else {
-                    // Fallback to raw value if parsing fails
-                    orderDate = order.order_date.toString();
                 }
             } catch (e) {
-                console.warn('Date parsing error:', e);
-                orderDate = order.order_date ? order.order_date.toString() : 'Unknown Date';
+                console.warn('Created date parsing error:', e);
+                orderPlacedDate = order.created_at ? order.created_at.toString() : 'Unknown Date';
+            }
+        }
+
+        // 🔧 FIX: Use order_date (delivery_date) for expected delivery
+        if (order.order_date) {
+            try {
+                const date = new Date(order.order_date);
+                if (!isNaN(date.getTime())) {
+                    expectedDeliveryDate = date.toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                    });
+                }
+            } catch (e) {
+                console.warn('Delivery date parsing error:', e);
+                expectedDeliveryDate = order.order_date ? order.order_date.toString() : 'Not specified';
             }
         }
 
@@ -3492,7 +3508,7 @@ function displayOrdersList(orders) {
                     <div class="row align-items-center">
                         <div class="col-md-3">
                             <h6 class="mb-1">📦 Order #${order.order_id}</h6>
-                            <small class="text-muted">${orderDate}</small>
+                            <small class="text-muted">${orderPlacedDate}</small>
                         </div>
                         <div class="col-md-3">
                             <span class="badge ${statusBadgeClass}">${order.status || 'Pending'}</span>
@@ -3711,21 +3727,39 @@ function displayEnhancedOrderModal(order) {
         Order #${order.order_id} - Complete Details
     `;
 
-    // Format order date
-    let orderDate = 'Unknown Date';
-    if (order.order_date) {
+    // 🔧 FIX: Use created_at for order placement date
+    let orderPlacedDate = 'Unknown Date';
+    let expectedDeliveryDate = 'Not specified';
+
+    if (order.created_at) {
         try {
-            const date = new Date(order.order_date);
+            const date = new Date(order.created_at);
             if (!isNaN(date.getTime())) {
-                orderDate = date.toLocaleDateString('en-US', {
+                orderPlacedDate = date.toLocaleDateString('en-US', {
                     year: 'numeric',
-                    month: 'long',
+                    month: 'short',
                     day: 'numeric'
                 });
             }
         } catch (e) {
-            console.warn('Date parsing error:', e);
-            orderDate = order.order_date;
+            console.warn('Created date parsing error:', e);
+            orderPlacedDate = 'Unknown Date';
+        }
+    }
+
+    // 🔧 FIX: Use delivery_date for expected delivery
+    if (order.delivery_date || order.order_date) {
+        try {
+            const date = new Date(order.delivery_date || order.order_date);
+            if (!isNaN(date.getTime())) {
+                expectedDeliveryDate = date.toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                });
+            }
+        } catch (e) {
+            console.warn('Delivery date parsing error:', e);
         }
     }
 
@@ -3773,7 +3807,7 @@ function displayEnhancedOrderModal(order) {
     }
 
     // Generate tracking timeline
-    const trackingTimeline = generateTrackingTimeline(order.status, orderDate);
+    const trackingTimeline = generateTrackingTimeline(order.status, orderPlacedDate);
 
     // Generate delivery information
     const deliveryInfo = generateDeliveryInfo(order);
@@ -3789,7 +3823,7 @@ function displayEnhancedOrderModal(order) {
                         <div class="d-flex align-items-center mb-2">
                             <span class="badge ${statusBadgeClass} me-2">${statusIcon} ${order.status || 'Pending'}</span>
                         </div>
-                        <small class="text-muted">Order placed on ${orderDate}</small>
+                        <small class="text-muted">Order placed on ${orderPlacedDate}</small>
                     </div>
                 </div>
             </div>
@@ -3803,6 +3837,13 @@ function displayEnhancedOrderModal(order) {
                             <span class="fw-bold text-success">₦${parseFloat(order.total_amount || 0).toLocaleString()}</span>
                             <span class="badge bg-info">${order.payment_method || 'Not specified'}</span>
                         </div>
+                        ${expectedDeliveryDate !== 'Not specified' ? `
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                <i class="bi bi-truck me-1"></i>Expected delivery: ${expectedDeliveryDate}
+                            </small>
+                        </div>
+                        ` : ''}
                     </div>
                 </div>
             </div>
@@ -3812,7 +3853,7 @@ function displayEnhancedOrderModal(order) {
 
         <div class="mb-4">
             <h6><i class="bi bi-truck me-2"></i>Order Tracking Timeline</h6>
-            ${trackingTimeline}
+            ${generateTrackingTimeline(order.status, orderPlacedDate)}
         </div>
 
         ${deliveryInfo}
