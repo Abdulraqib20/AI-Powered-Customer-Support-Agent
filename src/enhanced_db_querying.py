@@ -181,12 +181,14 @@ Current Date & Time Context (West Africa Time):
 # Import the enhanced recommendation engine
 try:
     from .recommendation_engine import ProductRecommendationEngine, CustomerSupportContext
-    from .order_ai_assistant import OrderAIAssistant
+    from .order_ai_assistant import OrderAIAssistant, SessionState
+    from .conversation_memory_system import world_class_memory, WorldClassMemorySystem
     logger.info("✅ Successfully imported enhanced components")
 except ImportError:
     try:
         from recommendation_engine import ProductRecommendationEngine, CustomerSupportContext
-        from order_ai_assistant import OrderAIAssistant
+        from order_ai_assistant import OrderAIAssistant, SessionState
+        from conversation_memory_system import world_class_memory, WorldClassMemorySystem
         logger.info("✅ Successfully imported enhanced components (direct)")
     except ImportError:
         logger.warning("⚠️ Enhanced components not available, using basic functionality")
@@ -194,11 +196,30 @@ except ImportError:
         CustomerSupportContext = None
         OrderAIAssistant = None
 
+        # Mock world-class memory system
+        class WorldClassMemorySystem:
+            def __init__(self): pass
+            def get_conversation_context(self, session_id, max_tokens=2000): return {}
+            def store_conversation_turn(self, session_id, user_input, ai_response, intent, entities, session_state): return "mock_turn_id"
+            def update_session_state(self, session_id, updates): return True
+
+        world_class_memory = WorldClassMemorySystem()
+
 class EnhancedDatabaseQuerying:
-    """
-    🚀 Enhanced Database Querying System for Nigerian E-commerce
-    Multi-stage pipeline with Nigerian business intelligence
-    """
+    """🚀 Advanced Nigerian E-commerce Database Querying with AI Intelligence"""
+
+    # 🆕 OFFICIAL CUSTOMER SUPPORT CONTACT INFORMATION
+    CUSTOMER_SUPPORT_CONTACTS = {
+        'primary_email': 'support@raqibtech.com',
+        'primary_phone': '+234 (702) 5965-922',
+        'business_hours': 'Monday - Friday: 8:00 AM - 6:00 PM (WAT)',
+        'emergency_support': '+234 (702) 5965-922',
+        'support_portal': 'https://raqibtech.com/support',
+        'live_chat': 'Available on raqibtech.com during business hours',
+        'whatsapp': '+234 (702) 5965-922',
+        'response_time': '24 hours for email, immediate for live chat',
+        'languages': 'English, Hausa, Yoruba, Igbo'
+    }
 
     def __init__(self):
         self.db_config = {
@@ -212,166 +233,165 @@ class EnhancedDatabaseQuerying:
         # Initialize Groq client
         self.groq_client = Groq(api_key=os.getenv('GROQ_API_KEY'))
 
-        # Initialize enhanced recommendation engine
+        # 🧠 Initialize World-Class Memory System
         try:
-            if ProductRecommendationEngine:
-                self.recommendation_engine = ProductRecommendationEngine()
-                logger.info("✅ Enhanced ProductRecommendationEngine initialized")
-            else:
-                self.recommendation_engine = None
-                logger.warning("⚠️ ProductRecommendationEngine not available")
+            self.memory_system = world_class_memory
+            logger.info("🧠 World-Class Memory System integrated successfully")
         except Exception as e:
-            logger.error(f"❌ Error initializing ProductRecommendationEngine: {e}")
+            logger.warning(f"⚠️ Memory system integration failed: {e}")
+            self.memory_system = None
+
+        # Initialize conversation context for legacy compatibility
+        self.conversation_context = {}
+
+        # Initialize Enhanced ProductRecommendationEngine
+        try:
+            from .recommendation_engine import ProductRecommendationEngine
+            self.recommendation_engine = ProductRecommendationEngine()
+            logger.info("✅ Enhanced ProductRecommendationEngine initialized")
+        except ImportError:
+            logger.warning("⚠️ Enhanced ProductRecommendationEngine not available")
             self.recommendation_engine = None
 
         # Initialize Order AI Assistant
         try:
-            if OrderAIAssistant:
-                self.order_assistant = OrderAIAssistant()
-                logger.info("✅ OrderAIAssistant initialized")
+            if OrderAIAssistant and self.memory_system: # Ensure memory_system is available
+                self.order_ai_assistant = OrderAIAssistant(memory_system=self.memory_system) # Pass memory_system
+                logger.info("✅ OrderAIAssistant initialized with memory system")
+            elif OrderAIAssistant:
+                logger.warning("⚠️ OrderAIAssistant initialized WITHOUT memory system due to self.memory_system not being available. This WILL cause issues.")
+                self.order_ai_assistant = OrderAIAssistant(memory_system=None)
             else:
-                self.order_assistant = None
-                logger.warning("⚠️ OrderAIAssistant not available")
+                self.order_ai_assistant = None
+                logger.warning("⚠️ OrderAIAssistant class not available")
         except Exception as e:
-            logger.error(f"❌ Error initializing OrderAIAssistant: {e}")
-            self.order_assistant = None
+            logger.error(f"❌ OrderAIAssistant initialization failed: {e}", exc_info=True)
+            self.order_ai_assistant = None
 
-        # Initialize Redis for conversation memory
+        # Initialize Nigerian Business Intelligence
+        self.ni_intelligence = NigerianBusinessIntelligence()
+
+        # Initialize Redis for conversation memory (fallback)
         try:
             self.redis_client = redis.Redis(
                 host=os.getenv('REDIS_HOST', 'localhost'),
-                port=int(os.getenv('REDIS_PORT', '6379')),
-                db=0,
-                decode_responses=True
+                port=int(os.getenv('REDIS_PORT', 6379)),
+                db=int(os.getenv('REDIS_DB', 0)),
+                decode_responses=True,
+                socket_connect_timeout=5,
+                socket_timeout=5,
+                retry_on_timeout=True
             )
             self.redis_client.ping()
             logger.info("✅ Redis conversation memory initialized")
         except Exception as e:
-            logger.warning(f"⚠️ Redis unavailable: {e}")
+            logger.warning(f"⚠️ Redis not available for conversation memory: {e}")
             self.redis_client = None
 
-        # Enhanced conversation tracking
-        self.conversation_context = {}
-        self.customer_mood_cache = {}
-
-        # Nigerian business intelligence helper
-        self.ni_intelligence = NigerianBusinessIntelligence()
+        logger.info("🚀 Enhanced Database Querying System initialized successfully")
 
     def classify_query_intent(self, user_query: str, conversation_history: List[Dict] = None) -> Tuple[QueryType, Dict[str, Any]]:
         """
-        🎯 Classify user query intent using Nigerian business context
-        Enhanced with conversation history for context inheritance
+        🧠 Intelligent query classification using AI with Nigerian e-commerce context
         """
-        query_lower = user_query.lower()
+        user_query_lower = user_query.lower()
+        query_lower = user_query_lower  # Alias for consistent naming
+
+        # Initialize entities dict early to prevent reference errors
         entities = {
-            'states': [],
-            'payment_methods': [],
-            'time_period': None,
-            'amount_range': None,
-            'product_categories': [],
             'order_id': None,
-            'customer_id': None,  # Added customer_id for context inheritance
+            'customer_id': None,
+            'product_categories': [],
             'brands': [],
             'product_keywords': [],
             'price_query': False,
             'inventory_query': False,
             'shopping_intent': False,
             'recommendation_intent': False,
-            'quantity': None,
-            'max_budget': None
+            'max_budget': None,
+            'delivery_date': None,
+            'payment_method': None,
+            'order_status': None,
+            'geographic_location': None,
+            'needs_customer_lookup': False
         }
 
-        # Extract Nigerian states
-        for state in NIGERIAN_STATES:
-            if state.lower() in query_lower:
-                entities['states'].append(state)
+        # 🆕 CUSTOMER SUPPORT CONTACT QUERIES - Handle these specially
+        if any(phrase in user_query_lower for phrase in [
+            'contact customer support', 'customer support contact', 'support contact',
+            'how to contact support', 'customer service contact', 'support phone',
+            'support email', 'how to reach support', 'customer care contact',
+            'help desk contact', 'technical support contact'
+        ]):
+            return QueryType.GENERAL_CONVERSATION, {
+                'intent': 'customer_support_contact_request',
+                'contact_type': 'support_team',
+                'privacy_safe': True,
+                'no_database_query': True
+            }
 
-        # Extract payment methods
-        for payment in NIGERIAN_PAYMENT_METHODS:
-            if payment.lower() in query_lower:
-                entities['payment_methods'].append(payment)
+        # Get Nigerian business context
+        geo_context = self.ni_intelligence.get_geographic_context(user_query)
+        time_context = self.ni_intelligence.get_nigerian_timezone_context()
 
-        # 🆕 Extract product categories
-        for category in NIGERIAN_PRODUCT_CATEGORIES:
-            if category.lower() in query_lower:
-                entities['product_categories'].append(category)
+        # Enhanced context for AI classification
+        system_prompt = f"""
+You are an AI classifier for a Nigerian e-commerce platform (raqibtech.com). Classify user queries into appropriate categories.
 
-        # 🆕 Extract brands
-        for brand in NIGERIAN_POPULAR_BRANDS:
-            if brand.lower() in query_lower:
-                entities['brands'] = entities.get('brands', [])
-                entities['brands'].append(brand)
+Nigerian E-commerce Context:
+- Platform: raqibtech.com
+- Currency: Nigerian Naira (₦)
+- Geographic Focus: 36 Nigerian states + FCT
+- Products: Electronics, Fashion, Beauty, Computing, Automotive, Books
+- Payment Methods: Pay on Delivery, Bank Transfer, Card, RaqibTechPay
 
-        # 🆕 Extract product-related terms
-        product_keywords = ['product', 'item', 'goods', 'phone', 'laptop', 'dress', 'shoe', 'book', 'car', 'electronics']
-        for keyword in product_keywords:
-            if keyword in query_lower:
-                entities['product_keywords'] = entities.get('product_keywords', [])
-                entities.get('product_keywords').append(keyword)
+{time_context}
 
-        # 🆕 Extract price-related terms
-        if any(term in query_lower for term in ['price', 'cost', 'naira', '₦', 'cheap', 'expensive', 'budget']):
-            entities['price_query'] = True
+Geographic Context: {json.dumps(geo_context)}
 
-        # 🆕 Extract stock/inventory terms
-        if any(term in query_lower for term in ['stock', 'available', 'inventory', 'out of stock', 'in stock']):
-            entities['inventory_query'] = True
+CRITICAL PRIVACY RULE:
+- NEVER classify customer support contact requests as customer_analysis
+- Customer support queries should be general_conversation
+- Customer data should NOT be accessed for support contact requests
 
-        # 🆕 ENHANCED SHOPPING ENTITIES
-        # Extract shopping intent terms
-        if any(term in query_lower for term in ['buy', 'purchase', 'order', 'add to cart', 'checkout', 'place order']):
-            entities['shopping_intent'] = True
+Query Classification Categories:
+1. CUSTOMER_ANALYSIS: Customer behavior, demographics, account tiers, purchase patterns
+2. ORDER_ANALYTICS: Order status, delivery tracking, payment methods, order history
+3. REVENUE_INSIGHTS: Sales data, profit analysis, financial metrics
+4. GEOGRAPHIC_ANALYSIS: State-wise sales, delivery patterns, regional preferences
+5. PRODUCT_PERFORMANCE: Product popularity, inventory, categories, brands
+6. TEMPORAL_ANALYSIS: Time-based trends, seasonal patterns, daily/monthly stats
+7. GENERAL_CONVERSATION: General questions, platform info, policies, customer support contacts
+8. PRODUCT_INFO_GENERAL: Product details, prices, availability
+9. SHOPPING_ASSISTANCE: Shopping guidance, product recommendations
+10. ORDER_PLACEMENT: Creating orders, checkout assistance
+11. PRODUCT_RECOMMENDATIONS: Personalized product suggestions
+12. PRICE_INQUIRY: Price comparisons, budget queries
+13. STOCK_CHECK: Inventory availability
+14. SHOPPING_CART: Cart management, item additions
 
-        # Extract recommendation intent terms
-        if any(term in query_lower for term in ['recommend', 'suggest', 'what should i buy', 'best product', 'popular', 'trending']):
-            entities['recommendation_intent'] = True
+IMPORTANT EXAMPLES:
+- "How to contact customer support" → GENERAL_CONVERSATION (NOT customer_analysis)
+- "Customer support phone number" → GENERAL_CONVERSATION (NOT customer_analysis)
+- "Who are your support team" → GENERAL_CONVERSATION (NOT customer_analysis)
+- "Customer service contacts" → GENERAL_CONVERSATION (NOT customer_analysis)
 
-        # Extract quantity if present
-        quantity_match = re.search(r'(\d+)\s*(piece|pieces|unit|units|qty|quantity)', query_lower)
-        if quantity_match:
-            entities['quantity'] = int(quantity_match.group(1))
+User Query: "{user_query}"
 
-        # Extract budget/price range
-        price_match = re.search(r'(?:under|below|less than|within|budget of)\s*₦?(\d+(?:,\d+)*(?:k|K|m|M)?)', query_lower)
-        if price_match:
-            price_str = price_match.group(1).replace(',', '').lower()
-            if 'k' in price_str:
-                entities['max_budget'] = float(price_str.replace('k', '')) * 1000
-            elif 'm' in price_str:
-                entities['max_budget'] = float(price_str.replace('m', '')) * 1000000
-            else:
-                entities['max_budget'] = float(price_str)
+Classify this query and extract relevant entities. Return JSON format:
+{{
+    "query_type": "category_name",
+    "confidence": 0.0-1.0,
+    "entities": {{
+        "key": "value"
+    }},
+    "intent": "specific_intent"
+}}
+"""
 
-        # Extract time periods
-        time_indicators = {
-            'today': 'today',
-            'yesterday': 'yesterday',
-            'this week': 'week',
-            'this month': 'month',
-            'this year': 'year',
-            'last week': 'last_week',
-            'last month': 'last_month',
-            'last year': 'last_year'
-        }
-
-        for indicator, period in time_indicators.items():
-            if indicator in query_lower:
-                entities['time_period'] = period
-                break
-
-        # Extract order_id if present (simple regex for "order id is XXXXX" or "order #XXXXX")
-        order_id_match = re.search(r'(?:order id is|order #|order number|order no\.|order id)\s*([0-9]+)', query_lower)
-        if order_id_match:
-            entities['order_id'] = order_id_match.group(1)
-            logger.info(f"Extracted order_id: {entities['order_id']}")
-
-        # 🔧 CRITICAL FIX: NEVER inherit conversation history for authenticated users
-        # Only inherit context for guest users when no specific entities are found
+        # 🔧 CRITICAL FIX: Conversation history inheritance (only for guest users with missing context)
         if conversation_history and not entities['order_id']:
-            # 🔧 FIX: Only inherit if this is truly a guest user (no customer_id in session)
-            # This should be controlled by the calling function, but double-check here
-
-            # Look for order_id or customer_id from recent conversation (ONLY for guests)
+            # Look for order_id from recent conversation
             for conversation in conversation_history[:3]:  # Check last 3 conversations
                 if 'entities' in conversation:
                     conv_entities = conversation['entities']
@@ -506,7 +526,7 @@ POPULAR BRANDS: Samsung, Apple, Tecno, Infinix, LG, Sony, Haier Thermocool, Scan
 """
 
         system_prompt = f"""
-You are a SQL expert for a Nigerian e-commerce platform. Generate PRECISE PostgreSQL queries based on user requests.
+You are a SQL expert for a Nigerian e-commerce platform. Generate ONLY the SQL query - no explanations, comments, or additional text.
 
 {schema_context}
 
@@ -517,6 +537,12 @@ NIGERIAN BUSINESS CONTEXT:
 - Geographic Focus: Nigerian states and LGAs
 - Payment Methods: Optimized for Nigerian market
 - Time Zone: West Africa Time (WAT, UTC+1)
+
+🔒 CRITICAL PRIVACY PROTECTION RULES:
+1. NEVER query the customers table for support contact information
+2. If user asks for "customer support contact" or similar, return: SELECT 'PRIVACY_PROTECTED' as message;
+3. Customer support queries should NOT access customer personal data
+4. Support contact information is handled by application layer, not database
 
 QUERY GENERATION RULES:
 1. Always use proper PostgreSQL syntax
@@ -534,30 +560,46 @@ QUERY GENERATION RULES:
 13. Handle NULL values gracefully
 14. NEVER use CURRENT_USER - use actual customer_id values from context when available
 15. For delivery/tracking queries: Use order_status IN ('Processing', 'Delivered') and join with customer data
-16. 🆕 PRODUCT QUERIES: When users ask about products, prices, categories, brands, or inventory:
+
+🚨 CRITICAL PRODUCT NAME SEARCH RULES:
+16. **PRESERVE EXACT SPACING**: When searching for products, ALWAYS preserve exact spacing in product names
+    - CORRECT: "Tecno Camon 20 Pro 5G" → '%Tecno Camon 20 Pro 5G%'
+    - WRONG: "Tecno Camon 20 Pro 5G" → '%Tecno Camon20 Pro5G%' (DO NOT remove spaces!)
+    - Use the exact product name as mentioned by the user, including all spaces and special characters
+17. **PRODUCT QUERIES**: When users ask about products, prices, categories, brands, or inventory:
     - Use products table for product information queries
     - JOIN with orders table for purchase history and popularity analysis
     - Include product details like brand, price, description, stock status
     - For product searches: Use ILIKE for partial matches on product_name, brand, or category
+    - ALWAYS preserve original spacing in ILIKE patterns: ILIKE '%exact product name with spaces%'
     - For price queries: Format prices in Naira and include currency symbol ₦
     - For inventory queries: Check stock_quantity and in_stock status
-17. 🆕 PRODUCT-ORDER RELATIONSHIPS: For queries involving both products and orders:
+18. **MULTIPLE SEARCH PATTERNS**: For better product matching, use multiple ILIKE patterns:
+    - Search product_name, brand, and description fields
+    - Example: WHERE (p.product_name ILIKE '%Tecno Camon 20 Pro 5G%' OR p.brand ILIKE '%Tecno%' OR p.description ILIKE '%Camon 20%')
+
+19. **PRODUCT-ORDER RELATIONSHIPS**: For queries involving both products and orders:
     - JOIN orders and products on product_id for detailed order information
     - Include customer information when showing order details with products
     - For popular products: COUNT orders by product_id and ORDER BY count DESC
-18. 🆕 CATEGORY AND BRAND QUERIES: When filtering by categories or brands:
+20. **CATEGORY AND BRAND QUERIES**: When filtering by categories or brands:
     - Use exact matches for categories: Electronics, Fashion, Beauty, Computing, Automotive, Books
     - Use ILIKE for brand searches to handle case variations
     - Group by category for category-level analytics
-19. 🆕 STOCK AND AVAILABILITY: For inventory and stock queries:
+21. **STOCK AND AVAILABILITY**: For inventory and stock queries:
     - Check both in_stock boolean and stock_quantity integer
     - Show stock status: 'Out of Stock', 'Low Stock' (<=10), 'Medium Stock' (<=50), 'High Stock' (>50)
     - Include stock_quantity in results for inventory management
-20. 🆕 PRICE AND REVENUE QUERIES: For pricing and financial analysis:
+22. **PRICE AND REVENUE QUERIES**: For pricing and financial analysis:
     - Use products.price for individual product pricing
     - Use orders.total_amount for actual transaction amounts
     - Calculate revenue by product: SUM(orders.total_amount) grouped by product_id
     - Format all monetary values with ₦ symbol
+
+🔍 EXAMPLE PRODUCT SEARCH PATTERNS:
+- User: "Tecno Camon 20 Pro 5G" → ILIKE '%Tecno Camon 20 Pro 5G%' (preserve all spaces!)
+- User: "iPhone 14 Pro Max" → ILIKE '%iPhone 14 Pro Max%' (preserve all spaces!)
+- User: "Samsung Galaxy S22" → ILIKE '%Samsung Galaxy S22%' (preserve all spaces!)
 
 🆕 PRODUCT INFORMATION HANDLING:
 - For product queries: Use database results to provide detailed product information with prices in ₦
@@ -571,22 +613,34 @@ QUERY GENERATION RULES:
 - If no specific products found: Guide to browse categories or suggest popular items
 
 🆕 SHOPPING AND ORDER ASSISTANCE:
-21. For ORDER_PLACEMENT queries: Get product details for ordering assistance
-22. For PRODUCT_RECOMMENDATIONS queries: Use collaborative filtering and popularity data
-23. For PRICE_INQUIRY queries: Focus on price comparisons and budget-friendly options
-24. For STOCK_CHECK queries: Prioritize availability status and alternative suggestions
-25. For SHOPPING_ASSISTANCE queries: Provide category browsing and general product information
-26. Include customer tier discounts and delivery information when relevant
-27. Format results to help customers make informed purchasing decisions
-28. Always check stock availability before suggesting products
-29. Include estimated delivery times and payment options in shopping assistance
+23. For ORDER_PLACEMENT queries: Get product details for ordering assistance
+24. For PRODUCT_RECOMMENDATIONS queries: Use collaborative filtering and popularity data
+25. For PRICE_INQUIRY queries: Focus on price comparisons and budget-friendly options
+26. For STOCK_CHECK queries: Prioritize availability status and alternative suggestions
+27. For SHOPPING_ASSISTANCE queries: Provide category browsing and general product information
+28. Include customer tier discounts and delivery information when relevant
+29. Format results to help customers make informed purchasing decisions
+30. Always check stock availability before suggesting products
+31. Include estimated delivery times and payment options in shopping assistance
+
+IMPORTANT:
+1. Output ONLY the SQL query - nothing else
+2. No explanatory text, comments, or suggestions
+3. Start with SELECT, INSERT, UPDATE, DELETE, WITH, CREATE, ALTER, or DROP
+4. End with semicolon (;)
+5. Use proper PostgreSQL syntax
+6. Include appropriate WHERE clauses for Nigerian context
+7. Use date functions for time-based queries
+8. Format monetary values appropriately
+9. Handle NULL values gracefully
+10. Limit results appropriately (usually 10-50 rows)
 
 USER QUERY: "{user_query}"
 QUERY TYPE: {query_type.value}
 EXTRACTED ENTITIES: {json.dumps(entities)}
 GEOGRAPHIC CONTEXT: {json.dumps(geo_context)}
 
-Generate ONLY the SQL query, no explanations or markdown formatting.
+Generate ONLY the SQL query - no explanations or markdown formatting.
 """
 
         try:
@@ -602,8 +656,58 @@ Generate ONLY the SQL query, no explanations or markdown formatting.
 
             sql_query = response.choices[0].message.content.strip()
 
-            # Clean up the SQL query
+            # Clean up the SQL query - remove markdown and extract actual SQL
             sql_query = sql_query.replace('```sql', '').replace('```', '').strip()
+
+            # 🔧 CRITICAL FIX: Extract only the SQL query from explanatory text
+            lines = sql_query.split('\n')
+            sql_lines = []
+            in_sql_block = False
+
+            for line in lines:
+                line = line.strip()
+                # Skip empty lines and explanatory text
+                if not line:
+                    continue
+
+                # 🆕 ENHANCED FILTERING: Skip lines with explanatory keywords
+                if any(phrase in line.lower() for phrase in [
+                    'however', 'since the query', 'for a more accurate', 'given the provided',
+                    'assuming', 'consider the', 'note:', 'explanation:', 'this query',
+                    'the query type', 'a more suitable query', 'adjustment to retrieve'
+                ]):
+                    continue
+
+                # Look for SQL keywords to identify actual SQL statements
+                if any(line.upper().startswith(keyword) for keyword in ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'WITH', 'CREATE', 'ALTER', 'DROP']):
+                    in_sql_block = True
+                    sql_lines.append(line)
+                elif in_sql_block and any(keyword in line.upper() for keyword in ['FROM', 'WHERE', 'JOIN', 'ORDER BY', 'GROUP BY', 'HAVING', 'UNION', 'LIMIT', 'OFFSET']):
+                    sql_lines.append(line)
+                elif in_sql_block and line.endswith(';'):
+                    sql_lines.append(line)
+                    break  # End of SQL statement
+                elif in_sql_block and not any(phrase in line.lower() for phrase in ['however', 'since', 'given', 'assuming']):
+                    # Only add if it's part of SQL and not explanatory text
+                    sql_lines.append(line)
+
+            if sql_lines:
+                sql_query = ' '.join(sql_lines)
+
+                # 🆕 ADDITIONAL CLEANING: Remove trailing explanatory text after semicolon
+                if '; However' in sql_query or '; Since' in sql_query or '; Given' in sql_query:
+                    sql_query = sql_query.split(';')[0] + ';'
+
+                # Basic syntax validation - check for common SQL errors
+                sql_upper = sql_query.upper()
+                if 'UNION ALL' in sql_upper and ',UNION' in sql_upper.replace(' ', ''):
+                    # Fix malformed UNION syntax
+                    sql_query = sql_query.replace(', UNION', ' UNION')
+                    logger.info("🔧 Fixed malformed UNION syntax in SQL query")
+
+            # Ensure it ends with semicolon
+            if not sql_query.endswith(';'):
+                sql_query += ';'
 
             logger.info(f"🔍 Generated SQL: {sql_query}")
             return sql_query
@@ -611,6 +715,57 @@ Generate ONLY the SQL query, no explanations or markdown formatting.
         except Exception as e:
             logger.error(f"❌ SQL generation error: {e}")
             return self._get_fallback_query(query_type, entities)
+
+    def _fix_product_name_spacing(self, sql_query: str, user_query: str) -> str:
+        """🔧 Fix product name spacing issues in generated SQL"""
+        try:
+            # Common product patterns that lose spaces
+            problematic_patterns = {
+                # Tecno products
+                r"'%Tecno Camon(\d+)\s*Pro(\d*)G%'": r"'%Tecno Camon \1 Pro \2G%'",
+                r"'%TecnoCamon(\d+)\s*Pro(\d*)G%'": r"'%Tecno Camon \1 Pro \2G%'",
+                r"'%Tecno(\w+)(\d+)\s*Pro(\d*)G%'": r"'%Tecno \1 \2 Pro \3G%'",
+
+                # iPhone products
+                r"'%iPhone(\d+)\s*Pro\s*Max%'": r"'%iPhone \1 Pro Max%'",
+                r"'%iPhone(\d+)Pro\s*Max%'": r"'%iPhone \1 Pro Max%'",
+                r"'%iPhone(\d+)\s*Pro%'": r"'%iPhone \1 Pro%'",
+                r"'%iPhone(\d+)Pro%'": r"'%iPhone \1 Pro%'",
+
+                # Samsung products
+                r"'%Samsung\s*Galaxy\s*([A-Z]\d+)%'": r"'%Samsung Galaxy \1%'",
+                r"'%SamsungGalaxy([A-Z]\d+)%'": r"'%Samsung Galaxy \1%'",
+
+                # Generic number-letter combinations
+                r"'%(\w+)(\d+)\s*([A-Z]+)%'": r"'%\1 \2 \3%'",
+                r"'%(\w+)\s*(\d+)([A-Z]+)%'": r"'%\1 \2 \3%'",
+            }
+
+            # Apply fixes
+            original_query = sql_query
+            for pattern, replacement in problematic_patterns.items():
+                import re
+                sql_query = re.sub(pattern, replacement, sql_query, flags=re.IGNORECASE)
+
+            # Additional specific fixes based on user query
+            if "tecno camon 20 pro 5g" in user_query.lower():
+                # Ensure correct spacing for this specific product
+                sql_query = re.sub(r"'%Tecno\s*Camon\s*20\s*Pro\s*5\s*G%'", "'%Tecno Camon 20 Pro 5G%'", sql_query, flags=re.IGNORECASE)
+                sql_query = re.sub(r"'%TecnoCamon20Pro5G%'", "'%Tecno Camon 20 Pro 5G%'", sql_query, flags=re.IGNORECASE)
+
+            if "iphone" in user_query.lower() and "pro" in user_query.lower():
+                # Fix iPhone Pro patterns
+                sql_query = re.sub(r"'%iPhone\s*(\d+)\s*Pro\s*Max%'", r"'%iPhone \1 Pro Max%'", sql_query, flags=re.IGNORECASE)
+                sql_query = re.sub(r"'%iPhone\s*(\d+)\s*Pro%'", r"'%iPhone \1 Pro%'", sql_query, flags=re.IGNORECASE)
+
+            if sql_query != original_query:
+                logger.info(f"🔧 Fixed product name spacing in SQL query")
+
+            return sql_query
+
+        except Exception as e:
+            logger.warning(f"⚠️ Error fixing product name spacing: {e}")
+            return sql_query
 
     def _get_fallback_query(self, query_type: QueryType, entities: Dict[str, Any]) -> str:
         """Generate fallback SQL queries for error scenarios"""
@@ -1202,6 +1357,11 @@ RESPONSE STYLE:
         try:
             customer_id = session_context.get('customer_id') if session_context else None
 
+            # 🆕 DETECT USER SENTIMENT AND GET EMOTIONAL RESPONSE STYLE
+            sentiment_data = self.detect_user_sentiment(query_context.user_query)
+            empathetic_style = self.get_empathetic_response_style(sentiment_data, query_context)
+            logger.info(f"🎭 Detected emotion: {sentiment_data['emotion']} (intensity: {sentiment_data['intensity']})")
+
             # Get intelligent recommendations for product-related queries
             recommendations_data = None
             if query_context.query_type in [QueryType.PRODUCT_PERFORMANCE, QueryType.PRODUCT_RECOMMENDATIONS,
@@ -1219,21 +1379,22 @@ RESPONSE STYLE:
                 'nigerian_time_context': NigerianBusinessIntelligence.get_nigerian_timezone_context(),
                 'session_context': session_context or {},
                 'recommendations': recommendations_data,
-                'customer_mood': None,
+                'customer_mood': sentiment_data['emotion'],  # 🆕 Add detected emotion
+                'sentiment_data': sentiment_data,  # 🆕 Add full sentiment data
+                'empathetic_style': empathetic_style,  # 🆕 Add emotional response style
                 'support_context': None
             }
 
             # Add support context if available
             if customer_id and recommendations_data and 'support_context' in recommendations_data:
                 enhanced_context['support_context'] = recommendations_data['support_context']
-                enhanced_context['customer_mood'] = recommendations_data['support_context'].get('customer_mood', 'neutral')
 
             # Generate response with enhanced context
             system_prompt = self._build_enhanced_system_prompt(enhanced_context)
 
             # Generate AI response
             response = self.groq_client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model="meta-llama/llama-4-scout-17b-16e-instruct",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"""
@@ -1241,9 +1402,11 @@ RESPONSE STYLE:
 
                     Query results: {safe_json_dumps(query_context.execution_result, max_items=3)}
 
+                    Customer emotion detected: {sentiment_data['emotion']} (intensity: {sentiment_data['intensity']})
+
                     {f"Intelligent recommendations available: {recommendations_data['total_recommendations']} products across {len(recommendations_data.get('recommendations', {}))} categories" if recommendations_data and recommendations_data.get('success') else ""}
 
-                    Provide a helpful, empathetic Nigerian customer support response.
+                    Provide a helpful, empathetic Nigerian customer support response following the emotional style guidelines. Use appropriate emojis based on the detected emotion.
                     """}
                 ],
                 temperature=0.7,
@@ -1252,44 +1415,142 @@ RESPONSE STYLE:
 
             ai_response = response.choices[0].message.content.strip()
 
+            # 🔧 Strip markdown formatting while keeping emojis
+            ai_response = self._strip_markdown_formatting(ai_response)
+
+            # 🆕 LOG AI RESPONSE IN TERMINAL (matching user query format)
+            logger.info(f"🤖 AI: {ai_response}")
+
             # Enhance response with recommendation details if available
             if recommendations_data and recommendations_data.get('success') and recommendations_data.get('recommendations'):
                 ai_response = self._enhance_response_with_recommendations(ai_response, recommendations_data)
+                # Strip markdown again after enhancement
+                ai_response = self._strip_markdown_formatting(ai_response)
 
             return ai_response
 
         except Exception as e:
             logger.error(f"❌ Error generating Nigerian response: {e}")
-            return self._get_fallback_emotional_response(query_context, {'sentiment': 'neutral'})
+            sentiment_fallback = {'emotion': 'neutral', 'intensity': 0.5}
+            return self._get_fallback_emotional_response(query_context, sentiment_fallback)
+
+    def generate_customer_support_contact_response(self, user_query: str) -> str:
+        """🆕 Generate customer support contact information response"""
+        try:
+            # Detect user sentiment for appropriate tone
+            sentiment_data = self.detect_user_sentiment(user_query)
+            emotion = sentiment_data['emotion']
+
+            # Choose appropriate emojis based on emotion
+            if emotion == 'frustrated':
+                emojis = ['😔', '💙', '🤗', '✨']
+                tone = "I completely understand your frustration. Let me help you get the support you need right away!"
+            elif emotion == 'worried':
+                emojis = ['🤗', '💙', '✨', '🌟']
+                tone = "Don't worry, our support team is here to help you!"
+            elif emotion == 'impatient':
+                emojis = ['⚡', '🚀', '💨']
+                tone = "I understand time is important! Here's how to reach our support team quickly:"
+            else:
+                emojis = ['😊', '✨', '💙', '🌟']
+                tone = "Happy to help you get in touch with our support team!"
+
+            # Format contact information with emojis
+            contact_info = f"""
+{tone} {emojis[0]}
+
+Here are the ways to contact raqibtech.com customer support:
+
+📧 Email: {self.CUSTOMER_SUPPORT_CONTACTS['primary_email']}
+📞 Phone: {self.CUSTOMER_SUPPORT_CONTACTS['primary_phone']}
+💬 WhatsApp: {self.CUSTOMER_SUPPORT_CONTACTS['whatsapp']}
+🌐 Support Portal: {self.CUSTOMER_SUPPORT_CONTACTS['support_portal']}
+💬 Live Chat: {self.CUSTOMER_SUPPORT_CONTACTS['live_chat']}
+
+⏰ Business Hours: {self.CUSTOMER_SUPPORT_CONTACTS['business_hours']}
+🔄 Response Time: {self.CUSTOMER_SUPPORT_CONTACTS['response_time']}
+🗣️ Languages: {self.CUSTOMER_SUPPORT_CONTACTS['languages']}
+
+Our team is ready to assist you with orders, delivery, payments, and any questions about raqibtech.com! {emojis[1]}
+            """.strip()
+
+            logger.info(f"🤖 AI: {contact_info}")
+            return contact_info
+
+        except Exception as e:
+            logger.error(f"❌ Error generating support contact response: {e}")
+            return f"You can contact our customer support team at {self.CUSTOMER_SUPPORT_CONTACTS['primary_email']} or {self.CUSTOMER_SUPPORT_CONTACTS['primary_phone']} for assistance! 😊✨"
 
     def _build_enhanced_system_prompt(self, context: Dict[str, Any]) -> str:
-        """🎯 Build enhanced system prompt with recommendation context"""
+        """🎯 Build enhanced system prompt with recommendation and emotion context"""
+
+        # 🆕 EMOTIONAL RESPONSE INTEGRATION
+        emotion_guidance = ""
+        if context.get('sentiment_data'):
+            sentiment = context['sentiment_data']
+            emotion = sentiment['emotion']
+            intensity = sentiment['intensity']
+
+            emotion_guidance = f"""
+            🎭 CUSTOMER EMOTION DETECTED: {emotion.upper()} (Intensity: {intensity})
+
+            {context.get('empathetic_style', '')}
+
+            CRITICAL: Follow the emotional style guidelines above - use the suggested emojis and tone!
+            MANDATORY: Include appropriate emojis in your response based on the customer's emotional state.
+            """
 
         mood_guidance = ""
         if context.get('customer_mood'):
             mood = context['customer_mood']
             if mood == "frustrated":
                 mood_guidance = """
-                CUSTOMER MOOD: FRUSTRATED - Be genuinely empathetic and solution-focused.
-                - Acknowledge their feelings with sincere understanding
+                🔥 CUSTOMER MOOD: FRUSTRATED - Be genuinely empathetic and solution-focused.
+                - Start with sincere apology: "I completely understand your frustration 😔"
+                - Use calming emojis: 😔, 💙, 🤗, ✨
                 - Focus on solving their immediate problem first
-                - Keep responses concise and helpful
-                - Offer one clear, quality solution
+                - End with reassurance: "I'm here to make this right for you ✨"
                 """
-            elif mood == "curious":
+            elif mood == "worried":
                 mood_guidance = """
-                CUSTOMER MOOD: CURIOUS - Be helpful and informative but concise.
-                - Answer their question directly
-                - Provide relevant context without overwhelming
-                - Suggest 1-2 related options if helpful
+                😰 CUSTOMER MOOD: WORRIED - Be reassuring and supportive.
+                - Acknowledge concern: "I understand you're worried 🤗"
+                - Use comforting emojis: 🤗, 💙, ✨, 🌟
+                - Provide clear guidance and continuous support
+                - End with positive assurance: "Everything will be okay! 🌟"
                 """
-            elif mood == "urgent":
+            elif mood == "confused":
                 mood_guidance = """
-                CUSTOMER MOOD: URGENT - Be direct and action-oriented.
-                - Address their need immediately
-                - Provide the fastest solution
-                - Skip unnecessary details
-                - Give clear next steps
+                🤔 CUSTOMER MOOD: CONFUSED - Be patient and clear.
+                - Show understanding: "No worries, I'm here to help clarify! 😊"
+                - Use friendly emojis: 😊, 💡, 🎯, ✨
+                - Break down information clearly
+                - Encourage questions: "Feel free to ask if anything is unclear! 💡"
+                """
+            elif mood == "happy":
+                mood_guidance = """
+                😊 CUSTOMER MOOD: HAPPY - Mirror their positivity.
+                - Share their joy: "So happy to help! 😊"
+                - Use joyful emojis: 😊, 🎉, ✨, 🌟, 💚
+                - Be enthusiastic and energetic
+                - Keep positive momentum: "Glad I could help! 🎉"
+                """
+            elif mood == "impatient":
+                mood_guidance = """
+                ⏰ CUSTOMER MOOD: IMPATIENT - Be quick and action-oriented.
+                - Acknowledge urgency: "I understand time is important! ⚡"
+                - Use action emojis: ⚡, 🚀, 💨, ⏰
+                - Be direct and efficient
+                - Show speed: "Let me get this sorted quickly for you! 🚀"
+                """
+            else:
+                # Default neutral mood with friendly emojis
+                mood_guidance = """
+                😊 CUSTOMER MOOD: NEUTRAL - Be warm and helpful.
+                - Be welcoming: "Happy to help! 😊"
+                - Use supportive emojis: 😊, ✨, 💙, 🌟
+                - Maintain professional warmth
+                - End positively: "Hope this helps! ✨"
                 """
 
         recommendations_guidance = ""
@@ -1303,34 +1564,177 @@ RESPONSE STYLE:
             - Include price in Nigerian Naira format
             """
 
+        # 🧠 CONVERSATION MEMORY CONTEXT
+        memory_guidance = ""
+        session_context = context.get('session_context', {})
+        conversation_memory = session_context.get('conversation_memory', {})
+
+        if conversation_memory:
+            buffer_memory = conversation_memory.get('buffer_memory', {})
+            session_state = conversation_memory.get('session_state', {})
+            entity_memory = conversation_memory.get('entity_memory', {})
+
+            # Recent conversation awareness
+            if buffer_memory.get('recent_turns'):
+                recent_turns = buffer_memory['recent_turns'][:3]  # Last 3 turns
+                last_user_input = buffer_memory.get('last_user_input', '')
+                last_ai_response = buffer_memory.get('last_ai_response', '')
+
+                memory_guidance += f"""
+                🧠 CONVERSATION MEMORY CONTEXT:
+                - Previous user input: "{last_user_input[:100]}..."
+                - Previous AI response: "{last_ai_response[:100]}..."
+                - Recent conversation turns: {len(recent_turns)}
+                - CRITICAL: Reference what was just discussed to maintain context!
+                """
+
+            # Shopping session state awareness
+            if session_state.get('session_exists'):
+                cart_items = session_state.get('cart_item_count', 0)
+                conversation_stage = session_state.get('conversation_stage', 'browsing')
+                last_product_mentioned = session_state.get('last_product_mentioned')
+                delivery_address = session_state.get('delivery_address')
+                payment_method = session_state.get('payment_method')
+
+                memory_guidance += f"""
+
+                🛒 SHOPPING SESSION STATE:
+                - Cart items: {cart_items}
+                - Conversation stage: {conversation_stage}
+                - Last product mentioned: {last_product_mentioned.get('product_name') if last_product_mentioned else 'None'}
+                - Delivery address: {delivery_address.get('full_address') if delivery_address else 'Not set'}
+                - Payment method: {payment_method or 'Not selected'}
+                - CRITICAL: Continue the shopping flow based on current stage!
+                """
+
+            # Entity memory awareness
+            entities = entity_memory.get('entities', {})
+            if entities:
+                memory_guidance += f"""
+
+                🏷️ ENTITY MEMORY:
+                - Products mentioned: {entities.get('product_info', {}).get('product_name', 'None')}
+                - Delivery preferences: {entities.get('delivery_address', 'None')}
+                - Payment preferences: {entities.get('payment_method', 'None')}
+                - CRITICAL: Use this context to provide relevant responses!
+            """
+
         return f"""
-        You are a caring Nigerian e-commerce customer support agent who genuinely wants to help.
+        You are a caring customer support agent for raqibtech.com, Nigeria's leading e-commerce platform.
+
+        PLATFORM IDENTITY:
+        - Always mention "raqibtech.com" naturally in responses to build brand familiarity
+        - Position raqibtech.com as a trusted Nigerian e-commerce destination
+        - Highlight our nationwide delivery across all 36 states + FCT
+        - Mention our multiple payment options including RaqibTechPay
 
         PERSONALITY:
         - Warm, understanding, and emotionally intelligent
         - Concise but caring - keep responses under 3 sentences when possible
         - Focus on the customer's feelings and immediate needs first
         - Nigerian cultural awareness with authentic warmth
+        - Never use markdown formatting (no **, ##, etc.) - use plain text only
+        - ALWAYS include appropriate emojis based on customer emotion
+
+        {emotion_guidance}
 
         {mood_guidance}
 
         {recommendations_guidance}
 
+        {memory_guidance}
+
         RESPONSE STYLE:
-        1. 💙 Lead with genuine empathy - acknowledge their feelings
+        1. 💙 Lead with genuine empathy - acknowledge their feelings with appropriate emojis
         2. 🎯 Address their specific need directly and concisely
         3. 🛍️ If relevant, mention 1-2 helpful products naturally
         4. 💰 Use ₦ format for prices
-        5. 🤝 End with supportive next step
+        5. 🤝 End with supportive next step mentioning raqibtech.com
+
+        EMOJI USAGE RULES:
+        - Use emojis that match the customer's detected emotion
+        - For frustrated customers: 😔, 💙, 🤗, ✨
+        - For worried customers: 🤗, 💙, ✨, 🌟
+        - For confused customers: 😊, 💡, 🎯, ✨
+        - For happy customers: 😊, 🎉, ✨, 🌟, 💚
+        - For impatient customers: ⚡, 🚀, 💨, ⏰
+        - Maximum 3-4 emojis per response
+
+        CONVERSATION FLOW RULES:
+        - ALWAYS reference what was just discussed in previous turns
+        - If user just added product to cart, help with checkout process
+        - If user provided delivery/payment info, continue that flow
+        - Maintain conversation continuity at all costs
+        - Never forget what was just mentioned in the immediate previous interaction
+
+        FORMATTING RULES:
+        - Use plain text only - NO markdown formatting
+        - NO bold (**text**), NO headers (###), NO code blocks
+        - Keep emojis for warmth but no markdown styling
+        - Simple sentences with natural flow
+
+        BRAND INTEGRATION:
+        - Naturally mention "raqibtech.com" in most responses
+        - Example: "Here at raqibtech.com, we have..."
+        - Example: "Your raqibtech.com shopping experience is important to us"
+        - Example: "Browse more products on raqibtech.com"
 
         KEEP IT SIMPLE:
         - Maximum 4-5 lines for most responses
         - One main point per response
         - Show genuine care, not just sales focus
-        - Use fewer emojis (max 3-4 per response)
+        - Use emojis that match customer's emotional state
 
         Current query: {context.get('query_type', 'general')}
+        Customer emotion: {context.get('customer_mood', 'neutral')}
         """
+
+    def _strip_markdown_formatting(self, text: str) -> str:
+        """
+        🔧 Strip markdown formatting from AI responses while keeping emojis
+        Based on OpenAI community recommendations for plain text output
+        """
+        try:
+            import re
+
+            # Remove markdown bold (**text** or __text__)
+            text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
+            text = re.sub(r'__(.*?)__', r'\1', text)
+
+            # Remove markdown italic (*text* or _text_)
+            text = re.sub(r'(?<!\*)\*([^*]+)\*(?!\*)', r'\1', text)
+            text = re.sub(r'(?<!_)_([^_]+)_(?!_)', r'\1', text)
+
+            # Remove headers (### Header)
+            text = re.sub(r'^#{1,6}\s+(.+)$', r'\1', text, flags=re.MULTILINE)
+
+            # Remove code blocks (```code```)
+            text = re.sub(r'```[\s\S]*?```', '', text)
+
+            # Remove inline code (`code`)
+            text = re.sub(r'`([^`]+)`', r'\1', text)
+
+            # Remove markdown links [text](url)
+            text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+
+            # Remove blockquotes (> text)
+            text = re.sub(r'^>\s+(.+)$', r'\1', text, flags=re.MULTILINE)
+
+            # Remove unordered list markers (- item, * item)
+            text = re.sub(r'^[-*+]\s+(.+)$', r'• \1', text, flags=re.MULTILINE)
+
+            # Remove ordered list markers (1. item)
+            text = re.sub(r'^\d+\.\s+(.+)$', r'• \1', text, flags=re.MULTILINE)
+
+            # Clean up extra whitespace but preserve line breaks
+            text = re.sub(r'\n{3,}', '\n\n', text)  # Max 2 consecutive newlines
+            text = re.sub(r'[ \t]+', ' ', text)  # Multiple spaces to single space
+
+            return text.strip()
+
+        except Exception as e:
+            logger.warning(f"⚠️ Error stripping markdown formatting: {e}")
+            return text
 
     def _enhance_response_with_recommendations(self, base_response: str, recommendations_data: Dict[str, Any]) -> str:
         """🎯 Enhance response with specific recommendation details"""
@@ -1385,41 +1789,41 @@ RESPONSE STYLE:
 
         if query_context.error_message:
             if emotion == 'frustrated':
-                return """I'm so sorry for the technical issue! 😔 I completely understand your frustration and I'm working to fix this right away.
+                response = """I'm so sorry for the technical issue! 😔 I completely understand your frustration and I'm working to fix this right away.
 
-Please try your question again, or contact our support team at +234 (702) 5965-922 for immediate help. I'm here to make this right! 💙✨"""
+Please try your question again, or contact our raqibtech.com support team at +234 (702) 5965-922 for immediate help. I'm here to make this right! 💙✨"""
 
             elif emotion == 'worried':
-                return """I understand you're concerned, and I want to reassure you everything is okay! 🤗 We're just having a small technical moment.
+                response = """I understand you're concerned, and I want to reassure you everything is okay! 🤗 We're just having a small technical moment at raqibtech.com.
 
 Please don't worry - try your question again or reach out to our team directly. We're here to help you! 🌟💙"""
 
             else:
-                return """I apologize for the technical hiccup! 😊 No worries though - these things happen.
+                response = """I apologize for the technical hiccup! 😊 No worries though - these things happen.
 
-Please try asking your question again, or contact our support team at +234 (702) 5965-922. I'm here to help! ✨"""
+Please try asking your question again, or contact our raqibtech.com support team at +234 (702) 5965-922. I'm here to help! ✨"""
 
         elif query_context.execution_result:
             results_count = len(query_context.execution_result)
 
             if emotion == 'happy':
-                return f"""Great news! 🎉 I found some helpful information for you! To give you the most accurate details for your raqibtech.com account,
+                response = f"""Great news! 🎉 I found some helpful information for you! To give you the most accurate details for your raqibtech.com account,
 
 could you share your order number or email address? I'm excited to help you get exactly what you need! ✨🌟"""
 
             elif emotion == 'impatient':
-                return f"""I found information quickly for you! ⚡ To get you the right details fast, please share your order number or email address.
+                response = f"""I found information quickly for you! ⚡ To get you the right details fast, please share your order number or email address.
 
 This will help me give you instant, accurate information about your raqibtech.com account! 🚀"""
 
             else:
-                return f"""I found some helpful information! 😊 To make sure I give you the right details for your raqibtech.com account,
+                response = f"""I found some helpful information! 😊 To make sure I give you the right details for your raqibtech.com account,
 
 could you please share your order number or email address with me? I'm here to help! ✨💙"""
 
         else:
             if emotion == 'confused':
-                return """No worries at all! 😊 I'm here to help clarify anything you need about raqibtech.com. 💡
+                response = """No worries at all! 😊 I'm here to help clarify anything you need about raqibtech.com. 💡
 
 I can help with:
 • 📦 Order tracking and delivery status
@@ -1437,32 +1841,35 @@ I can help with:
 What can I help you with regarding your raqibtech.com experience? 😊✨"""
 
             elif emotion == 'frustrated':
-                return """I'm truly sorry for any frustration! 😔 Let me help make this better right away. 💙
+                response = """I'm truly sorry for any frustration! 😔 Let me help make this better right away. 💙
 
 I can assist with:
 • 📦 Order tracking and delivery updates
 • 💳 Payment methods and account questions
 • 🛍️ Product recommendations and shopping
 • 👤 Account management and support
-• 🏪 Our extensive product catalog with competitive ₦ prices
+• 🏪 Our extensive raqibtech.com catalog with competitive ₦ prices
 
 How can I assist you with raqibtech.com today? 🌟✨"""
 
             else:
-                return """Thanks for your question! I'm your dedicated raqibtech.com customer support assistant, so I focus on helping with our platform and services. 😊
+                response = """Thanks for your question! I'm your dedicated raqibtech.com customer support assistant, so I focus on helping with our platform and services. 😊
 
 I'd love to assist you with:
 • 📦 Order tracking and delivery status
 • 💳 Payment and account questions
 • 🛍️ Shopping and product recommendations
 • 👤 Account management and support
-• 🏪 Our amazing product catalog:
+• 🏪 Our amazing raqibtech.com catalog:
   - Electronics, Fashion, Beauty, Computing, Automotive, Books
   - Nigerian brands and international favorites
   - Competitive prices in Naira (₦)
   - Fast delivery across all 36 states + FCT
 
 How can I help you with your raqibtech.com experience today? 🌟"""
+
+        # Strip markdown formatting from the response
+        return self._strip_markdown_formatting(response)
 
     def is_query_within_scope(self, user_query: str) -> bool:
         """
@@ -1558,7 +1965,7 @@ How can I help you with your raqibtech.com experience today? 🌟"""
         emotion = sentiment_data['emotion']
 
         if emotion == 'frustrated':
-            return """I understand you might be looking for information, but I'm specifically designed to help with raqibtech.com customer support! 😊
+            response = """I understand you might be looking for information, but I'm specifically designed to help with raqibtech.com customer support! 😊
 
 I'd love to assist you with:
 • 📦 Order tracking and delivery status
@@ -1569,7 +1976,7 @@ I'd love to assist you with:
 How can I help you with your raqibtech.com experience today? 🌟"""
 
         elif emotion == 'confused':
-            return """I'm here to help, but I'm specifically designed to assist with raqibtech.com customer support! 💡
+            response = """I'm here to help, but I'm specifically designed to assist with raqibtech.com customer support! 💡
 
 I can help you with:
 • 📦 Tracking your orders and deliveries
@@ -1580,7 +1987,7 @@ I can help you with:
 What can I help you with regarding your raqibtech.com experience? 😊✨"""
 
         else:
-            return """Thanks for your question! I'm your dedicated raqibtech.com customer support assistant, so I focus on helping with our platform and services. 😊
+            response = """Thanks for your question! I'm your dedicated raqibtech.com customer support assistant, so I focus on helping with our platform and services. 😊
 
 I'd love to assist you with:
 • 📦 Order tracking and delivery status
@@ -1590,360 +1997,209 @@ I'd love to assist you with:
 
 How can I help you with your raqibtech.com experience today? 🌟"""
 
+        # Strip markdown formatting from the response
+        return self._strip_markdown_formatting(response)
+
     def process_enhanced_query(self, user_query: str, session_context: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         🚀 Main pipeline method that orchestrates the entire enhanced query process
         Returns a comprehensive result dictionary for the Flask API
         """
         start_time = time.time()
-
-        # 🆕 LOG USER MESSAGE TO TERMINAL
         logger.info(f"👤 USER: {user_query}")
 
+        session_id = session_context.get('session_id', 'default_session') if session_context else 'default_session'
+
+        if session_context and 'conversation_memory' not in session_context:
+            session_context['conversation_memory'] = {}
+
+        if self.memory_system and session_context:
+            try:
+                full_conv_context = self.memory_system.get_conversation_context(session_id, max_tokens=2000)
+                session_context['conversation_memory'] = full_conv_context
+                logger.info(f"🧠 Loaded full conversation context into session_context for AI prompt: {full_conv_context.get('total_tokens',0)} tokens")
+            except Exception as e_full_mem:
+                logger.warning(f"⚠️ Failed to load full_conv_context for AI prompt: {e_full_mem}")
+
         try:
-            # 🎯 STEP 1: Check if query is within customer support scope FIRST
+            # 🆕 EARLY DETECTION: Customer Support Contact Requests
+            user_query_lower = user_query.lower()
+            support_contact_keywords = [
+                'contact customer support', 'customer support contact', 'support contact',
+                'how to contact support', 'customer service contact', 'support phone',
+                'support email', 'how to reach support', 'customer care contact',
+                'help desk contact', 'technical support contact', 'customer support number',
+                'support team contact', 'customer service number', 'support hotline'
+            ]
+
+            if any(keyword in user_query_lower for keyword in support_contact_keywords):
+                logger.info(f"🔒 PRIVACY PROTECTION: Customer support contact request detected, bypassing database query")
+
+                response_text = self.generate_customer_support_contact_response(user_query)
+
+                # Store in memory if available
+                if self.memory_system:
+                    try:
+                        self.memory_system.store_conversation_turn(
+                            session_id=session_id, user_input=user_query, ai_response=response_text,
+                            intent="customer_support_contact", entities={'contact_type': 'support_team'},
+                            session_state=session_context or {}
+                        )
+                    except Exception as e_store:
+                        logger.warning(f"⚠️ Failed to store support contact turn: {e_store}")
+
+                return {
+                    'success': True, 'response': response_text,
+                    'query_type': 'customer_support_contact', 'execution_time': f"{time.time() - start_time:.3f}s",
+                    'sql_query': None, 'results_count': 0, 'privacy_protected': True
+                }
+
             if not self.is_query_within_scope(user_query):
                 logger.info(f"🚫 Out-of-scope query detected: {user_query[:50]}...")
                 sentiment_data = self.detect_user_sentiment(user_query)
+                if self.memory_system:
+                    try:
+                        self.memory_system.store_conversation_turn(
+                            session_id=session_id, user_input=user_query, ai_response="Out of scope query",
+                            intent="out_of_scope", entities={}, session_state=session_context or {}
+                        )
+                    except Exception as e_oos_store: logger.warning(f"⚠️ Failed to store out-of-scope turn: {e_oos_store}")
                 return {
-                    'success': True,
-                    'response': self.generate_out_of_scope_response(user_query, sentiment_data),
-                    'query_type': 'out_of_scope',
-                    'execution_time': f"{time.time() - start_time:.3f}s",
-                    'sql_query': None,
-                    'results_count': 0
+                    'success': True, 'response': self.generate_out_of_scope_response(user_query, sentiment_data),
+                    'query_type': 'out_of_scope', 'execution_time': f"{time.time() - start_time:.3f}s",
+                    'sql_query': None, 'results_count': 0
                 }
 
-            # 🆕 STEP 1.5: Check if this is a SHOPPING/ORDER ACTION that needs execution
-            try:
-                # Try multiple import methods to ensure we get the order_ai_assistant
-                import sys
-                import os
+            logger.info(f"🔍 Shopping check: order_ai_assistant_instance_exists={bool(self.order_ai_assistant)}, session_context_provided={bool(session_context)}, user_is_authenticated={session_context.get('user_authenticated') if session_context else False}")
 
-                # Method 1: Try direct import
-                from src.order_ai_assistant import order_ai_assistant
-                order_ai_available = True
-                logger.info("✅ order_ai_assistant imported successfully with src import")
-            except ImportError as e1:
-                logger.warning(f"⚠️ src import failed: {e1}")
-                try:
-                    # Method 2: Add src to path and import
-                    src_path = os.path.join(os.path.dirname(__file__), '..', 'src')
-                    if src_path not in sys.path:
-                        sys.path.append(src_path)
-                    from order_ai_assistant import order_ai_assistant
-                    order_ai_available = True
-                    logger.info("✅ order_ai_assistant imported after adding src to path")
-                except ImportError as e2:
-                    logger.warning(f"⚠️ Path import failed: {e2}")
-                    try:
-                        # Method 3: Relative import
-                        from .order_ai_assistant import order_ai_assistant
-                        order_ai_available = True
-                        logger.info("✅ order_ai_assistant imported with relative import")
-                    except ImportError as e3:
-                        logger.error(f"❌ All import methods failed: {e3}")
-                        order_ai_available = False
-
-            logger.info(f"🔍 Shopping check: order_ai_available={order_ai_available}, session_context={bool(session_context)}, user_authenticated={session_context.get('user_authenticated') if session_context else False}")
-
-            if order_ai_available and session_context and session_context.get('user_authenticated'):
-                logger.info("✅ All shopping prerequisites met - checking keywords...")
+            if self.order_ai_assistant and session_context and session_context.get('user_authenticated'):
                 customer_id = session_context.get('customer_id')
+
                 if customer_id:
-                    # Check for order-related intents
-                    shopping_keywords = [
-                        # 🆕 ADD TO CART PATTERNS (MOST IMPORTANT)
-                        'add', 'add samsung', 'add galaxy', 'add phone', 'add to my cart',
-                        'buy', 'buy samsung', 'buy phone', 'get samsung', 'get phone',
-                        'order samsung', 'order phone', 'want samsung', 'want phone',
+                    parsed_intent_check = self.order_ai_assistant.parse_order_intent(user_query)
+                    intent_from_parser = parsed_intent_check['intent']
 
-                        # Original order patterns
-                        'add to cart', 'place order', 'checkout', 'proceed to checkout',
-                        'buy now', 'purchase', 'place the order', 'complete order',
-                        'use raqibpay', 'pay with', 'payment method',
-
-                        # 🆕 DELIVERY ADDRESS PATTERNS - Auto-trigger checkout
-                        'delivery address is', 'my address is', 'deliver to',
-                        'shipping address', 'send to', 'address:', 'deliver at',
-                        'my delivery address', 'ship to', 'delivery location',
-
-                        # 🆕 PAYMENT METHOD PATTERNS - Auto-trigger checkout
-                        'payment method is', 'pay with', 'use raqibpay',
-                        'payment option', 'i want to pay', 'payment preference',
-                        'method i want', 'raqibpay', 'pay on delivery',
-                        'want to use', 'i want to use raqibpay',
-
-                        # 🆕 COMPLETE CHECKOUT PATTERNS - Auto-place order
-                        'address is', 'method is', 'payment method i want',
-                        'delivery address', 'using raqibpay', 'pay with raqibpay',
-                        'lugbe', 'abuja', 'lagos', # Common Nigerian locations
-                        'raqibtech pay', 'raqib tech pay', 'confirm order', 'confirm'
+                    shopping_related_intents = [
+                        'add_to_cart', 'view_cart', 'clear_cart', 'remove_from_cart', 'update_cart_item',
+                        'checkout', 'place_order', 'set_delivery_address', 'payment_method_selection',
+                        'affirmative_confirmation', 'negative_rejection'
                     ]
+                    is_potentially_shopping_action = intent_from_parser in shopping_related_intents
 
-                    user_query_lower = user_query.lower()
-                    matched_keywords = [keyword for keyword in shopping_keywords if keyword in user_query_lower]
-                    logger.info(f"🔍 Shopping keyword check: query='{user_query[:50]}...', matched={matched_keywords}")
+                    logger.info(f"🔍 Shopping intent check: query='{user_query[:50]}...', parsed_intent='{intent_from_parser}', is_shopping_action={is_potentially_shopping_action}")
 
-                    if any(keyword in user_query_lower for keyword in shopping_keywords):
-                        logger.info(f"🎯 SHOPPING ACTION TRIGGERED! Keywords matched: {matched_keywords}")
-                        # 🆕 DIRECT ORDER PLACEMENT: When user says "place order for X", auto-extract product and place order
-                        direct_order_patterns = ['place order for', 'order for', 'place the order for', 'buy the', 'purchase the']
-                        is_direct_order = any(pattern in user_query_lower for pattern in direct_order_patterns)
+                    if is_potentially_shopping_action:
+                        logger.info(f"🎯 Potential Shopping Action via intent parser: {intent_from_parser}")
 
-                        if is_direct_order:
-                            logger.info(f"🎯 DIRECT ORDER DETECTED: {user_query[:100]}...")
-                            # Auto-set delivery and payment for direct orders
-                            user_query = f"{user_query} delivery_address:Lagos payment_method:RaqibTechPay"
-                            logger.info("🚀 Auto-adding default delivery and payment for direct order")
-                        logger.info(f"🛒 Shopping action detected: {user_query[:50]}...")
-
-                        # 🆕 ENHANCED CHECKOUT DETECTION: Auto-detect complete checkout attempts
-                        has_delivery_info = any(keyword in user_query_lower for keyword in [
-                            'address is', 'delivery address', 'lugbe', 'abuja', 'lagos', 'address:'
-                        ])
-                        has_payment_info = any(keyword in user_query_lower for keyword in [
-                            'raqibpay', 'pay with', 'payment method', 'pay on delivery', 'card'
-                        ])
-
-                        # If user provides both delivery and payment info, force order placement
-                        if has_delivery_info and has_payment_info:
-                            logger.info("🎯 COMPLETE CHECKOUT DETECTED: User provided delivery + payment info")
-                            # Override user query to trigger order placement
-                            user_query = f"place order with delivery and payment: {user_query}"
-
-                        # Get conversation history for context
-                        user_id = session_context.get('user_id', 'anonymous')
-                        conversation_history = self.get_conversation_history(user_id, limit=5)
-
-                        # 🔧 BULLETPROOF: Extract product context from multiple sources
-                        product_context = []
-
-# 1.5. SPECIFIC SAMSUNG GALAXY A24 DETECTION
-                        if 'samsung galaxy a24' in user_query_lower or ('samsung' in user_query_lower and 'galaxy' in user_query_lower and 'a24' in user_query_lower):
+                        current_session_state_obj: Optional[SessionState] = None
+                        if self.memory_system:
                             try:
-                                samsung_a24_sql = """
-                                SELECT product_id, product_name, category, brand, description, price, currency, in_stock, stock_quantity
-                                FROM products WHERE product_name ILIKE '%Samsung Galaxy A24%' AND in_stock = TRUE
-                                ORDER BY price ASC LIMIT 1
-                                """
-                                success, samsung_a24_results, _ = self.execute_sql_query(samsung_a24_sql)
-                                if success and samsung_a24_results:
-                                    product_context.extend(samsung_a24_results)
-                                    logger.info(f"✅ Found Samsung Galaxy A24 by specific query: {samsung_a24_results[0].get('product_name', 'Unknown')}")
-                            except Exception as e:
-                                logger.warning(f"⚠️ Could not query Samsung Galaxy A24: {e}")
+                                current_session_state_obj = self.memory_system.get_session_state(session_id)
+                                if current_session_state_obj:
+                                    logger.info(f"🧠 Fetched SessionState for shopping: session_id={session_id}, stage={current_session_state_obj.conversation_stage}, cart_items={len(current_session_state_obj.cart_items)}")
+                                else:
+                                    logger.info(f"🧠 No existing SessionState for {session_id}. OrderAIAssistant will init.")
+                            except Exception as e_mem_fetch:
+                                logger.warning(f"⚠️ Error fetching session state for shopping: {e_mem_fetch}")
 
-
-
-# 1. NEW PRIORITY: Handle specific product names in order requests
-                        #    Example: "place the order for the Samsung Galaxy A24 128GB for me"
-                        order_keywords = ['order for', 'place order for', 'buy the', 'purchase the']
-                        if any(keyword in user_query_lower for keyword in order_keywords) and                            ('samsung galaxy a24' in user_query_lower or 'iphone 14 pro max' in user_query_lower): # Add more products as needed
-
-                            extracted_product_name = None
-                            if 'samsung galaxy a24' in user_query_lower:
-                                extracted_product_name = "Samsung Galaxy A24 128GB Smartphone"
-                            elif 'iphone 14 pro max' in user_query_lower:
-                                extracted_product_name = "iPhone 14 Pro Max 256GB"
-                            # Add more specific product name extractions here
-
-                            if extracted_product_name:
-                                try:
-                                    product_sql = f"SELECT product_id, product_name, category, brand, description, price, currency, in_stock, stock_quantity FROM products WHERE product_name ILIKE '%{extracted_product_name}%' AND in_stock = TRUE ORDER BY price ASC LIMIT 1"
-                                    success, product_results, _ = self.execute_sql_query(product_sql)
-                                    if success and product_results:
-                                        product_context.extend(product_results)
-                                        logger.info(f"✅ Found specific product for order: {product_results[0].get('product_name', 'Unknown')}")
-                                except Exception as e:
-                                    logger.warning(f"⚠️ Could not query specific product for order: {e}")
-
-
-
-                        # 2. ENHANCED SAMSUNG DETECTION: Handle Samsung Galaxy A24 and other Samsung products
-                        if ('samsung' in user_query_lower and ('phone' in user_query_lower or 'galaxy' in user_query_lower or 'a24' in user_query_lower)):
-                            try:
-                                samsung_sql = """
-                                SELECT product_id, product_name, category, brand, description, price, currency, in_stock, stock_quantity
-                                FROM products WHERE brand ILIKE '%Samsung%' AND product_name ILIKE '%phone%' AND in_stock = TRUE
-                                ORDER BY price ASC LIMIT 1
-                                """
-                                success, samsung_results, _ = self.execute_sql_query(samsung_sql)
-                                if success and samsung_results:
-                                    product_context.extend(samsung_results)
-                                    logger.info(f"✅ Found Samsung phone by direct query: {samsung_results[0].get('product_name', 'Unknown')}")
-                            except Exception as e:
-                                logger.warning(f"⚠️ Could not query Samsung phone: {e}")
-
-                        # 3. ONLY for contextual references: Extract from conversation history
-                        contextual_words = ['add it', 'buy it', 'get it', 'order it', 'take it', 'add this', 'buy this']
-                        is_contextual_reference = any(word in user_query_lower for word in contextual_words)
-
-                        if not product_context and is_contextual_reference:
-                            for msg in conversation_history:
-                                if isinstance(msg, dict):
-                                    # Check execution_result field for product data
-                                    if 'execution_result' in msg and msg['execution_result']:
-                                        for result in msg['execution_result']:
-                                            if isinstance(result, dict) and 'product_id' in result:
-                                                product_context.append(result)
-                                                logger.info(f"✅ Found product from history: {result.get('product_name', 'Unknown')}")
-                                                break  # Only take first product for contextual reference
-                                        if product_context:  # Stop once we find a product
-                                            break
-
-                        # 4. ENHANCED FALLBACK: Samsung product handling (fallback if not found above)
-                        if not product_context and ('samsung' in user_query_lower and ('phone' in user_query_lower or 'galaxy' in user_query_lower or 'a24' in user_query_lower)):
-                            try:
-                                samsung_sql = """
-                                SELECT product_id, product_name, category, brand, description, price, currency, in_stock, stock_quantity
-                                FROM products WHERE brand ILIKE '%Samsung%' AND product_name ILIKE '%phone%' AND in_stock = TRUE
-                                ORDER BY price ASC LIMIT 1
-                                """
-                                success, samsung_results, _ = self.execute_sql_query(samsung_sql)
-                                if success and samsung_results:
-                                    product_context.extend(samsung_results)
-                                    logger.info(f"✅ Found Samsung phone by direct query: {samsung_results[0].get('product_name', 'Unknown')}")
-                            except Exception as e:
-                                logger.warning(f"⚠️ Could not query Samsung phone: {e}")
-
-                        # 5. FALLBACK: Try to extract from current conversation context if needed
-                        if not product_context:
-                            # Run a quick product search based on the query
-                            try:
-                                current_query_type, current_entities = self.classify_query_intent(user_query, conversation_history)
-                                if current_query_type.name in ['product_performance', 'inventory_management']:
-                                    # Override entities with session data for authenticated users
-                                    if session_context and session_context.get('customer_verified', False):
-                                        authenticated_customer_id = session_context.get('customer_id')
-                                        if authenticated_customer_id:
-                                            current_entities['customer_id'] = str(authenticated_customer_id)
-                                            current_entities['customer_verified'] = True
-
-                                    temp_sql = self.generate_sql_query(user_query, current_query_type, current_entities)
-                                    success, temp_results, _ = self.execute_sql_query(temp_sql)
-                                    if success and temp_results:
-                                        product_context.extend(temp_results)
-                                        logger.info(f"✅ Found {len(temp_results)} products from current query analysis")
-                            except Exception as e:
-                                logger.warning(f"⚠️ Could not extract from current query: {e}")
-
-                        logger.info(f"🎯 Total product context for shopping: {len(product_context)} products")
-
-                        # Process through Order AI Assistant
-                        logger.info(f"🛒 Calling order_ai_assistant.process_shopping_conversation for customer {customer_id}")
-                        logger.info(f"📝 Query: {user_query[:100]}...")
-                        logger.info(f"📦 Product context: {len(product_context)} products")
+                        logger.info(f"🛒 Calling OrderAIAssistant.process_shopping_conversation for customer {customer_id}, session {session_id}")
 
                         try:
-                            shopping_result = order_ai_assistant.process_shopping_conversation(
-                                user_query, customer_id, product_context
+                            shopping_result = self.order_ai_assistant.process_shopping_conversation(
+                                user_message=user_query,
+                                customer_id=customer_id,
+                                session_id=session_id,
+                                current_session_state=current_session_state_obj
                             )
-                            logger.info(f"🎯 Shopping result: success={shopping_result.get('success', False)}, action={shopping_result.get('action', 'unknown')}")
+                            logger.info(f"🎯 Shopping result from OrderAIAssistant: success={shopping_result.get('success', False)}, action={shopping_result.get('action', 'unknown')}")
 
-                            # If order was placed, verify it in database
-                            if shopping_result.get('success') and shopping_result.get('action') == 'order_placed':
-                                order_id = shopping_result.get('order_id')
-                                logger.info(f"✅ ORDER PLACED! Verifying order {order_id} in database...")
-                                self._verify_order_in_database(order_id, customer_id)
+                            if shopping_result.get('success'):
+                                enhanced_response_text = self._generate_shopping_response(shopping_result)
 
-                        except Exception as shopping_error:
-                            logger.error(f"❌ Error in shopping conversation: {shopping_error}")
-                            shopping_result = {
-                                'success': False,
-                                'message': f"Shopping system error: {str(shopping_error)}",
-                                'action': 'system_error'
-                            }
+                                if self.memory_system:
+                                    try:
+                                        turn_entities_for_log = {
+                                            'query_type': 'shopping_action',
+                                            'intent': shopping_result.get('action', 'unknown_shopping_action'),
+                                            'shopping_data': shopping_result
+                                        }
+                                        self.memory_system.store_conversation_turn(
+                                            session_id=session_id,
+                                            user_input=user_query,
+                                            ai_response=enhanced_response_text,
+                                            intent=shopping_result.get('action', 'unknown_shopping_action'),
+                                            entities=turn_entities_for_log,
+                                            session_state=session_context
+                                        )
+                                        logger.info(f"🧠 Shopping turn interaction logged in world-class memory for action: {shopping_result.get('action')}")
+                                    except Exception as e_mem_store_shop_log:
+                                        logger.warning(f"⚠️ Failed to log shopping turn interaction: {e_mem_store_shop_log}")
 
-                        if shopping_result['success']:
-                            # Generate enhanced response with shopping context
-                            enhanced_response = self._generate_shopping_response(shopping_result)
+                                return {
+                                    'success': True, 'response': enhanced_response_text,
+                                    'query_type': 'shopping_action', 'execution_time': f"{time.time() - start_time:.3f}s",
+                                    'shopping_action': shopping_result.get('action'),
+                                    'shopping_data': shopping_result, 'sql_query': None,
+                                    'results_count': 1
+                                }
+                            else:
+                                logger.warning(f"🛒 Shopping action via OrderAIAssistant failed or inconclusive: {shopping_result.get('message', 'No specific message')}. Proceeding to general query processing.")
 
-                            return {
-                                'success': True,
-                                'response': enhanced_response,
-                                'query_type': 'shopping_action',
-                                'execution_time': f"{time.time() - start_time:.3f}s",
-                                'shopping_action': shopping_result['action'],
-                                'shopping_data': shopping_result,
-                                'results_count': 1
-                            }
-                        else:
-                            # Handle shopping error with fallback to regular processing
-                            logger.warning(f"🛒 Shopping action failed: {shopping_result.get('message', 'Unknown error')}")
+                        except Exception as shopping_call_error:
+                            logger.error(f"❌ Error calling OrderAIAssistant.process_shopping_conversation: {shopping_call_error}", exc_info=True)
 
-            # Step 2: Get conversation history for context
-            user_id = session_context.get('user_id', 'anonymous') if session_context else 'anonymous'
-            conversation_history = self.get_conversation_history(user_id, limit=5)
+            logger.info("Proceeding with general (non-shopping or fallback after shopping attempt) query processing...")
+            user_id_for_history = session_context.get('user_id', 'anonymous') if session_context else 'anonymous'
 
-            # Step 3: Classify query intent and extract entities
+            # Get conversation history
+            conversation_history = self.get_conversation_history(user_id_for_history, limit=5)
+
+            # Classify query intent
             query_type, entities = self.classify_query_intent(user_query, conversation_history)
 
-            # 🔧 CRITICAL FIX: Override entities with authenticated session data
-            if session_context and session_context.get('customer_verified', False):
-                # For authenticated users, ALWAYS use session customer_id, never conversation history
-                authenticated_customer_id = session_context.get('customer_id')
-                if authenticated_customer_id:
-                    entities['customer_id'] = str(authenticated_customer_id)
-                    entities['customer_verified'] = True
-                    logger.info(f"🔐 Using authenticated customer_id: {authenticated_customer_id} (overriding any conversation history)")
-                else:
-                    logger.warning(f"⚠️ Authenticated user but no customer_id in session: {session_context}")
-            else:
-                # For guest users, mark as not verified
-                entities['customer_verified'] = False
-                logger.info(f"👤 Guest user - no authenticated customer_id")
-
-            # Step 4: Generate SQL query based on classification
+            # Generate and execute SQL query
             sql_query = self.generate_sql_query(user_query, query_type, entities)
+            success, results, error_message = self.execute_sql_query(sql_query)
 
-            # Step 5: Execute the database query
-            success, execution_result, error_message = self.execute_sql_query(sql_query)
+            if success:
+                # Create query context
+                query_context = QueryContext(
+                    query_type=query_type,
+                    intent=query_type.value,
+                    entities=entities,
+                    sql_query=sql_query,
+                    execution_result=results,
+                    response="",
+                    timestamp=datetime.now(),
+                    user_query=user_query
+                )
 
-            if not success:
-                # Query failed - try fallback
-                fallback_sql = self._get_fallback_query(query_type, entities)
-                app_logger.info(f"🔄 Trying fallback query: {fallback_sql}")
-                success, execution_result, error_message = self.execute_sql_query(fallback_sql)
+                # Generate enhanced response
+                response_text = self.generate_nigerian_response(query_context, conversation_history, session_context)
+                query_context.response = response_text
 
-                if not success:
-                    # Both original and fallback failed
-                    execution_result = []
-                    app_logger.error(f"❌ Both original and fallback queries failed: {error_message}")
+                # Store conversation
+                try:
+                    self.store_conversation_context(query_context, user_id_for_history)
+                except Exception as e_store:
+                    logger.warning(f"⚠️ Failed to store conversation context: {e_store}")
 
-            # Step 6: Create query context
-            query_context = QueryContext(
-                query_type=query_type,
-                intent=entities.get('intent', 'general_inquiry'),
-                entities=entities,
-                sql_query=sql_query,
-                execution_result=execution_result or [],
-                response="",
-                timestamp=datetime.now(),
-                user_query=user_query,
-                error_message=error_message
-            )
-
-            # Step 7: Generate natural language response
-            response = self.generate_nigerian_response(query_context, conversation_history, session_context)
-            query_context.response = response
-
-            # Step 8: Store conversation context for future reference
-            self.store_conversation_context(query_context, user_id)
-
-            execution_time = time.time() - start_time
-
-            # Step 9: Return comprehensive result
-            return {
-                'success': True,
-                'response': response,
-                'query_type': query_type.value,
-                'sql_query': sql_query,
-                'results_count': len(execution_result) if execution_result else 0,
-                'execution_time': f"{execution_time:.3f}s",
-                'entities': entities,
-                'user_query': user_query
-            }
+                return {
+                    'success': True,
+                    'response': response_text,
+                    'query_type': query_type.value,
+                    'execution_time': f"{time.time() - start_time:.3f}s",
+                    'sql_query': sql_query,
+                    'results_count': len(results)
+                }
+            else:
+                return {
+                    'success': False,
+                    'response': f"I encountered an issue processing your request: {error_message}. Please try rephrasing your question or contact our support team!",
+                    'query_type': 'error',
+                    'execution_time': f"{time.time() - start_time:.3f}s",
+                    'error': error_message
+                }
 
         except Exception as e:
             execution_time = time.time() - start_time
@@ -1956,7 +2212,6 @@ How can I help you with your raqibtech.com experience today? 🌟"""
                 'execution_time': f"{execution_time:.3f}s",
                 'error': str(e)
             }
-
 
     def _verify_order_in_database(self, order_id: str, customer_id: int):
         """Verify that an order was actually saved to the database"""

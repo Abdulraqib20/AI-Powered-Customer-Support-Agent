@@ -736,86 +736,140 @@ def api_analytics():
         return jsonify({'success': False, 'message': str(e)}), 500
 
 
+def parse_order_intent(query: str) -> Dict[str, Any]:
+    """🛒 Parse order intent from user query using Groq LLaMA"""
+    try:
+        # Enhanced order intent parsing prompt
+        order_parsing_prompt = f"""
+        You are an expert Nigerian e-commerce order assistant. Parse this customer query for order intent:
+
+        Query: "{query}"
+
+        Extract and return ONLY a JSON object with these fields:
+        {{
+            "has_order_intent": true/false,
+            "product_mentioned": "product name or null",
+            "quantity": number or null,
+            "location": "Nigerian state mentioned or null",
+            "payment_preference": "Pay on Delivery/Bank Transfer/Card/RaqibTechPay or null",
+            "urgency": "low/medium/high",
+            "order_type": "new_order/inquiry/complaint/null"
+        }}
+
+        Examples:
+        - "I want to order a laptop" → {{"has_order_intent": true, "product_mentioned": "laptop", "quantity": 1, "location": null, "payment_preference": null, "urgency": "medium", "order_type": "new_order"}}
+        - "Order 2 phones to Lagos" → {{"has_order_intent": true, "product_mentioned": "phones", "quantity": 2, "location": "Lagos", "payment_preference": null, "urgency": "medium", "order_type": "new_order"}}
+        - "What's the price of iPhone?" → {{"has_order_intent": false, "product_mentioned": "iPhone", "quantity": null, "location": null, "payment_preference": null, "urgency": "low", "order_type": "inquiry"}}
+        """
+
+        completion = groq_client.chat.completions.create(
+            model="llama3-70b-8192",
+            messages=[{"role": "user", "content": order_parsing_prompt}],
+            temperature=0.1,
+            max_tokens=200
+        )
+
+        response_text = completion.choices[0].message.content.strip()
+
+        # Extract JSON from response
+        import re
+        json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+        if json_match:
+            return json.loads(json_match.group())
+
+        # Fallback parsing
+        return {
+            "has_order_intent": any(word in query.lower() for word in ['order', 'buy', 'purchase', 'get me']),
+            "product_mentioned": None,
+            "quantity": 1,
+            "location": None,
+            "payment_preference": None,
+            "urgency": "medium",
+            "order_type": "inquiry"
+        }
+
+    except Exception as e:
+        app_logger.warning(f"⚠️ Order intent parsing failed: {e}")
+        return {
+            "has_order_intent": any(word in query.lower() for word in ['order', 'buy', 'purchase']),
+            "product_mentioned": None,
+            "quantity": 1,
+            "location": None,
+            "payment_preference": None,
+            "urgency": "medium",
+            "order_type": "inquiry"
+        }
+
 @app.route('/api/chat', methods=['POST'])
 def api_chat():
-    """  Enhanced AI Chat API endpoint with sophisticated database querying"""
+    """Enhanced AI Chat API endpoint with order intent recognition"""
     try:
         data = request.json
         query = data.get('message', '').strip()
         user_id = session.get('user_id', 'anonymous')
+        customer_id = session.get('customer_id') if session.get('user_authenticated') else None
 
         if not query:
             return jsonify({'success': False, 'message': 'Message is required'}), 400
 
-        # 🚀 NEW: Use enhanced database querying system for sophisticated analysis
-        # if enhanced_db_querying is not None:
-        #     enhanced_result = enhanced_db_querying.process_query(query, user_id)
-        #
-        #     if enhanced_result['success'] and enhanced_result.get('has_results', False):
-        #         # Use the sophisticated pipeline result
-        #         ai_response = enhanced_result['response']
-        #
-        #         # Generate quick action buttons based on query type
-        #         quick_actions = []
-        #         query_type = enhanced_result.get('query_type', '')
-        #
-        #         if query_type == 'customer_analysis':
-        #             quick_actions.extend([
-        #                 {'text': 'View Customer Details', 'action': 'view_customer_details'},
-        #                 {'text': 'Customer Distribution by State', 'action': 'customer_distribution'}
-        #             ])
-        #         elif query_type == 'order_analytics':
-        #             quick_actions.extend([
-        #                 {'text': 'Track Order Status', 'action': 'track_order'},
-        #                 {'text': 'Payment Analysis', 'action': 'payment_analysis'}
-        #             ])
-        #         elif query_type == 'revenue_insights':
-        #             quick_actions.extend([
-        #                 {'text': 'Revenue Breakdown', 'action': 'revenue_breakdown'},
-        #                 {'text': 'State Performance', 'action': 'state_performance'}
-        #             ])
-        #         elif query_type == 'geographic_analysis':
-        #             quick_actions.extend([
-        #                 {'text': 'Regional Analytics', 'action': 'regional_analytics'},
-        #                 {'text': 'Delivery Insights', 'action': 'delivery_insights'}
-        #             ])
-        #
-        #         return jsonify({
-        #             'success': True,
-        #             'response': ai_response,
-        #             'quick_actions': quick_actions,
-        #             'query_type': query_type,
-        #             'results_count': enhanced_result.get('results_count', 0),
-        #             'execution_time': enhanced_result.get('execution_time', ''),
-        #             'timestamp': datetime.now().isoformat(),
-        #             'enhanced': True  # Flag to indicate enhanced processing
-        #         })
+        # 🛒 NEW: Parse order intent first
+        order_intent = parse_order_intent(query)
 
-        # Fallback to original logic for non-database queries or errors
         context = ""
+        quick_actions = []
 
-        # Extract context based on query intent (original logic)
+        # Handle order-related queries with enhanced logic
+        if order_intent.get('has_order_intent'):
+            if customer_id:
+                # Get customer info for personalized response
+                customer = customer_repo.get_customer_by_id(customer_id)
+                if customer:
+                    context += f"Customer: {customer['name']} ({customer['account_tier']} tier) from {customer['state']}\n"
+
+                    # Add tier-specific benefits to context
+                    tier_benefits = {
+                        'Bronze': '0% discount',
+                        'Silver': '5% discount',
+                        'Gold': '10% discount + free delivery',
+                        'Platinum': '15% discount + premium perks'
+                    }
+                    context += f"Tier benefits: {tier_benefits.get(customer['account_tier'], 'Standard')}\n"
+
+            # Add product search if product mentioned
+            if order_intent.get('product_mentioned'):
+                # This would integrate with your product search
+                context += f"Product inquiry: {order_intent['product_mentioned']}\n"
+                quick_actions.extend([
+                    {'text': f"Search {order_intent['product_mentioned']}", 'action': 'search_product', 'data': {'product': order_intent['product_mentioned']}},
+                    {'text': 'Check Availability', 'action': 'check_stock', 'data': {'product': order_intent['product_mentioned']}}
+                ])
+
+            # Add order-specific quick actions
+            if order_intent['order_type'] == 'new_order':
+                quick_actions.extend([
+                    {'text': '🛒 Start Order', 'action': 'start_order', 'data': order_intent},
+                    {'text': '💰 Check Prices', 'action': 'check_prices'},
+                    {'text': '📍 Delivery Info', 'action': 'delivery_info'}
+                ])
+
+            context += f"Order intent: {safe_json_dumps(order_intent)}\n"
+
+        # Extract context based on query intent (existing logic enhanced)
         if any(word in query.lower() for word in ['customer', 'customers', 'profile']):
-            # If asking about customers, get relevant customer data
             search_term = ""
             state = ""
-
-            # Simple intent extraction
             for state_name in NIGERIAN_STATES:
                 if state_name.lower() in query.lower():
                     state = state_name
                     break
-
             customers = customer_repo.get_customers_by_state(state) if state else customer_repo.search_customers(search_term)[:5]
             context += f"Recent customers: {safe_json_dumps(customers[:3])}\n"
 
         if any(word in query.lower() for word in ['order', 'orders', 'payment', 'delivery']):
-            # If asking about orders, get relevant order data
             orders = order_repo.get_order_summary()[:5]
             context += f"Recent orders: {safe_json_dumps(orders)}\n"
 
         if any(word in query.lower() for word in ['analytics', 'revenue', 'sales', 'metrics']):
-            # If asking about analytics, get relevant data
             revenue_data = order_repo.get_revenue_by_state()[:5]
             context += f"Revenue by state: {safe_json_dumps(revenue_data)}\n"
 
@@ -824,36 +878,25 @@ def api_chat():
         if vector_results:
             context += f"Related information: {safe_json_dumps(vector_results[:2])}\n"
 
-        # Generate AI response
+        # Generate AI response with enhanced context
         ai_response = get_ai_response(query, context, user_id)
 
-        # Generate quick action buttons based on query
-        quick_actions = []
-        if any(word in query.lower() for word in ['payment', 'refund', 'issue']):
-            quick_actions.append({'text': 'Resolve Payment Issue', 'action': 'resolve_payment'})
-        if any(word in query.lower() for word in ['delivery', 'shipping']):
-            quick_actions.append({'text': 'Track Delivery', 'action': 'track_delivery'})
-        if any(word in query.lower() for word in ['customer', 'profile']):
-            quick_actions.append({'text': 'View Customer Profile', 'action': 'view_profile'})
-
-        # 🆕 Product-related quick actions
-        if any(word in query.lower() for word in ['product', 'products', 'item', 'catalog']):
-            quick_actions.append({'text': 'Browse Catalog', 'action': 'browse_products'})
-        if any(word in query.lower() for word in ['price', 'cost', 'cheap', 'expensive']):
-            quick_actions.append({'text': 'Check Prices', 'action': 'check_prices'})
-        if any(word in query.lower() for word in ['phone', 'laptop', 'electronics']):
-            quick_actions.append({'text': 'Electronics', 'action': 'browse_electronics'})
-        if any(word in query.lower() for word in ['fashion', 'clothes', 'dress', 'shoe']):
-            quick_actions.append({'text': 'Fashion Items', 'action': 'browse_fashion'})
-        if any(word in query.lower() for word in ['stock', 'available', 'inventory']):
-            quick_actions.append({'text': 'Check Stock', 'action': 'check_inventory'})
+        # Add general quick actions if none were added
+        if not quick_actions:
+            if any(word in query.lower() for word in ['payment', 'refund', 'issue']):
+                quick_actions.append({'text': 'Resolve Payment Issue', 'action': 'resolve_payment'})
+            if any(word in query.lower() for word in ['delivery', 'shipping']):
+                quick_actions.append({'text': 'Track Delivery', 'action': 'track_delivery'})
+            if any(word in query.lower() for word in ['customer', 'profile']):
+                quick_actions.append({'text': 'View Customer Profile', 'action': 'view_profile'})
 
         return jsonify({
             'success': True,
             'response': ai_response,
             'quick_actions': quick_actions,
-            'timestamp': datetime.now().isoformat(),
-            'enhanced': False  # Flag to indicate fallback processing
+            'order_intent': order_intent,
+            'customer_authenticated': bool(customer_id),
+            'timestamp': datetime.now().isoformat()
         })
 
     except Exception as e:
@@ -2695,6 +2738,226 @@ def get_cart_recovery_recommendations():
         return jsonify({
             'success': False,
             'error': 'Failed to generate cart recovery recommendations',
+            'message': str(e)
+        }), 500
+
+
+@app.route('/api/orders/create', methods=['POST'])
+def create_order_from_chat():
+    """🛒 Create order from chatbot interaction with enhanced validation"""
+    try:
+        data = request.get_json()
+        customer_id = session.get('customer_id') if session.get('user_authenticated') else None
+
+        if not customer_id:
+            return jsonify({
+                'success': False,
+                'error': 'Authentication required',
+                'message': 'Please log in to place an order',
+                'action_required': 'login'
+            }), 401
+
+        # Extract order data
+        product_query = data.get('product_query', '')
+        quantity = data.get('quantity', 1)
+        delivery_state = data.get('delivery_state')
+        payment_method = data.get('payment_method', 'Pay on Delivery')
+
+        # Validate required fields
+        if not product_query:
+            return jsonify({
+                'success': False,
+                'error': 'Product information required',
+                'message': 'Please specify what product you want to order'
+            }), 400
+
+        # Get customer info for state default
+        customer = customer_repo.get_customer_by_id(customer_id)
+        if not customer:
+            return jsonify({
+                'success': False,
+                'error': 'Customer not found',
+                'message': 'Unable to find your customer profile'
+            }), 404
+
+        # Use customer's state as default if not provided
+        if not delivery_state:
+            delivery_state = customer['state']
+
+        # 🔍 Product search and matching (simplified for demo)
+        # In a real implementation, this would search your product database
+        mock_products = [
+            {'product_id': 1, 'name': 'Samsung Galaxy A54', 'price': 285000, 'category': 'Electronics'},
+            {'product_id': 2, 'name': 'iPhone 14', 'price': 850000, 'category': 'Electronics'},
+            {'product_id': 3, 'name': 'HP Laptop', 'price': 450000, 'category': 'Computing'},
+            {'product_id': 4, 'name': 'Nike Air Max', 'price': 65000, 'category': 'Fashion'},
+            {'product_id': 5, 'name': 'Ankara Dress', 'price': 25000, 'category': 'Fashion'}
+        ]
+
+        # Simple product matching
+        matched_product = None
+        for product in mock_products:
+            if any(word in product['name'].lower() for word in product_query.lower().split()):
+                matched_product = product
+                break
+
+        if not matched_product:
+            # Return product suggestions
+            return jsonify({
+                'success': False,
+                'error': 'Product not found',
+                'message': f"I couldn't find '{product_query}' in our catalog. Here are some suggestions:",
+                'suggestions': mock_products[:3],
+                'action_required': 'product_selection'
+            }), 404
+
+        # Calculate order totals
+        items = [{
+            'product_id': matched_product['product_id'],
+            'quantity': quantity
+        }]
+
+        # Use existing order calculation logic
+        order_calc = order_management.calculate_order_totals(
+            items=items,
+            customer_id=customer_id,
+            delivery_state=delivery_state
+        )
+
+        if not order_calc['success']:
+            return jsonify({
+                'success': False,
+                'error': 'Order calculation failed',
+                'message': order_calc.get('error', 'Unable to calculate order total')
+            }), 400
+
+        # Apply tier discounts
+        tier_discounts = {
+            'Bronze': 0.0,
+            'Silver': 0.05,
+            'Gold': 0.10,
+            'Platinum': 0.15
+        }
+
+        discount_rate = tier_discounts.get(customer['account_tier'], 0.0)
+        subtotal = order_calc['subtotal']
+        discount_amount = subtotal * discount_rate
+
+        # Free delivery for Gold and Platinum
+        delivery_fee = order_calc['delivery_fee']
+        if customer['account_tier'] in ['Gold', 'Platinum']:
+            delivery_fee = 0
+
+        final_total = subtotal - discount_amount + delivery_fee
+
+        # Prepare order summary for confirmation
+        order_summary = {
+            'product': matched_product,
+            'quantity': quantity,
+            'subtotal': subtotal,
+            'discount_rate': discount_rate * 100,  # Convert to percentage
+            'discount_amount': discount_amount,
+            'delivery_fee': delivery_fee,
+            'total_amount': final_total,
+            'payment_method': payment_method,
+            'delivery_state': delivery_state,
+            'customer_tier': customer['account_tier'],
+            'estimated_delivery_days': order_calc.get('delivery_days', 3)
+        }
+
+        return jsonify({
+            'success': True,
+            'order_summary': order_summary,
+            'customer_info': {
+                'name': customer['name'],
+                'email': customer['email'],
+                'state': customer['state'],
+                'tier': customer['account_tier']
+            },
+            'message': f"Order ready for confirmation! Total: {format_currency(final_total)}",
+            'action_required': 'confirmation'
+        })
+
+    except Exception as e:
+        app_logger.error(f"❌ Order creation error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Order creation failed',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/orders/confirm', methods=['POST'])
+def confirm_order():
+    """✅ Confirm and place the order"""
+    try:
+        data = request.get_json()
+        customer_id = session.get('customer_id') if session.get('user_authenticated') else None
+
+        if not customer_id:
+            return jsonify({
+                'success': False,
+                'error': 'Authentication required'
+            }), 401
+
+        # Extract confirmed order data
+        order_data = data.get('order_data', {})
+        delivery_address = data.get('delivery_address', {})
+
+        # Get customer info
+        customer = customer_repo.get_customer_by_id(customer_id)
+
+        # Prepare delivery address
+        if not delivery_address:
+            delivery_address = {
+                'state': customer['state'],
+                'lga': customer.get('lga', 'Municipal'),
+                'full_address': customer.get('address', f"{customer['state']}, Nigeria")
+            }
+
+        # Create the order using existing order management
+        items = [{
+            'product_id': order_data['product']['product_id'],
+            'quantity': order_data['quantity']
+        }]
+
+        order_result = order_management.create_order(
+            customer_id=customer_id,
+            items=items,
+            delivery_address=delivery_address,
+            payment_method=order_data['payment_method']
+        )
+
+        if not order_result['success']:
+            return jsonify(order_result), 400
+
+        # Update order in database with correct total
+        order_id = order_result['database_order_id']
+        final_total = order_data['total_amount']
+
+        with db_manager.get_cursor() as cursor:
+            cursor.execute("""
+                UPDATE orders
+                SET total_amount = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE order_id = %s
+            """, (final_total, order_id))
+
+        return jsonify({
+            'success': True,
+            'order_id': order_result['order_id'],
+            'message': f"🎉 Order {order_result['order_id']} confirmed! You'll receive SMS/email confirmation shortly.",
+            'order_details': {
+                'order_id': order_result['order_id'],
+                'total_amount': final_total,
+                'payment_method': order_data['payment_method'],
+                'estimated_delivery': order_result['order_summary'].estimated_delivery.strftime('%B %d, %Y')
+            }
+        })
+
+    except Exception as e:
+        app_logger.error(f"❌ Order confirmation error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Order confirmation failed',
             'message': str(e)
         }), 500
 

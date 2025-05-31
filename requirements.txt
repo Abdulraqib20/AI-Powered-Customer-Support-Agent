@@ -432,3 +432,9 @@ zstandard==0.23.0
 sdv==1.15.0
 copulas==0.11.1
 rdt==1.12.1
+
+# Enhanced conversation and memory
+redis==5.0.1
+cachetools==5.3.3  # TTL caching for conversation memory
+
+# Web framework and server

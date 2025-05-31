@@ -24,6 +24,7 @@ from dataclasses import dataclass, asdict
 import requests
 import uuid
 import re
+from psycopg2.extras import RealDictCursor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -31,18 +32,22 @@ logger = logging.getLogger(__name__)
 
 # Import our existing systems
 try:
-    from .order_management import OrderManagementSystem, PaymentMethod
+    from .order_management import OrderManagementSystem, PaymentMethod, OrderStatus
     from .recommendation_engine import ProductRecommendationEngine
-    logger.info("✅ Successfully imported OrderManagementSystem and ProductRecommendationEngine with relative imports")
+    from config.database_config import DatabaseManager, initialize_database
+    from .conversation_memory_system import SessionState, WorldClassMemorySystem
+    logger.info("✅ Successfully imported OrderManagementSystem, ProductRecommendationEngine, DatabaseManager, and SessionState with relative/config imports")
 except ImportError as e1:
-    logger.warning(f"⚠️ Relative import failed: {e1}")
+    logger.warning(f"⚠️ Relative/config import failed: {e1}")
     # Fallback for when imported directly
     try:
-        from order_management import OrderManagementSystem, PaymentMethod
+        from order_management import OrderManagementSystem, PaymentMethod, OrderStatus
         from recommendation_engine import ProductRecommendationEngine
-        logger.info("✅ Successfully imported OrderManagementSystem and ProductRecommendationEngine with direct imports")
+        from config.database_config import DatabaseManager, initialize_database
+        from conversation_memory_system import SessionState, WorldClassMemorySystem
+        logger.info("✅ Successfully imported OrderManagementSystem, ProductRecommendationEngine, DatabaseManager, and SessionState with direct/config imports")
     except ImportError as e2:
-        logger.error(f"❌ Direct import failed: {e2}")
+        logger.error(f"❌ Direct/config import failed: {e2}")
         # Create mock classes if imports fail - but log this as an error
         logger.error("❌ CRITICAL: Using mock OrderManagementSystem - orders will NOT be saved to database!")
 
@@ -88,7 +93,7 @@ class ShoppingCart:
 class OrderAIAssistant:
     """🤖 AI Assistant for Smart Order Management"""
 
-    def __init__(self):
+    def __init__(self, memory_system: Optional[WorldClassMemorySystem]):
         try:
             self.order_system = OrderManagementSystem()
             logger.info("✅ OrderManagementSystem initialized successfully")
@@ -104,30 +109,121 @@ class OrderAIAssistant:
             self.recommendation_engine = None
 
         self.active_carts = {}  # In-memory cart storage (use Redis in production)
-        logger.info("✅ OrderAIAssistant initialized successfully")
+
+        # Handle memory system - create a mock one if None is passed
+        if memory_system is not None:
+            self.memory_system = memory_system
+            logger.info("✅ OrderAIAssistant initialized successfully with WorldClassMemorySystem")
+        else:
+            logger.warning("⚠️ OrderAIAssistant initialized without memory system - using mock")
+            # Create a mock memory system for compatibility
+            class MockMemorySystem:
+                def get_session_state(self, session_id): return None
+                def update_session_state(self, session_id, state): pass
+            self.memory_system = MockMemorySystem()
 
     def parse_order_intent(self, user_message: str) -> Dict[str, Any]:
         """🧠 Parse user message to determine shopping intent"""
         message_lower = user_message.lower()
 
-        # Enhanced intent patterns with more comprehensive coverage
-        intent_patterns = {
-            'add_to_cart': [
-                'add to cart', 'add the', 'put in cart', 'add this', 'I want to buy',
-                'purchase', 'buy', 'get this', 'add it', 'cart it',
-                'add samsung', 'buy samsung', 'purchase samsung', 'get samsung',
-                'add phone', 'buy phone', 'add galaxy', 'buy galaxy'
-            ],
-            'place_order': [
-                'place order', 'checkout', 'proceed to checkout', 'complete order',
-                'finalize order', 'confirm order', 'submit order', 'buy now',
-                'complete purchase', 'finish order', 'pay and order', 'order now',
-                'use raqibpay', 'pay with raqibpay', 'raqibpay payment',
-                'confirm', 'place', 'order', 'proceed', 'complete'
-            ],
+        # 🔧 CRITICAL FIX: PRIORITY-BASED INTENT DETECTION
+        # Check HIGH PRIORITY patterns first to avoid misclassification
+
+        # 1. HIGHEST PRIORITY: Payment method selection (must come before general "want")
+        payment_patterns = [
+            (r'payment method.*(is|set to|choose|select)\s*(.+)', 'payment_method_selection', 2),
+            (r'pay\s*(with|using)\s*(.+)', 'payment_method_selection', 2),
+            (r'(use|choose|select|want\s*to\s*use)\s*(raqibpay|raqibtechpay|pay\s*on\s*delivery|card\s*payment|bank\s*transfer|verve|mastercard|visa)', 'payment_method_selection', 2),
+            (r'(verve|mastercard|visa|atm)\s*card', 'payment_method_selection', 0), # Card types
+            (r'i\s*want\s*to\s*use\s*(.+)', 'payment_method_selection', 1), # Keep this for flexibility
+            (r'payment\s*(option|preference)\s*is\s*(.+)', 'payment_method_selection', 2),
+            (r'(raqibpay|raqibtechpay|pay\s*on\s*delivery|card\s*payment|bank\s*transfer)', 'payment_method_selection', 0) # Direct mention
+        ]
+        for pattern, intent, group_idx in payment_patterns:
+            match = re.search(pattern, message_lower)
+            if match:
+                entity = match.group(group_idx).strip() if group_idx > 0 and len(match.groups()) >= group_idx else match.group(0).strip()
+                # Normalize payment method names
+                if "raqib" in entity: entity = "RaqibTechPay"
+                elif "delivery" in entity: entity = "Pay on Delivery"
+                elif any(card_type in entity for card_type in ["card", "verve", "mastercard", "visa", "atm"]): entity = "Card Payment"
+                elif "bank" in entity: entity = "Bank Transfer"
+                logger.info(f"🎯 Intent parsed: {intent} (confidence: 0.95, pattern: '{pattern}') - Entity: {entity}")
+                return {'intent': intent, 'entities': {'payment_method': entity}, 'confidence': 0.95}
+
+        # 2. HIGH PRIORITY: Delivery address (must come before general address mentions)
+        delivery_patterns = [
+            (r'(delivery|shipping)\s*address\s*(is|set to|for|:)\s*(.+)', 'set_delivery_address', 3),
+            (r'my\s*address\s*(is|:)\s*(.+)', 'set_delivery_address', 2),
+            (r'deliver\s*to\s*(.+)', 'set_delivery_address', 1),
+            (r'send\s*to\s*(.+)', 'set_delivery_address', 1),
+            (r'ship\s*to\s*(.+)', 'set_delivery_address', 1),
+            (r'use\s*address\s*(.+)', 'set_delivery_address', 1), # For confirming saved address
+             # Common Nigerian locations as implicit address
+            (r'\b(lugbe|abuja|lagos|ikeja|lekki|victoria island|ilorin|kano|kaduna|port harcourt|ibadan|benin city|onitsha|aba|enugu|jos|maiduguri|zaria|warri|uyo|calabar|owerri|akure|abeokuta|osogbo|minna|sokoto|bauchi|gombe|yola|jalingo|damaturu|dutse|lafia|makurdi|awka|asaba|yenagoa|abakaliki|Ado Ekiti)\b', 'set_delivery_address', 0)
+        ]
+        for pattern, intent, group_idx in delivery_patterns:
+            match = re.search(pattern, message_lower)
+            if match:
+                address_text = match.group(group_idx).strip() if group_idx > 0 and len(match.groups()) >= group_idx else match.group(0).strip()
+                full_address, city, state = self._parse_nigerian_address(address_text)
+                logger.info(f"🎯 Intent parsed: {intent} (confidence: 0.9, pattern: '{pattern}') - Address: {full_address}")
+                return {'intent': intent, 'entities': {'delivery_address': {'full_address': full_address, 'city': city, 'state': state, 'raw': address_text}}, 'confidence': 0.9}
+
+        # 3. HIGH PRIORITY: Place order / checkout (with typo tolerance)
+        order_patterns = [
+            (r'place\s*(my|the)?\s*order', 'place_order'),
+            (r'confirm\s*(my|the)?\s*order', 'place_order'),
+            (r'complete\s*(my|the)?\s*order', 'place_order'),
+            (r'proceed\s*to\s*che[ck]*out', 'checkout'),  # Handles "chekout", "checkout", "cheout" etc.
+            (r'go\s*to\s*che[ck]*out', 'checkout'),
+            (r'che[ck]*out\s*now', 'checkout'),
+            (r'che[ck]*out', 'checkout')  # Broad checkout with typo tolerance
+        ]
+        for pattern, intent in order_patterns:
+            if re.search(pattern, message_lower):
+                logger.info(f"🎯 Intent parsed: {intent} (confidence: 0.9, pattern: '{pattern}')")
+                return {'intent': intent, 'entities': {}, 'confidence': 0.9}
+
+        # 4. MEDIUM PRIORITY: Add to cart (improved product name extraction)
+        cart_patterns = [
+            (r'add\s+(.+?)\s+to\s+(my|the)?\s*cart', 'add_to_cart'),  # "add X to cart"
+            (r'add\s+(.+?)\s+for\s+me', 'add_to_cart'),  # "add X for me"
+            (r'put\s+(.+?)\s+in\s+(my|the)?\s*cart', 'add_to_cart'),  # "put X in cart"
+            (r'i\s*want\s*to\s*buy\s+(.+)', 'add_to_cart'),  # "I want to buy X"
+            (r'get\s+(me\s+)?(.+)', 'add_to_cart'),  # "get me X" or "get X"
+            (r'buy\s+(.+)', 'add_to_cart'),  # "buy X"
+            (r'add\s+(.+)', 'add_to_cart')  # Fallback "add X" (last to avoid overmatching)
+        ]
+        for pattern, intent in cart_patterns:
+            match = re.search(pattern, message_lower)
+            if match:
+                # Extract product name from the appropriate group
+                if r'get\s+(me\s+)' in pattern:
+                    product_name = match.group(2).strip() if len(match.groups()) >= 2 else match.group(1).strip()
+                else:
+                    product_name = match.group(1).strip()
+
+                # Clean up common trailing phrases that might have been captured
+                product_name = re.sub(r'\s*(to\s+(my|the)?\s*cart|for\s+me|please)$', '', product_name, flags=re.IGNORECASE).strip()
+
+                logger.info(f"🎯 Intent parsed: {intent} (confidence: 0.85, pattern: '{pattern}') - Product: {product_name}")
+                return {'intent': intent, 'entities': {'product_name': product_name}, 'confidence': 0.85}
+
+        # 5. CONTEXT-AWARE AFFIRMATIVE/NEGATIVE RESPONSES
+        if message_lower in ['yes', 'yeah', 'yep', 'ok', 'okay', 'sure', 'alright', 'y']:
+            logger.info(f"🎯 Intent parsed: affirmative_confirmation (confidence: 0.95, pattern: 'affirmative_words')")
+            return {'intent': 'affirmative_confirmation', 'entities': {}, 'confidence': 0.95}
+
+        if message_lower in ['no', 'nope', 'nah', 'n', 'cancel', 'stop']:
+            logger.info(f"🎯 Intent parsed: negative_rejection (confidence: 0.95, pattern: 'negative_words')")
+            return {'intent': 'negative_rejection', 'entities': {}, 'confidence': 0.95}
+
+        # 6. OTHER SPECIFIC INTENTS
+        other_patterns = {
             'check_cart': [
                 'view cart', 'show cart', 'cart contents', 'what\'s in my cart',
-                'shopping cart', 'my cart', 'cart status', 'show my cart'
+                'shopping cart', 'cart status', 'show my cart'
             ],
             'remove_from_cart': [
                 'remove from cart', 'delete from cart', 'take out', 'remove this',
@@ -137,126 +233,164 @@ class OrderAIAssistant:
                 'calculate total', 'show total', 'how much', 'total cost',
                 'delivery fee', 'shipping cost', 'order total', 'final cost'
             ],
-            'select_payment': [
-                'payment method', 'pay with', 'use raqibpay', 'card payment',
-                'bank transfer', 'pay on delivery', 'payment option'
-            ],
             'track_order': [
                 'track order', 'order status', 'where is my order', 'delivery status',
                 'check order', 'order tracking', 'order progress'
             ]
         }
 
-        detected_intent = 'general_inquiry'
-        confidence = 0.0
-        matched_pattern = ""
-
-        # Check for intent patterns with enhanced matching
-        for intent, patterns in intent_patterns.items():
+        for intent, patterns in other_patterns.items():
             for pattern in patterns:
                 if pattern in message_lower:
-                    detected_intent = intent
-                    confidence = 0.9
-                    matched_pattern = pattern
-                    break
-            if confidence > 0:
-                break
+                    logger.info(f"🎯 Intent parsed: {intent} (confidence: 0.9, pattern: '{pattern}')")
+                    return {
+                        'intent': intent,
+                        'confidence': 0.9,
+                        'matched_pattern': pattern,
+                        'raw_message': user_message
+                    }
 
-        # 🔧 SPECIAL HANDLING: If user mentions specific product actions
-        if detected_intent == 'general_inquiry':
-            # Check for implicit add to cart requests
-            if any(word in message_lower for word in ['samsung', 'phone', 'galaxy']) and \
-               any(word in message_lower for word in ['want', 'need', 'buy', 'get', 'purchase']):
-                detected_intent = 'add_to_cart'
-                confidence = 0.8
-                matched_pattern = "implicit_product_purchase"
+        # 7. CONTEXT-AWARE FALLBACK DETECTION
+        # Check for delivery address mentions by location
+        if any(word in message_lower for word in ['lugbe', 'lagos', 'abuja', 'kano', 'port harcourt']):
+            logger.info(f"🎯 Intent parsed: set_delivery_address (confidence: 0.8, pattern: 'location_mention')")
+            return {
+                'intent': 'set_delivery_address',
+                'confidence': 0.8,
+                'matched_pattern': "location_mention",
+                'raw_message': user_message
+            }
 
-            # Check for checkout/payment mentions
-            elif any(word in message_lower for word in ['checkout', 'pay', 'payment', 'order']):
-                detected_intent = 'place_order'
-                confidence = 0.8
-                matched_pattern = "payment_checkout_mention"
+        # 8. VERY LOW PRIORITY: Generic "want/need" (only for clear product mentions)
+        if any(word in message_lower for word in ['want', 'need']) and \
+           any(product in message_lower for product in ['samsung', 'iphone', 'phone', 'galaxy', 'laptop', 'tecno', 'google', 'pixel']):
+            # But exclude if it's clearly about payment
+            if not any(payment_word in message_lower for payment_word in ['pay', 'payment', 'delivery', 'raqib']):
+                logger.info(f"🎯 Intent parsed: add_to_cart (confidence: 0.7, pattern: 'generic_product_want')")
+                return {
+                    'intent': 'add_to_cart',
+                    'confidence': 0.7,
+                    'matched_pattern': "generic_product_want",
+                    'raw_message': user_message
+                }
 
-        logger.info(f"🎯 Intent parsed: {detected_intent} (confidence: {confidence}, pattern: '{matched_pattern}')")
-
+        # 9. DEFAULT: General inquiry
+        logger.info(f"🎯 Intent parsed: general_inquiry (confidence: 0.5, pattern: 'no_match')")
         return {
-            'intent': detected_intent,
-            'confidence': confidence,
-            'matched_pattern': matched_pattern,
+            'intent': 'general_inquiry',
+            'confidence': 0.5,
+            'matched_pattern': "no_match",
             'raw_message': user_message
         }
 
-    def extract_product_info(self, user_message: str, product_context: List[Dict] = None) -> Dict[str, Any]:
-        """🔍 Extract product information from user message"""
-        message_lower = user_message.lower()
+    def extract_product_info(self, user_message: str, product_name_hint: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """
+        🆕 Extract specific product information from user message or hint by querying the database.
+        Prioritizes product_name_hint if provided.
+        """
+        target_product_name = product_name_hint
+        if not target_product_name:
+            # Try to extract from user_message if no hint. This is a simplified extraction.
+            # More robust extraction would involve NER or more complex regex.
+            # Example: "add the Tecno Camon 20 Pro 5G for me" -> "Tecno Camon 20 Pro 5G"
+            # This is a simplified version; parse_order_intent is better for primary extraction
+            match = re.search(r'(?:add|buy|get|order|product is|the|a)\s*(.+?)(?:\s*to cart|\s*for me|$)', user_message.lower())
+            if match:
+                target_product_name = match.group(1).strip()
+                # Clean common trailing phrases
+                target_product_name = re.sub(r'\s*(to my cart|to the cart|for me)$', '', target_product_name).strip()
 
-        # Extract product mentions
-        product_keywords = {
-            'samsung': ['samsung', 'galaxy'],
-            'iphone': ['iphone', 'apple'],
-            'tecno': ['tecno'],
-            'infinix': ['infinix'],
-            'laptop': ['laptop', 'computer', 'macbook'],
-            'phone': ['phone', 'smartphone']
-        }
+        if not target_product_name:
+            logger.warning("⚠️ No product name found in user message or hint for DB lookup.")
+            return None
 
-        extracted_products = []
-        for brand, keywords in product_keywords.items():
-            for keyword in keywords:
-                if keyword in message_lower:
-                    extracted_products.append(brand)
-                    break
+        logger.info(f"🔍 Attempting to find product in DB: '{target_product_name}'")
+        conn = None
+        db_manager = initialize_database()
+        try:
+            with db_manager.get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    # Use ILIKE for case-insensitive partial matching. Prioritize exact matches if possible.
+                    # This query can be expanded for more sophisticated matching (e.g., brand + model)
+                    # Ensure spaces are handled correctly by ILIKE.
+                    query = """
+                        SELECT product_id, product_name, category, brand, description, price, currency, in_stock, stock_quantity
+                        FROM products
+                        WHERE product_name ILIKE %s AND in_stock = TRUE
+                        ORDER BY (product_name = %s) DESC, price ASC
+                        LIMIT 1;
+                    """
+                    # The `(product_name = %s) DESC` part tries to give exact matches higher priority
+                    # The actual ILIKE pattern needs '%' for wildcard matching.
+                    search_pattern = f"%{target_product_name}%"
+                    exact_match_term = target_product_name # For exact match prioritization
 
-        # If we have product context from previous conversation
-        if product_context:
-            for product in product_context:
-                product_name_lower = product.get('product_name', '').lower()
-                if any(word in product_name_lower for word in message_lower.split()):
-                    return {
-                        'product_id': product.get('product_id'),
-                        'product_name': product.get('product_name'),
-                        'brand': product.get('brand'),
-                        'price': product.get('price'),
-                        'found_in_context': True
-                    }
+                    cursor.execute(query, (search_pattern, exact_match_term))
+                    product_data = cursor.fetchone()
 
-        return {
-            'extracted_brands': extracted_products,
-            'found_in_context': False
-        }
+                    if product_data:
+                        logger.info(f"✅ Product found in DB: {product_data['product_name']}")
+                        # Convert Decimal to float for easier handling if price is Decimal
+                        if 'price' in product_data and hasattr(product_data['price'], 'quantize'): # Check if Decimal
+                            product_data['price'] = float(product_data['price'])
+                        return dict(product_data)
+                    else:
+                        logger.warning(f"🟡 Product '{target_product_name}' not found in DB with ILIKE '%{target_product_name}%'.")
+                        # Try a broader search if initial one fails, e.g. splitting words
+                        words = target_product_name.split()
+                        if len(words) > 1:
+                            broader_search_pattern = "%" + "%".join(words) + "%"
+                            logger.info(f" AgamaTrying broader search with pattern: {broader_search_pattern}")
+                            cursor.execute(query, (broader_search_pattern, exact_match_term)) # exact_match_term remains for priority sort
+                            product_data = cursor.fetchone()
+                            if product_data:
+                                logger.info(f"✅ Product found in DB (broader search): {product_data['product_name']}")
+                                if 'price' in product_data and hasattr(product_data['price'], 'quantize'):
+                                    product_data['price'] = float(product_data['price'])
+                                return dict(product_data)
+                            else:
+                                logger.warning(f"🟡 Product '{target_product_name}' still not found with broader search.")
+
+            return None
+        except Exception as e:
+            logger.error(f"❌ Error querying product from DB: {e}")
+            return None
 
     def add_to_cart(self, customer_id: int, product_info: Dict, quantity: int = 1) -> Dict[str, Any]:
         """🛒 Add product to customer's cart"""
         try:
-            # Validate product availability
-            availability = self.order_system.check_product_availability(
-                product_info['product_id'], quantity
-            )
+            cart_key = f"cart_{customer_id}"  # Consistent cart key format
 
-            if not availability['available']:
-                return {
-                    'success': False,
-                    'message': f"Sorry! {availability['error']}",
-                    'action': 'add_to_cart_failed'
-                }
-
-            # Get or create cart for customer
-            cart_key = f"cart_{customer_id}"
+            # Initialize cart if it doesn't exist
             if cart_key not in self.active_carts:
                 self.active_carts[cart_key] = {
                     'customer_id': customer_id,
                     'items': [],
+                    'subtotal': 0.0,
+                    'delivery_state': 'Lagos',  # Default
+                    'delivery_address': {},
+                    'payment_method': 'Pay on Delivery',  # Default
                     'created_at': datetime.now(),
                     'updated_at': datetime.now()
                 }
 
             cart = self.active_carts[cart_key]
-            product_data = availability['product_info']
+
+            # Create cart item
+            cart_item = {
+                'product_id': product_info.get('product_id'),
+                'product_name': product_info.get('product_name'),
+                'category': product_info.get('category', 'Electronics'),
+                'brand': product_info.get('brand', ''),
+                'price': float(product_info.get('price', 0)),
+                'quantity': quantity,
+                'subtotal': float(product_info.get('price', 0)) * quantity
+            }
 
             # Check if product already in cart
             existing_item = None
             for item in cart['items']:
-                if item['product_id'] == product_info['product_id']:
+                if item['product_id'] == cart_item['product_id']:
                     existing_item = item
                     break
 
@@ -264,39 +398,34 @@ class OrderAIAssistant:
                 # Update quantity
                 existing_item['quantity'] += quantity
                 existing_item['subtotal'] = existing_item['price'] * existing_item['quantity']
-                message = f"Updated {product_data['product_name']} quantity to {existing_item['quantity']} in your cart! 🛒"
             else:
                 # Add new item
-                cart_item = {
-                    'product_id': product_data['product_id'],
-                    'product_name': product_data['product_name'],
-                    'category': product_data['category'],
-                    'brand': product_data['brand'],
-                    'price': float(product_data['price']),
-                    'quantity': quantity,
-                    'subtotal': float(product_data['price']) * quantity
-                }
                 cart['items'].append(cart_item)
-                message = f"Added {product_data['product_name']} to your cart! 🎉"
 
+            # Recalculate cart totals
+            cart['subtotal'] = sum(item['subtotal'] for item in cart['items'])
             cart['updated_at'] = datetime.now()
+
+            # Save to in-memory storage (replace with Redis in production)
+            self.active_carts[cart_key] = cart
+
+            logger.info(f"✅ Added {product_info.get('product_name')} to cart for customer {customer_id}")
 
             return {
                 'success': True,
-                'message': message,
+                'message': f"✅ Added {product_info.get('product_name')} to your cart! 🎉",
                 'action': 'add_to_cart_success',
                 'cart_summary': self._get_cart_summary(cart),
-                'next_actions': [
-                    'View cart', 'Continue shopping', 'Proceed to checkout'
-                ]
+                'product_added': cart_item
             }
 
         except Exception as e:
             logger.error(f"❌ Error adding to cart: {e}")
             return {
                 'success': False,
-                'message': "I encountered an error adding the item to your cart. Please try again!",
-                'action': 'add_to_cart_error'
+                'message': "Sorry, I couldn't add that product to your cart. Please try again!",
+                'action': 'add_to_cart_error',
+                'error': str(e)
             }
 
     def calculate_order_preview(self, customer_id: int, delivery_state: str = "Lagos") -> Dict[str, Any]:
@@ -470,309 +599,475 @@ class OrderAIAssistant:
                 'action': 'status_error'
             }
 
-    def process_shopping_conversation(self, user_message: str, customer_id: int,
-                                    conversation_context: List[Dict] = None) -> Dict[str, Any]:
-        """🎯 Process shopping conversation with intelligent context awareness"""
+    def process_shopping_conversation(
+        self,
+        user_message: str,
+        customer_id: int,
+        session_id: str,
+        current_session_state: Optional[SessionState] = None
+    ) -> Dict[str, Any]:
+        """🎯 Process shopping conversation with intelligent context awareness using passed SessionState"""
+
+        active_session_state = self._get_or_initialize_session_state(session_id, customer_id, current_session_state)
+        active_session_state.current_intent = user_message
+
         try:
-            # Parse user intent
             intent_data = self.parse_order_intent(user_message)
             intent = intent_data['intent']
+            entities = intent_data.get('entities', {})
+            active_session_state.current_intent = intent
 
-            logger.info(f"🛒 Processing shopping intent: {intent} for customer {customer_id}")
+            logger.info(f"🛒 Processing shopping intent: {intent} for customer {customer_id}, session {session_id}, stage: {active_session_state.conversation_stage}")
 
-            # Handle different shopping intents
+            response_data = {'success': False, 'message': "Could not process your request.", 'action': intent}
+
             if intent == 'add_to_cart':
-                # Extract product information
-                product_info = self.extract_product_info(user_message, conversation_context)
+                product_name_from_intent = entities.get('product_name')
+                product_info = self.extract_product_info(user_message, product_name_hint=product_name_from_intent)
 
-                # 🔧 ENHANCED: Better product matching
-                if product_info.get('found_in_context') or conversation_context:
-                    # Use the first product from context if extract_product_info didn't find it
-                    if not product_info.get('found_in_context') and conversation_context:
-                        product_info = conversation_context[0]
-                        product_info['found_in_context'] = True
-
-                    logger.info(f"🛒 Adding product to cart: {product_info.get('product_name', 'Unknown')}")
-                    add_result = self.add_to_cart(customer_id, product_info)
-
-                    # 🆕 PROGRESSIVE CHECKOUT: After adding to cart, start checkout flow
-                    if add_result['success']:
-                        checkout_result = self.progressive_checkout(customer_id, "start checkout", conversation_context)
-
-                        # Combine the add to cart success with checkout initiation
-                        add_result['message'] += f"\n\n{checkout_result['message']}"
-                        add_result['checkout_step'] = checkout_result.get('checkout_step', 'delivery_address')
-
-                    return add_result
+                if product_info and product_info.get('product_id'):
+                    if product_info.get('stock_quantity', 0) > 0:
+                        existing_item = next((item for item in active_session_state.cart_items if item['product_id'] == product_info['product_id']), None)
+                        if existing_item:
+                            existing_item['quantity'] += 1
+                            existing_item['subtotal'] = existing_item['price'] * existing_item['quantity']
+                        else:
+                            active_session_state.cart_items.append({
+                                'product_id': product_info['product_id'],
+                                'product_name': product_info['product_name'],
+                                'price': float(product_info['price']),
+                                'quantity': 1,
+                                'subtotal': float(product_info['price'])
+                            })
+                        active_session_state.last_product_mentioned = product_info
+                        active_session_state.conversation_stage = 'cart_updated'
+                        response_data.update({
+                            'success': True,
+                            'message': f"✅ Added {product_info['product_name']} to your cart!",
+                            'action': 'add_to_cart_success',
+                            'product_added': product_info
+                        })
+                    else:
+                        response_data['message'] = f"😔 Sorry, {product_info['product_name']} is currently out of stock."
+                        active_session_state.last_product_mentioned = product_info
                 else:
-                    logger.warning(f"❌ No product found in context for add_to_cart")
-                    return {
-                        'success': False,
-                        'message': "I need to know which specific product you want to add. Can you tell me the product name or browse our catalog first?",
-                        'action': 'need_product_clarification'
+                    response_data['message'] = "🤔 I couldn't find that specific product. Can you try naming it again or browse our catalog?"
+                    response_data['action'] = 'need_product_clarification'
+
+            elif intent == 'view_cart':
+                if active_session_state.cart_items:
+                    response_data.update({
+                        'success': True,
+                        'message': "🛒 Here's what's in your cart:",
+                        'action': 'cart_displayed',
+                    })
+                else:
+                    response_data.update({
+                        'success': True,
+                        'message': "🛒 Your cart is currently empty!",
+                        'action': 'empty_cart',
+                    })
+
+            elif intent == 'clear_cart':
+                active_session_state.cart_items = []
+                active_session_state.conversation_stage = 'cart_cleared'
+                response_data.update({
+                    'success': True,
+                    'message': "🗑️ Your cart has been cleared.",
+                    'action': 'cart_cleared',
+                })
+
+            elif intent == 'set_delivery_address':
+                address_entity = entities.get('delivery_address')
+                if address_entity and isinstance(address_entity, dict) and address_entity.get('full_address'):
+                    active_session_state.delivery_address = address_entity
+                    active_session_state.conversation_stage = 'address_set'
+                    response_data.update({
+                        'success': True,
+                        'message': f"✅ Delivery address updated to: {address_entity['full_address']}",
+                        'action': 'delivery_address_set',
+                        'delivery_address': address_entity
+                    })
+                elif user_message.lower() in ["yes", "yeah", "ok"] and active_session_state.conversation_stage == 'awaiting_address_confirmation' and active_session_state.delivery_address:
+                    active_session_state.conversation_stage = 'address_set'
+                    response_data.update({
+                        'success': True,
+                        'message': f"✅ Great! Using delivery address: {active_session_state.delivery_address.get('full_address', 'Saved Address')}",
+                        'action': 'delivery_address_confirmed'
+                    })
+                else:
+                    response_data['message'] = "🤔 I didn't catch that address. Could you please provide it again? e.g., 'Deliver to 123 Main St, Lagos'"
+                    response_data['action'] = 'need_address_clarification'
+
+            elif intent == 'payment_method_selection':
+                payment_method_entity = entities.get('payment_method')
+                if payment_method_entity:
+                    # Map normalized payment methods to PaymentMethod enum values
+                    payment_method_mapping = {
+                        'RaqibTechPay': 'RaqibTechPay',
+                        'Pay on Delivery': 'Pay on Delivery',
+                        'Card Payment': 'Card',
+                        'Bank Transfer': 'Bank Transfer'
                     }
+                    mapped_payment_method = payment_method_mapping.get(payment_method_entity, payment_method_entity)
 
-            elif intent == 'place_order':
-                # Check if we have delivery and payment info
-                delivery_address = self.extract_delivery_address(user_message)
-                payment_method = self.extract_payment_method(user_message)
-
-                if delivery_address and payment_method:
-                    # Direct order placement with all info provided
-                    return self.place_order(customer_id, delivery_address, payment_method)
+                    if any(pm.value.lower() == mapped_payment_method.lower() for pm in PaymentMethod):
+                        active_session_state.payment_method = mapped_payment_method
+                        active_session_state.conversation_stage = 'payment_method_set'
+                        response_data.update({
+                            'success': True,
+                            'message': f"✅ Payment method set to: {payment_method_entity}",  # Show user-friendly name
+                            'action': 'payment_method_set',
+                            'payment_method': payment_method_entity
+                        })
+                    else:
+                        response_data['message'] = f"🤔 '{payment_method_entity}' is not a recognized payment method. Please choose from RaqibTechPay, Pay on Delivery, Card, or Bank Transfer."
+                        response_data['action'] = 'need_payment_clarification'
+                elif user_message.lower() in ["yes", "yeah", "ok"] and active_session_state.conversation_stage == 'awaiting_payment_confirmation' and active_session_state.payment_method:
+                    active_session_state.conversation_stage = 'payment_method_set'
+                    response_data.update({
+                        'success': True,
+                        'message': f"✅ Understood! Using payment method: {active_session_state.payment_method}",
+                        'action': 'payment_method_confirmed'
+                    })
                 else:
-                    # Start progressive checkout
-                    return self.progressive_checkout(customer_id, user_message, conversation_context)
+                    response_data['message'] = "🤔 Which payment method would you like to use? (RaqibTechPay, Pay on Delivery, Card, Bank Transfer)"
+                    response_data['action'] = 'need_payment_clarification'
 
-            elif intent == 'check_cart':
-                return self.get_cart_contents(customer_id)
+            elif intent == 'checkout' or intent == 'place_order' or \
+                 (intent == 'affirmative_confirmation' and active_session_state.conversation_stage in ['awaiting_order_confirmation', 'checkout_summary_shown', 'payment_method_set', 'address_set']):
+                checkout_result = self.progressive_checkout(user_message, customer_id, active_session_state)
+                response_data.update(checkout_result)
 
-            elif intent == 'calculate_total':
-                return self.calculate_order_preview(customer_id)
+            elif intent == 'affirmative_confirmation':
+                logger.info(f"Affirmative confirmation. Current stage: {active_session_state.conversation_stage}")
+                action_taken = False
+                if active_session_state.conversation_stage == 'awaiting_address_confirmation' and active_session_state.delivery_address:
+                    active_session_state.conversation_stage = 'address_set'
+                    self._save_session_state(session_id, active_session_state)
+                    checkout_result = self.progressive_checkout(user_message, customer_id, active_session_state)
+                    response_data.update(checkout_result)
+                    response_data['message'] = f"✅ Delivery address confirmed: {active_session_state.delivery_address.get('full_address')}. " + response_data.get('message', '')
+                    action_taken = True
 
-            elif intent == 'track_order':
-                return self.get_order_status(customer_id)
+                elif active_session_state.conversation_stage == 'awaiting_payment_confirmation' and active_session_state.payment_method:
+                    active_session_state.conversation_stage = 'payment_method_set'
+                    self._save_session_state(session_id, active_session_state)
+                    checkout_result = self.progressive_checkout(user_message, customer_id, active_session_state)
+                    response_data.update(checkout_result)
+                    response_data['message'] = f"✅ Payment method confirmed: {active_session_state.payment_method}. " + response_data.get('message', '')
+                    action_taken = True
 
-            elif any(keyword in user_message.lower() for keyword in ['delivery', 'address', 'payment', 'confirm', 'lugbe', 'abuja', 'lagos', 'raqibpay']):
-                # Handle checkout flow responses
-                checkout_key = f"checkout_{customer_id}"
-                if checkout_key in self.active_carts:
-                    return self.progressive_checkout(customer_id, user_message, conversation_context)
+                elif active_session_state.conversation_stage == 'awaiting_order_confirmation':
+                    logger.info("Affirmative for order confirmation. Proceeding to place order.")
+                    # progressive_checkout will handle the actual order placement if conditions are met
+                    checkout_result = self.progressive_checkout(user_message, customer_id, active_session_state)
+                    response_data.update(checkout_result)
+                    action_taken = True
+
+                if not action_taken: # Generic "yes", unsure what it's for, or fell through
+                    response_data['message'] = "Okay! What would you like to do next? You can view your cart, add more items, or ask for help."
+                    response_data['action'] = 'generic_affirmation'
+                    # No specific state change here, but ensure current state is saved if it was somehow modified by a prior missed step
+                    # self._save_session_state(session_id, active_session_state) # Already saved at the end of method
+
+            elif intent == 'negative_rejection':
+                logger.info(f"Negative rejection. Current stage: {active_session_state.conversation_stage}")
+                if active_session_state.conversation_stage == 'awaiting_address_confirmation':
+                    active_session_state.delivery_address = None
+                    active_session_state.conversation_stage = 'checkout_initiated_need_address'
+                    response_data['message'] = "Okay, what is the correct delivery address then?"
+                    response_data['action'] = 'address_rejected_need_new'
+                elif active_session_state.conversation_stage == 'awaiting_payment_confirmation':
+                    active_session_state.payment_method = None
+                    active_session_state.conversation_stage = 'address_set_need_payment'
+                    response_data['message'] = "Alright, which payment method would you prefer?"
+                    response_data['action'] = 'payment_rejected_need_new'
+                elif active_session_state.conversation_stage == 'awaiting_order_confirmation':
+                    active_session_state.conversation_stage = 'checkout_summary_shown' # Or perhaps 'cart_updated' to allow cart changes
+                    response_data['message'] = "Okay, order cancelled. You can view your cart, add/remove items, or change delivery/payment details."
+                    response_data['action'] = 'order_confirmation_rejected'
                 else:
-                    # No active checkout, but user mentioned checkout-related terms
-                    return {
-                        'success': False,
-                        'message': "I don't see an active checkout session. Please add items to your cart first! 🛒",
-                        'action': 'no_active_checkout'
-                    }
+                    response_data['message'] = "Alright. How can I help you then? You can view products or ask about your cart."
+                    response_data['action'] = 'generic_rejection'
+                self._save_session_state(session_id, active_session_state) # Save state after rejection handling
 
-            else:
-                return {
-                    'success': False,
-                    'message': "I didn't understand that request. Can you be more specific about what you'd like to do?",
-                    'action': 'clarification_needed'
-                }
+            else: # General inquiry or unhandled shopping intent
+                response_data['message'] = "I can help with shopping! You can add items, view your cart, or checkout."
+                response_data['action'] = 'general_shopping_prompt'
+                # No specific state change, but state is saved at the end of the method
+
+            if response_data['success'] and active_session_state.cart_items:
+                 cart_total_items = sum(item['quantity'] for item in active_session_state.cart_items)
+                 cart_subtotal = sum(item['subtotal'] for item in active_session_state.cart_items)
+                 cart_summary_dict = {
+                     'items': active_session_state.cart_items,
+                     'total_items': cart_total_items,
+                     'subtotal': cart_subtotal,
+                     'subtotal_formatted': f"₦{cart_subtotal:,.2f}"  # Direct formatting instead of order_system.format_price
+                 }
+                 response_data['cart_summary'] = cart_summary_dict
+
+            self._save_session_state(session_id, active_session_state)
+            return response_data
 
         except Exception as e:
-            logger.error(f"❌ Error in shopping conversation: {e}")
-            return {
+            logger.error(f"❌ Error in process_shopping_conversation: {e}", exc_info=True)
+            if 'active_session_state' in locals() and active_session_state:
+                self._save_session_state(session_id, active_session_state)
+            return {'success': False, 'message': f"An internal error occurred: {str(e)}", 'action': 'system_error'}
+
+    def progressive_checkout(self, user_message: str, customer_id: int, session_state: SessionState) -> Dict[str, Any]:
+        """
+        🧠 Manages the progressive checkout flow based on current SessionState.
+        This method will now primarily use the passed session_state.
+        """
+        action_result = {'success': False, 'message': "Let's get your order ready!", 'action': 'checkout_progress'}
+
+        if not self.order_system:
+            return {'success': False, 'message': "Order system is currently unavailable.", 'action': 'system_error'}
+
+        # Use passed session_state for cart items
+        if not session_state.cart_items:
+            session_state.conversation_stage = 'cart_empty_checkout_attempt'
+            self._save_session_state(session_state.session_id, session_state) # Save updated stage
+            return {'success': False, 'message': "Your cart is empty! Please add some products first. 🛒", 'action': 'empty_cart'}
+
+        # 1. Check/Get Delivery Address from session_state
+        if not session_state.delivery_address:
+            intent_data = self.parse_order_intent(user_message)
+            if intent_data['intent'] == 'set_delivery_address' and intent_data['entities'].get('delivery_address'):
+                addr_entity = intent_data['entities']['delivery_address']
+                session_state.delivery_address = addr_entity
+                session_state.conversation_stage = 'address_set'
+                logger.info(f"🚚 Address parsed during checkout: {addr_entity.get('full_address')}")
+                self._save_session_state(session_state.session_id, session_state) # Save
+                # Fall through to payment check
+            else:
+                # Try to get saved address for customer
+                saved_address = self._get_customer_address(customer_id)
+                if saved_address:
+                    session_state.delivery_address = saved_address # Tentatively set, user needs to confirm
+                    session_state.conversation_stage = 'awaiting_address_confirmation'
+                    action_result.update({
+                        'success': True,  # This is a successful checkout step, not a failure
+                        'message': f"🚚 Should I use your saved address: {saved_address['full_address']} for delivery?",
+                        'action': 'confirm_delivery_address'
+                    })
+                    self._save_session_state(session_state.session_id, session_state) # Save state before returning
+                    return action_result
+                else:
+                    session_state.conversation_stage = 'checkout_initiated_need_address'
+                    action_result.update({
+                        'success': True,  # This is a successful checkout step, not a failure
+                        'message': "🚚 What is your delivery address? (e.g., '123 Main St, Ikeja, Lagos')",
+                        'action': 'request_delivery_address'
+                    })
+                    self._save_session_state(session_state.session_id, session_state) # Save state before returning
+                    return action_result
+
+        # Ensure conversation_stage reflects address is set if we passed the above block
+        if session_state.delivery_address and session_state.conversation_stage not in ['address_set', 'payment_method_set', 'awaiting_payment_confirmation', 'checkout_summary_shown', 'awaiting_order_confirmation']:
+            session_state.conversation_stage = 'address_set'
+            self._save_session_state(session_state.session_id, session_state)
+
+
+        # 2. Check/Get Payment Method from session_state
+        if not session_state.payment_method:
+            intent_data = self.parse_order_intent(user_message)
+            if intent_data['intent'] == 'payment_method_selection' and intent_data['entities'].get('payment_method'):
+                pm_entity = intent_data['entities']['payment_method']
+                if any(pm.value.lower() == pm_entity.lower() for pm in PaymentMethod):
+                    session_state.payment_method = pm_entity
+                    session_state.conversation_stage = 'payment_method_set'
+                    logger.info(f"💳 Payment method parsed during checkout: {pm_entity}")
+                    self._save_session_state(session_state.session_id, session_state)
+                    # Fall through to summary/placement
+                else:
+                    session_state.conversation_stage = 'address_set_need_payment' # Stay here but prompt again
+                    action_result.update({
+                        'success': True,  # This is a successful checkout step, not a failure
+                        'message': f"🤔 '{pm_entity}' isn't valid. Choose RaqibTechPay, Pay on Delivery, Card, or Bank Transfer.",
+                        'action': 'request_payment_method_invalid'
+                    })
+                    self._save_session_state(session_state.session_id, session_state) # Save state before returning
+                    return action_result
+            else:
+                session_state.conversation_stage = 'address_set_need_payment'
+                action_result.update({
+                    'success': True,  # This is a successful checkout step, not a failure
+                    'message': "💳 How would you like to pay? (RaqibTechPay, Pay on Delivery, Card, or Bank Transfer)",
+                    'action': 'request_payment_method'
+                })
+                self._save_session_state(session_state.session_id, session_state) # Save state before returning
+                return action_result
+
+        # Ensure stage reflects payment is set
+        if session_state.payment_method and session_state.conversation_stage not in ['payment_method_set', 'checkout_summary_shown', 'awaiting_order_confirmation']:
+             session_state.conversation_stage = 'payment_method_set'
+             self._save_session_state(session_state.session_id, session_state)
+
+        # 3. All details collected - Show summary and ask for confirmation to place order
+        cart_summary_dict = {
+             'items': session_state.cart_items,
+             'total_items': sum(item['quantity'] for item in session_state.cart_items),
+             'subtotal': sum(item['subtotal'] for item in session_state.cart_items)
+        }
+        order_summary_text = self.order_system.format_potential_order_summary(
+            cart_summary_dict,
+            session_state.delivery_address,
+            session_state.payment_method
+        )
+
+        # Check if user message is an attempt to place order (e.g. "place order", "confirm")
+        # or if user said "yes" and stage was awaiting_order_confirmation
+        is_place_order_command = self.parse_order_intent(user_message)['intent'] == 'place_order'
+        is_affirmative_confirmation_for_order = (self.parse_order_intent(user_message)['intent'] == 'affirmative_confirmation' and
+                                               session_state.conversation_stage == 'awaiting_order_confirmation')
+
+
+        if is_place_order_command or is_affirmative_confirmation_for_order:
+            logger.info(f"Attempting to place order for customer {customer_id} based on command or confirmation.")
+            # Ensure all details are present one last time
+            if not (session_state.cart_items and session_state.delivery_address and session_state.payment_method):
+                 logger.warning(f"Missing details for order placement: Cart: {bool(session_state.cart_items)}, Addr: {bool(session_state.delivery_address)}, PM: {bool(session_state.payment_method)}")
+                 action_result['message'] = "It seems some details are still missing. Let's review. What is your delivery address?"
+                 session_state.conversation_stage = 'checkout_initiated_need_address' # Restart collection
+                 session_state.delivery_address = None # Clear to re-prompt
+                 session_state.payment_method = None # Clear to re-prompt
+                 self._save_session_state(session_state.session_id, session_state)
+                 action_result['action'] = 'request_delivery_address' # Go back to address collection
+                 return action_result
+
+            order_id, order_details, error = self.order_system.place_order(
+                customer_id=customer_id,
+                cart_items=session_state.cart_items,
+                delivery_address=session_state.delivery_address,
+                payment_method=PaymentMethod(session_state.payment_method),
+                notes="Order placed via AI Assistant"
+            )
+            if order_id:
+                session_state.cart_items = [] # Clear cart in current state
+                session_state.conversation_stage = 'order_placed'
+                session_state.checkout_state = {'last_order_id': order_id, 'details': order_details}
+                action_result.update({
+                    'success': True,
+                    'message': f"🎉 Your order {order_id} has been placed successfully!",
+                    'action': 'order_placed',
+                    'order_id': order_id,
+                    'order_summary': self.order_system.format_order_summary(order_details)
+                })
+            else:
+                action_result.update({
                 'success': False,
-                'message': "Something went wrong. Please try again!",
-                'action': 'error'
-            }
+                    'message': f"💥 Error placing order: {error}. Please check details or try again.",
+                    'action': 'order_placement_failed'
+                })
+        else:
+            # Not a direct place order command, so show summary and await confirmation
+            session_state.conversation_stage = 'awaiting_order_confirmation'
+            action_result.update({
+                'success': True, # Success in reaching this stage
+                'message': f"📝 **Order Summary:**\\n{order_summary_text}\\n\\nIs everything correct? Say 'yes' to place your order or tell me what to change.",
+                'action': 'confirm_order_details'
+            })
 
-    def progressive_checkout(self, customer_id: int, user_message: str,
-                           conversation_context: List[Dict] = None) -> Dict[str, Any]:
-        """🎯 Progressive checkout - collect details step by step"""
+        self._save_session_state(session_state.session_id, session_state) # Save final stage before returning
+        return action_result
+
+    def _get_or_initialize_session_state(self, session_id: str, customer_id: Optional[int], existing_state: Optional[SessionState]) -> SessionState:
+        """ Helper to get existing session state or initialize a new one. """
+        if existing_state:
+            logger.info(f"🧠 Using existing session state for session {session_id}, stage: {existing_state.conversation_stage}")
+            return existing_state
+
+        logger.info(f"🧠 No existing session state passed for {session_id}, attempting to fetch or create new.")
+        state_from_mem = self.memory_system.get_session_state(session_id)
+        if state_from_mem:
+            logger.info(f"🧠 Fetched session state from memory for session {session_id}, stage: {state_from_mem.conversation_stage}")
+            return state_from_mem
+
+        logger.info(f"🧠 Initializing new session state for session {session_id}")
+        return SessionState(
+            session_id=session_id,
+            customer_id=customer_id,
+            cart_items=[],
+            checkout_state={},
+            current_intent='initial',
+            last_product_mentioned=None,
+            delivery_address=None,
+            payment_method=None,
+            conversation_stage='browsing',
+            created_at=datetime.now(),
+            updated_at=datetime.now()
+        )
+
+    def _save_session_state(self, session_id: str, session_state: SessionState):
+        """ Helper to save the session state using the memory system. """
+        session_state.updated_at = datetime.now()
+        logger.info(f"🧠 Saving session state for {session_id}, stage: {session_state.conversation_stage}, cart: {len(session_state.cart_items)} items.")
+        self.memory_system.update_session_state(session_id, asdict(session_state))
+
+    def _parse_nigerian_address(self, address_text: str) -> Tuple[str, str, str]:
+        # This is a placeholder implementation. A real implementation would parse the address
+        # and return the components (full_address, city, state). For now, we'll return a default.
+        return ("1 RaqibTech Avenue", "Lagos", "Lagos")
+
+    def get_order_history(self, customer_id: int) -> Dict[str, Any]:
+        # This method is not provided in the original file or the new implementation
+        # It's assumed to exist as it's called in the process_shopping_conversation method
+        # A placeholder implementation is provided
+        return {"orders": []}
+
+    def _get_customer_address(self, customer_id: int) -> Optional[Dict[str, Any]]:
+        """Get customer's default address from database"""
         try:
-            cart_key = f"cart_{customer_id}"
+            db_manager = initialize_database()
+            with db_manager.get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute("""
+                        SELECT address, state, lga
+                        FROM customers
+                        WHERE customer_id = %s
+                    """, (customer_id,))
 
-            # Check if cart exists
-            if cart_key not in self.active_carts or not self.active_carts[cart_key]['items']:
-                return {
-                    'success': False,
-                    'message': "Your cart is empty! Please add some products first. 🛒",
-                    'action': 'empty_cart'
-                }
-
-            cart = self.active_carts[cart_key]
-            message_lower = user_message.lower()
-
-            # Initialize checkout session if not exists
-            checkout_key = f"checkout_{customer_id}"
-            if checkout_key not in self.active_carts:
-                self.active_carts[checkout_key] = {
-                    'step': 'delivery_address',
-                    'delivery_address': None,
-                    'payment_method': None,
-                    'confirmed': False
-                }
-
-            checkout_session = self.active_carts[checkout_key]
-
-            # Step 1: Collect delivery address
-            if checkout_session['step'] == 'delivery_address':
-                # Check if delivery address provided in message
-                if any(location in message_lower for location in ['lugbe', 'abuja', 'lagos', 'address']):
-                    if 'lugbe' in message_lower and 'abuja' in message_lower:
-                        checkout_session['delivery_address'] = {
-                            'state': 'Abuja',
-                            'lga': 'Lugbe',
-                            'full_address': 'Anyim Pius Anyim Street, Lugbe, Abuja'
-                        }
-                    elif 'abuja' in message_lower:
-                        checkout_session['delivery_address'] = {
-                            'state': 'Abuja',
-                            'lga': 'Municipal',
-                            'full_address': 'Abuja, Nigeria'
-                        }
-                    elif 'lagos' in message_lower:
-                        checkout_session['delivery_address'] = {
-                            'state': 'Lagos',
-                            'lga': 'Ikeja',
-                            'full_address': 'Lagos, Nigeria'
-                        }
-
-                    if checkout_session['delivery_address']:
-                        checkout_session['step'] = 'payment_method'
-                        logger.info(f"✅ Delivery address collected: {checkout_session['delivery_address']}")
+                    result = cursor.fetchone()
+                    if result and result['address']:
+                        # Parse the address components
+                        full_address = result['address']
+                        state = result['state'] or 'Lagos'  # Default to Lagos if null
+                        lga = result['lga'] or 'Unknown'
 
                         return {
-                            'success': True,
-                            'message': f"✅ Delivery address confirmed: {checkout_session['delivery_address']['full_address']}\n\n💳 Now, please choose your payment method:\n• RaqibTechPay\n• Pay on Delivery\n• Card Payment\n• Bank Transfer\n\nJust say something like 'I want to use RaqibTechPay'",
-                            'action': 'delivery_confirmed_payment_needed',
-                            'checkout_step': 'payment_method'
+                            'full_address': full_address,
+                            'city': lga,
+                            'state': state,
+                            'raw': full_address
                         }
-
-                # Ask for delivery address
-                return {
-                    'success': True,
-                    'message': f"🚚 Great! You have {len(cart['items'])} item(s) in your cart.\n\nTo proceed with checkout, please provide your delivery address.\n\nFor example: 'My delivery address is Lugbe, Abuja' or 'Deliver to Lagos'",
-                    'action': 'delivery_address_needed',
-                    'checkout_step': 'delivery_address'
-                }
-
-            # Step 2: Collect payment method
-            elif checkout_session['step'] == 'payment_method':
-                payment_method = 'Pay on Delivery'  # Default
-
-                if 'raqibpay' in message_lower or 'raqibtech' in message_lower:
-                    payment_method = 'RaqibTechPay'
-                elif 'card' in message_lower:
-                    payment_method = 'Card'
-                elif 'transfer' in message_lower:
-                    payment_method = 'Bank Transfer'
-                elif 'delivery' in message_lower:
-                    payment_method = 'Pay on Delivery'
-
-                checkout_session['payment_method'] = payment_method
-                checkout_session['step'] = 'confirmation'
-                logger.info(f"✅ Payment method collected: {payment_method}")
-
-                # Calculate totals for confirmation
-                cart_summary = self._get_cart_summary(cart)
-
-                return {
-                    'success': True,
-                    'message': f"✅ Payment method confirmed: {payment_method}\n\n📋 **Order Summary:**\n• Items: {cart_summary['total_items']}\n• Subtotal: {cart_summary['subtotal_formatted']}\n• Delivery: {checkout_session['delivery_address']['full_address']}\n• Payment: {payment_method}\n\n🎯 Ready to place your order? Say 'confirm order' or 'place order' to complete!",
-                    'action': 'payment_confirmed_ready_to_order',
-                    'checkout_step': 'confirmation'
-                }
-
-            # Step 3: Final confirmation and order placement
-            elif checkout_session['step'] == 'confirmation':
-                if any(keyword in message_lower for keyword in ['confirm', 'place order', 'yes', 'proceed']):
-                    # Place the actual order
-                    order_result = self.place_order(
-                        customer_id,
-                        checkout_session['delivery_address'],
-                        checkout_session['payment_method']
-                    )
-
-                    # Clear checkout session
-                    if checkout_key in self.active_carts:
-                        del self.active_carts[checkout_key]
-
-                    return order_result
-                else:
-                    return {
-                        'success': True,
-                        'message': "Please confirm your order by saying 'confirm order' or 'place order', or you can modify details by saying 'change delivery address' or 'change payment method'.",
-                        'action': 'awaiting_confirmation'
-                    }
-
-            return {
-                'success': False,
-                'message': "Something went wrong with checkout. Please try again.",
-                'action': 'checkout_error'
-            }
-
+                    return None
         except Exception as e:
-            logger.error(f"❌ Error in progressive checkout: {e}")
-            return {
-                'success': False,
-                'message': "Checkout error. Please try again!",
-                'action': 'checkout_error'
-            }
-
-    def extract_delivery_address(self, user_message: str) -> Dict[str, str]:
-        """🚚 Extract delivery address from user message"""
-        message_lower = user_message.lower()
-
-        if 'lugbe' in message_lower and 'abuja' in message_lower:
-            return {
-                'state': 'Abuja',
-                'lga': 'Lugbe',
-                'full_address': 'Anyim Pius Anyim Street, Lugbe, Abuja'
-            }
-        elif 'abuja' in message_lower:
-            return {
-                'state': 'Abuja',
-                'lga': 'Municipal',
-                'full_address': 'Abuja, Nigeria'
-            }
-        elif 'lagos' in message_lower:
-            return {
-                'state': 'Lagos',
-                'lga': 'Ikeja',
-                'full_address': 'Lagos, Nigeria'
-            }
-
-        return None
-
-    def extract_payment_method(self, user_message: str) -> str:
-        """💳 Extract payment method from user message"""
-        message_lower = user_message.lower()
-
-        if 'raqibpay' in message_lower or 'raqibtech' in message_lower:
-            return 'RaqibTechPay'
-        elif 'card' in message_lower:
-            return 'Card'
-        elif 'transfer' in message_lower:
-            return 'Bank Transfer'
-        elif 'delivery' in message_lower:
-            return 'Pay on Delivery'
-
-        return None
-
-    def _get_cart_summary(self, cart: Dict) -> Dict[str, Any]:
-        """📋 Generate cart summary"""
-        total_items = sum(item['quantity'] for item in cart['items'])
-        subtotal = sum(item['subtotal'] for item in cart['items'])
-
-        return {
-            'total_items': total_items,
-            'subtotal': subtotal,
-            'subtotal_formatted': f"₦{subtotal:,.0f}",
-            'items': cart['items'],
-            'updated_at': cart['updated_at']
-        }
-
-    def _format_order_summary(self, calculation: Dict) -> str:
-        """💰 Format order calculation for display"""
-        return f"""
-📋 **Order Summary:**
-• Subtotal: ₦{calculation['subtotal']:,.0f}
-• Delivery: ₦{calculation['delivery_fee']:,.0f} ({calculation['delivery_zone']})
-• Tier Discount: -₦{calculation['tier_discount']:,.0f} ({calculation['tier_discount_rate']*100:.0f}% off)
-• **Total: ₦{calculation['total_amount']:,.0f}**
-
-🚚 Estimated Delivery: {calculation['delivery_days']} days
-🏆 Your tier: {calculation['customer_tier']}
-"""
-
-    def _format_placed_order_summary(self, order_summary) -> str:
-        """📦 Format placed order summary"""
-        return f"""
-🎉 **Order Confirmation:**
-• Order ID: {order_summary.order_id}
-• Total: ₦{order_summary.total_amount:,.0f}
-• Payment: {order_summary.payment_method.value}
-• Delivery to: {order_summary.delivery_info.state}
-• Expected: {order_summary.estimated_delivery.strftime('%Y-%m-%d')}
-
-📱 You'll receive SMS/email confirmation shortly!
-"""
+            logger.error(f"❌ Error getting customer address: {e}")
+            return None
 
 # Global instance for use in Flask app
-order_ai_assistant = OrderAIAssistant()
+# Note: This will be created with a memory system when needed
+# For now, we'll make it None to avoid import errors
+order_ai_assistant = None
+
+def get_order_ai_assistant():
+    """Factory function to get OrderAIAssistant instance with proper memory system"""
+    global order_ai_assistant
+    if order_ai_assistant is None:
+        try:
+            from .conversation_memory_system import world_class_memory
+            order_ai_assistant = OrderAIAssistant(world_class_memory)
+        except ImportError:
+            # Fallback: create a basic memory system if import fails
+            try:
+                from conversation_memory_system import world_class_memory
+                order_ai_assistant = OrderAIAssistant(world_class_memory)
+            except ImportError:
+                # Last resort: create OrderAIAssistant with None (will need to handle this in __init__)
+                logger.warning("⚠️ Could not import world_class_memory, creating OrderAIAssistant without memory system")
+                order_ai_assistant = OrderAIAssistant(None)
+    return order_ai_assistant

@@ -359,12 +359,41 @@
     line-height: 1.5;
     word-wrap: break-word;
     position: relative;
+    white-space: pre-wrap; /* Preserve whitespace formatting */
+}
+
+/* Enhanced AI Message Formatting */
+.message.ai .message-bubble {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    line-height: 1.6;
+    white-space: normal; /* Allow normal text flow for HTML content */
+}
+
+.message.ai .message-bubble br {
+    line-height: 1.8; /* Extra space between lines */
+}
+
+/* Better spacing for structured AI responses */
+.message.ai .message-bubble p {
+    margin: 8px 0;
+}
+
+.message.ai .message-bubble ul,
+.message.ai .message-bubble ol {
+    margin: 8px 0 8px 16px;
+    padding-left: 0;
+}
+
+.message.ai .message-bubble li {
+    margin: 4px 0;
 }
 
 .message.customer .message-bubble {
     background: linear-gradient(135deg, #2c3e50, #34495e);
     color: white;
     border-color: #2c3e50;
+    white-space: pre-wrap; /* Preserve user input formatting */
 }
 
 .message-meta {
@@ -2431,7 +2460,19 @@ class CustomerSupportPortal {
 
         const messageBubble = document.createElement('div');
         messageBubble.className = 'message-bubble';
-        messageBubble.innerHTML = message;
+
+        // 🔧 FIX: Properly format AI responses with line breaks
+        if (sender === 'ai') {
+            // Convert line breaks to HTML breaks and preserve formatting for AI responses
+            const formattedMessage = message
+                .replace(/\n/g, '<br>')
+                .replace(/\r\n/g, '<br>')
+                .replace(/\r/g, '<br>');
+            messageBubble.innerHTML = formattedMessage;
+        } else {
+            // For customer messages, use as-is (user input should be escaped)
+            messageBubble.textContent = message;
+        }
 
         const messageMeta = document.createElement('div');
         messageMeta.className = 'message-meta';
@@ -2953,5 +2994,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
 console.log('✅ Modal system loaded and ready');
 </script>
+
+<!-- Include Checkout Modal -->
+{% include 'checkout.html' %}
+
 {% endblock %}
 

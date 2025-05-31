@@ -1,0 +1,441 @@
+<!-- 🛒 Enhanced Checkout Modal for Nigerian E-commerce -->
+<div class="modal fade" id="checkoutModal" tabindex="-1" aria-labelledby="checkoutModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="checkoutModalLabel">
+                    <i class="fas fa-shopping-cart me-2"></i>Order Confirmation
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Order Summary Section -->
+                <div class="row">
+                    <div class="col-md-8">
+                        <!-- Product Details -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0"><i class="fas fa-box me-2"></i>Product Details</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-flex align-items-center">
+                                    <div class="product-image me-3">
+                                        <div class="bg-light rounded p-3" style="width: 80px; height: 80px;">
+                                            <i class="fas fa-mobile-alt fa-2x text-muted"></i>
+                                        </div>
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <h6 class="mb-1" id="checkout-product-name">Product Name</h6>
+                                        <p class="text-muted mb-1" id="checkout-product-category">Category</p>
+                                        <div class="d-flex justify-content-between">
+                                            <span>Quantity: <span id="checkout-quantity">1</span></span>
+                                            <span class="fw-bold" id="checkout-unit-price">₦0.00</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Customer Information -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0"><i class="fas fa-user me-2"></i>Customer Information</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-sm-6">
+                                        <strong>Name:</strong> <span id="checkout-customer-name">Customer Name</span>
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <strong>Email:</strong> <span id="checkout-customer-email">email@example.com</span>
+                                    </div>
+                                    <div class="col-sm-6 mt-2">
+                                        <strong>State:</strong> <span id="checkout-customer-state">Lagos</span>
+                                    </div>
+                                    <div class="col-sm-6 mt-2">
+                                        <strong>Account Tier:</strong>
+                                        <span class="badge" id="checkout-customer-tier">Bronze</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Delivery Information -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0"><i class="fas fa-truck me-2"></i>Delivery Information</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-sm-6">
+                                        <strong>Delivery State:</strong> <span id="checkout-delivery-state">Lagos</span>
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <strong>Estimated Delivery:</strong> <span id="checkout-delivery-days">3 days</span>
+                                    </div>
+                                </div>
+                                <div class="mt-2">
+                                    <strong>Payment Method:</strong>
+                                    <select class="form-select" id="checkout-payment-method">
+                                        <option value="Pay on Delivery">Pay on Delivery</option>
+                                        <option value="Bank Transfer">Bank Transfer</option>
+                                        <option value="Card">Card Payment</option>
+                                        <option value="RaqibTechPay">RaqibTechPay</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Order Total Section -->
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header bg-success text-white">
+                                <h6 class="mb-0"><i class="fas fa-calculator me-2"></i>Order Summary</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span>Subtotal:</span>
+                                    <span id="checkout-subtotal">₦0.00</span>
+                                </div>
+
+                                <div class="d-flex justify-content-between mb-2 text-success" id="checkout-discount-row" style="display: none !important;">
+                                    <span>Discount (<span id="checkout-discount-rate">0</span>%):</span>
+                                    <span>-₦<span id="checkout-discount-amount">0.00</span></span>
+                                </div>
+
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span>Delivery Fee:</span>
+                                    <span id="checkout-delivery-fee">₦0.00</span>
+                                </div>
+
+                                <div class="tier-benefits mb-2" id="checkout-tier-benefits" style="display: none;">
+                                    <small class="text-muted">
+                                        <i class="fas fa-star text-warning"></i>
+                                        <span id="tier-benefit-text">Tier benefits applied</span>
+                                    </small>
+                                </div>
+
+                                <hr>
+                                <div class="d-flex justify-content-between fw-bold fs-5">
+                                    <span>Total:</span>
+                                    <span class="text-success" id="checkout-total">₦0.00</span>
+                                </div>
+
+                                <div class="mt-3">
+                                    <small class="text-muted">
+                                        <i class="fas fa-shield-alt me-1"></i>
+                                        Secure checkout powered by RaqibTech
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Nigerian Payment Methods Info -->
+                        <div class="card mt-3">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <i class="fas fa-credit-card me-2"></i>Payment Options
+                                </h6>
+                                <div class="payment-methods">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <i class="fas fa-truck text-primary me-2"></i>
+                                        <small>Pay on Delivery (Most Popular)</small>
+                                    </div>
+                                    <div class="d-flex align-items-center mb-2">
+                                        <i class="fas fa-university text-success me-2"></i>
+                                        <small>Bank Transfer</small>
+                                    </div>
+                                    <div class="d-flex align-items-center mb-2">
+                                        <i class="fas fa-credit-card text-info me-2"></i>
+                                        <small>Card Payment</small>
+                                    </div>
+                                    <div class="d-flex align-items-center">
+                                        <i class="fas fa-mobile-alt text-warning me-2"></i>
+                                        <small>RaqibTechPay</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-2"></i>Cancel
+                </button>
+                <button type="button" class="btn btn-primary" id="confirm-order-btn">
+                    <i class="fas fa-check me-2"></i>Confirm Order
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Order Success Modal -->
+<div class="modal fade" id="orderSuccessModal" tabindex="-1" aria-labelledby="orderSuccessModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="orderSuccessModalLabel">
+                    <i class="fas fa-check-circle me-2"></i>Order Confirmed!
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <div class="mb-3">
+                    <i class="fas fa-check-circle text-success" style="font-size: 4rem;"></i>
+                </div>
+                <h4 class="text-success mb-3">Order Successfully Placed!</h4>
+                <p class="mb-3">Your order <strong id="success-order-id">#RQB20250101</strong> has been confirmed.</p>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    You'll receive SMS and email confirmation shortly.
+                </div>
+                <div class="order-details">
+                    <p><strong>Total Amount:</strong> <span id="success-total-amount">₦0.00</span></p>
+                    <p><strong>Payment Method:</strong> <span id="success-payment-method">Pay on Delivery</span></p>
+                    <p><strong>Estimated Delivery:</strong> <span id="success-delivery-date">January 15, 2025</span></p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="trackOrder()">
+                    <i class="fas fa-search me-2"></i>Track Order
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Custom styles for checkout modal */
+.checkout-modal .modal-dialog {
+    max-width: 900px;
+}
+
+.product-image {
+    min-width: 80px;
+}
+
+.tier-benefits {
+    background-color: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 0.375rem;
+    padding: 0.5rem;
+}
+
+.payment-methods small {
+    font-size: 0.875rem;
+}
+
+.badge {
+    font-size: 0.75rem;
+}
+
+#checkout-customer-tier.badge {
+    color: white !important;
+}
+
+#checkout-customer-tier.badge.Bronze {
+    background-color: #cd7f32 !important;
+}
+
+#checkout-customer-tier.badge.Silver {
+    background-color: #c0c0c0 !important;
+}
+
+#checkout-customer-tier.badge.Gold {
+    background-color: #ffd700 !important;
+    color: #000 !important;
+}
+
+#checkout-customer-tier.badge.Platinum {
+    background-color: #e5e4e2 !important;
+    color: #000 !important;
+}
+
+.modal-header.bg-primary {
+    background-color: #0d6efd !important;
+}
+
+.modal-header.bg-success {
+    background-color: #198754 !important;
+}
+
+.card-header.bg-success {
+    background-color: #198754 !important;
+}
+
+.text-success {
+    color: #198754 !important;
+}
+
+@media (max-width: 768px) {
+    .checkout-modal .modal-dialog {
+        margin: 0.5rem;
+    }
+
+    .checkout-modal .row {
+        flex-direction: column-reverse;
+    }
+
+    .checkout-modal .col-md-4 {
+        margin-bottom: 1rem;
+    }
+}
+</style>
+
+<script>
+// Checkout modal functionality
+function showCheckoutModal(orderData) {
+    // Populate product details
+    document.getElementById('checkout-product-name').textContent = orderData.product.name;
+    document.getElementById('checkout-product-category').textContent = orderData.product.category;
+    document.getElementById('checkout-quantity').textContent = orderData.quantity;
+    document.getElementById('checkout-unit-price').textContent = formatCurrency(orderData.product.price);
+
+    // Populate customer information
+    document.getElementById('checkout-customer-name').textContent = orderData.customer_info.name;
+    document.getElementById('checkout-customer-email').textContent = orderData.customer_info.email;
+    document.getElementById('checkout-customer-state').textContent = orderData.customer_info.state;
+
+    const tierBadge = document.getElementById('checkout-customer-tier');
+    tierBadge.textContent = orderData.customer_info.tier;
+    tierBadge.className = `badge ${orderData.customer_info.tier}`;
+
+    // Populate delivery information
+    document.getElementById('checkout-delivery-state').textContent = orderData.delivery_state;
+    document.getElementById('checkout-delivery-days').textContent = `${orderData.estimated_delivery_days} days`;
+    document.getElementById('checkout-payment-method').value = orderData.payment_method;
+
+    // Populate order summary
+    document.getElementById('checkout-subtotal').textContent = formatCurrency(orderData.subtotal);
+    document.getElementById('checkout-delivery-fee').textContent = formatCurrency(orderData.delivery_fee);
+    document.getElementById('checkout-total').textContent = formatCurrency(orderData.total_amount);
+
+    // Handle discount display
+    const discountRow = document.getElementById('checkout-discount-row');
+    if (orderData.discount_rate > 0) {
+        document.getElementById('checkout-discount-rate').textContent = orderData.discount_rate.toFixed(0);
+        document.getElementById('checkout-discount-amount').textContent = orderData.discount_amount.toFixed(2);
+        discountRow.style.display = 'flex';
+    } else {
+        discountRow.style.display = 'none';
+    }
+
+    // Handle tier benefits
+    const tierBenefits = document.getElementById('checkout-tier-benefits');
+    const tierBenefitText = document.getElementById('tier-benefit-text');
+
+    if (orderData.customer_tier !== 'Bronze') {
+        let benefitText = '';
+        switch (orderData.customer_tier) {
+            case 'Silver':
+                benefitText = '5% discount applied';
+                break;
+            case 'Gold':
+                benefitText = '10% discount + free delivery';
+                break;
+            case 'Platinum':
+                benefitText = '15% discount + premium perks';
+                break;
+        }
+        tierBenefitText.textContent = benefitText;
+        tierBenefits.style.display = 'block';
+    } else {
+        tierBenefits.style.display = 'none';
+    }
+
+    // Store order data for confirmation
+    window.currentOrderData = orderData;
+
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('checkoutModal'));
+    modal.show();
+}
+
+function formatCurrency(amount) {
+    return new Intl.NumberFormat('en-NG', {
+        style: 'currency',
+        currency: 'NGN',
+        minimumFractionDigits: 2
+    }).format(amount);
+}
+
+function trackOrder() {
+    // Implement order tracking functionality
+    const orderId = document.getElementById('success-order-id').textContent;
+    addMessage(`Please provide your order ID ${orderId} for tracking.`, 'assistant');
+
+    // Close modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('orderSuccessModal'));
+    modal.hide();
+}
+
+// Confirm order button handler
+document.getElementById('confirm-order-btn').addEventListener('click', function() {
+    if (!window.currentOrderData) {
+        showNotification('Order data not found', 'error');
+        return;
+    }
+
+    const confirmBtn = this;
+    const originalText = confirmBtn.innerHTML;
+
+    // Show loading state
+    confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing...';
+    confirmBtn.disabled = true;
+
+    // Get updated payment method
+    const paymentMethod = document.getElementById('checkout-payment-method').value;
+    window.currentOrderData.payment_method = paymentMethod;
+
+    // Send confirmation request
+    fetch('/api/orders/confirm', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            order_data: window.currentOrderData,
+            delivery_address: {} // Will use customer's default address
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Hide checkout modal
+            const checkoutModal = bootstrap.Modal.getInstance(document.getElementById('checkoutModal'));
+            checkoutModal.hide();
+
+            // Show success modal
+            document.getElementById('success-order-id').textContent = data.order_id;
+            document.getElementById('success-total-amount').textContent = formatCurrency(data.order_details.total_amount);
+            document.getElementById('success-payment-method').textContent = data.order_details.payment_method;
+            document.getElementById('success-delivery-date').textContent = data.order_details.estimated_delivery;
+
+            const successModal = new bootstrap.Modal(document.getElementById('orderSuccessModal'));
+            successModal.show();
+
+            // Add success message to chat
+            addMessage(data.message, 'assistant');
+
+            showNotification('Order confirmed successfully!', 'success');
+        } else {
+            showNotification(data.message || 'Order confirmation failed', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Order confirmation error:', error);
+        showNotification('Order confirmation failed. Please try again.', 'error');
+    })
+    .finally(() => {
+        // Restore button state
+        confirmBtn.innerHTML = originalText;
+        confirmBtn.disabled = false;
+    });
+});
+</script>

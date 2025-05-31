@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Checkout Modal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <div class="container mt-5">
+        <h1>🛒 Test Checkout Modal</h1>
+        <p>This page tests the checkout modal functionality.</p>
+
+        <button class="btn btn-success btn-lg" onclick="testCheckoutModal()">
+            <i class="fas fa-shopping-cart me-2"></i>Test Checkout Modal
+        </button>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Helper function for currency formatting
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-NG', {
+                style: 'currency',
+                currency: 'NGN',
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0
+            }).format(amount).replace('NGN', '₦');
+        }
+
+        // Function to show notification
+        function showNotification(message, type = 'info') {
+            const alertClass = type === 'success' ? 'alert-success' :
+                type === 'error' ? 'alert-danger' : 'alert-info';
+
+            const notification = document.createElement('div');
+            notification.className = `alert ${alertClass} alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x`;
+            notification.style.zIndex = '9999';
+            notification.style.marginTop = '20px';
+            notification.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.remove();
+                }
+            }, 5000);
+        }
+
+        // Test function
+        function testCheckoutModal() {
+            const orderSummary = {
+                products: [
+                    {
+                        name: 'Samsung Galaxy A24 128GB Smartphone',
+                        price: 425000,
+                        quantity: 1
+                    }
+                ],
+                customer: {
+                    name: 'Test Customer',
+                    email: 'test@example.com'
+                },
+                delivery: {
+                    state: 'Abuja',
+                    lga: 'Lugbe',
+                    address: 'Test Address'
+                },
+                subtotal: 425000,
+                discount: 63750,
+                delivery_fee: 0,
+                total: 361250
+            };
+
+            showCheckoutModal(orderSummary);
+        }
+
+        // Include the checkout modal functions from main.js
+        // [Copy the functions here]
+
+        // Show checkout modal function
+        function showCheckoutModal(orderSummary) {
+            let checkoutModal = document.getElementById('checkoutModal');
+            if (!checkoutModal) {
+                createCheckoutModal();
+                checkoutModal = document.getElementById('checkoutModal');
+            }
+            populateCheckoutModal(orderSummary);
+            const modal = new bootstrap.Modal(checkoutModal);
+            modal.show();
+        }
+
+        // Create checkout modal HTML structure
+        function createCheckoutModal() {
+            const modalHTML = `
+            <div class="modal fade" id="checkoutModal" tabindex="-1" aria-labelledby="checkoutModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header bg-success text-white">
+                            <h5 class="modal-title" id="checkoutModalLabel">
+                                <i class="fas fa-shopping-cart me-2"></i>Checkout - Nigerian E-commerce
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <h6 class="text-primary mb-3">📱 Product Details</h6>
+                                    <div id="checkoutProducts" class="mb-4"></div>
+
+                                    <h6 class="text-primary mb-3">👤 Customer Information</h6>
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label">Name</label>
+                                            <input type="text" class="form-control" id="customerName" readonly>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Email</label>
+                                            <input type="email" class="form-control" id="customerEmail" readonly>
+                                        </div>
+                                    </div>
+
+                                    <h6 class="text-primary mb-3">🚚 Delivery Information</h6>
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label">State</label>
+                                            <select class="form-select" id="deliveryState">
+                                                <option value="Lagos">Lagos</option>
+                                                <option value="Abuja">Abuja (FCT)</option>
+                                                <option value="Kano">Kano</option>
+                                                <option value="Rivers">Rivers (Port Harcourt)</option>
+                                                <option value="Oyo">Oyo (Ibadan)</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label">Local Government Area</label>
+                                            <input type="text" class="form-control" id="deliveryLGA" placeholder="e.g., Lugbe, Ikeja, Wuse">
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Full Address</label>
+                                        <textarea class="form-control" id="deliveryAddress" rows="2" placeholder="Complete delivery address"></textarea>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-4">
+                                    <div class="card bg-light">
+                                        <div class="card-header bg-primary text-white">
+                                            <h6 class="mb-0">📋 Order Summary</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div id="orderSummaryDetails"></div>
+
+                                            <h6 class="text-primary mb-2 mt-3">💳 Payment Method</h6>
+                                            <div class="mb-3">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="radio" name="paymentMethod" id="payOnDelivery" value="Pay on Delivery" checked>
+                                                    <label class="form-check-label" for="payOnDelivery">📦 Pay on Delivery</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="radio" name="paymentMethod" id="raqibTechPay" value="RaqibTechPay">
+                                                    <label class="form-check-label" for="raqibTechPay">📱 RaqibTechPay</label>
+                                                </div>
+                                            </div>
+
+                                            <div class="border-top pt-3">
+                                                <div class="d-flex justify-content-between">
+                                                    <span>Subtotal:</span>
+                                                    <span id="orderSubtotal">₦0</span>
+                                                </div>
+                                                <div class="d-flex justify-content-between text-success" id="discountRow">
+                                                    <span>Discount:</span>
+                                                    <span id="orderDiscount">-₦0</span>
+                                                </div>
+                                                <div class="d-flex justify-content-between">
+                                                    <span>Delivery:</span>
+                                                    <span id="deliveryFee">₦2,500</span>
+                                                </div>
+                                                <hr>
+                                                <div class="d-flex justify-content-between fw-bold">
+                                                    <span>Total:</span>
+                                                    <span id="orderTotal">₦0</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-success" id="confirmOrderBtn" onclick="testConfirmOrder()">
+                                <i class="fas fa-check me-1"></i>Confirm Order
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+        }
+
+        // Populate checkout modal with order data
+        function populateCheckoutModal(orderSummary) {
+            if (!orderSummary) return;
+
+            // Populate product details
+            const productsContainer = document.getElementById('checkoutProducts');
+            if (productsContainer && orderSummary.products) {
+                productsContainer.innerHTML = '';
+                orderSummary.products.forEach(product => {
+                    const productHTML = `
+                        <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+                            <div>
+                                <h6 class="mb-1">${product.name}</h6>
+                                <small class="text-muted">Qty: ${product.quantity}</small>
+                            </div>
+                            <div class="text-end">
+                                <span class="fw-bold">${formatCurrency(product.price * product.quantity)}</span>
+                            </div>
+                        </div>
+                    `;
+                    productsContainer.insertAdjacentHTML('beforeend', productHTML);
+                });
+            }
+
+            // Populate customer info
+            if (orderSummary.customer) {
+                const customerName = document.getElementById('customerName');
+                const customerEmail = document.getElementById('customerEmail');
+                if (customerName) customerName.value = orderSummary.customer.name || '';
+                if (customerEmail) customerEmail.value = orderSummary.customer.email || '';
+            }
+
+            // Populate delivery info
+            if (orderSummary.delivery) {
+                const deliveryState = document.getElementById('deliveryState');
+                const deliveryLGA = document.getElementById('deliveryLGA');
+                const deliveryAddress = document.getElementById('deliveryAddress');
+
+                if (deliveryState) deliveryState.value = orderSummary.delivery.state || 'Lagos';
+                if (deliveryLGA) deliveryLGA.value = orderSummary.delivery.lga || '';
+                if (deliveryAddress) deliveryAddress.value = orderSummary.delivery.address || '';
+            }
+
+            // Update order summary
+            updateOrderSummary(orderSummary);
+        }
+
+        // Update order summary display
+        function updateOrderSummary(orderSummary) {
+            const subtotal = orderSummary.subtotal || 0;
+            const discount = orderSummary.discount || 0;
+            const deliveryFee = orderSummary.delivery_fee || 2500;
+            const total = orderSummary.total || (subtotal - discount + deliveryFee);
+
+            const subtotalEl = document.getElementById('orderSubtotal');
+            const discountEl = document.getElementById('orderDiscount');
+            const discountRow = document.getElementById('discountRow');
+            const deliveryEl = document.getElementById('deliveryFee');
+            const totalEl = document.getElementById('orderTotal');
+
+            if (subtotalEl) subtotalEl.textContent = formatCurrency(subtotal);
+            if (discountEl) discountEl.textContent = `-${formatCurrency(discount)}`;
+            if (discountRow) discountRow.style.display = discount > 0 ? 'flex' : 'none';
+            if (deliveryEl) deliveryEl.textContent = formatCurrency(deliveryFee);
+            if (totalEl) totalEl.textContent = formatCurrency(total);
+        }
+
+        // Test confirm order function
+        function testConfirmOrder() {
+            showNotification('✅ Test order confirmed! In the real app, this would place the order.', 'success');
+
+            // Hide modal after 2 seconds
+            setTimeout(() => {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('checkoutModal'));
+                modal.hide();
+            }, 2000);
+        }
+    </script>
+</body>
+
+</html>
