@@ -1708,6 +1708,23 @@ Our team is ready to assist you with orders, delivery, payments, and any questio
         return f"""
         You are a caring customer support agent for raqibtech.com, Nigeria's leading e-commerce platform.
 
+        🚨 CRITICAL AUTHORIZATION & SECURITY RULES - MUST FOLLOW:
+        1. AUTHENTICATED CUSTOMERS: Only generate queries for THEIR OWN data using customer_id = {context.get('customer_id', 'NULL')}
+        2. UNAUTHENTICATED USERS: No access to customer data, orders (except with order_id), or full product catalogs
+        3. BUSINESS ANALYTICS: NEVER give business-wide analytics to regular customers (e.g., total orders, revenue)
+        4. DATA ISOLATION: Each customer sees ONLY their own orders, never system-wide data
+
+        🔒 CURRENT USER AUTHORIZATION:
+        - User authenticated: {context.get('user_authenticated', False)}
+        - Customer ID: {context.get('customer_id', 'None')}
+        - User type: {'Customer' if context.get('customer_id') else 'Anonymous'}
+
+        🚨 AUTHORIZATION EXAMPLES:
+        - WRONG (for customer): SELECT COUNT(*) FROM orders GROUP BY order_status (shows all business data!)
+        - CORRECT (for customer): SELECT order_status, COUNT(*) FROM orders WHERE customer_id = {context.get('customer_id', 'NULL')} GROUP BY order_status
+        - WRONG (unauthenticated): SELECT product_name FROM products (shows all products!)
+        - CORRECT (unauthenticated): "Please log in to browse our full catalog"
+
         PLATFORM IDENTITY:
         - Always mention "raqibtech.com" naturally in responses to build brand familiarity
         - Position raqibtech.com as a trusted Nigerian e-commerce destination
@@ -2903,6 +2920,45 @@ CURRENT TIME CONTEXT:
         try:
             fixed_query = sql_query.strip()
 
+            # 🚨 CRITICAL AUTHORIZATION & SECURITY VALIDATION
+            user_authenticated = entities.get('user_authenticated', False)
+            customer_id = entities.get('customer_id')
+            user_query = entities.get('user_query', '').lower()
+
+            # 🚨 BUSINESS ANALYTICS PROTECTION: Prevent customers from accessing business-wide data
+            if ('GROUP BY' in fixed_query.upper() and 'orders' in fixed_query.lower() and
+                'WHERE customer_id' not in fixed_query):
+                if not user_authenticated:
+                    print_log("🔒 SECURITY ALERT: Preventing business analytics access for unauthenticated user!", 'error')
+                    return "SELECT 'Access denied: Business analytics require authentication.' as message;"
+                elif user_authenticated and customer_id:
+                    print_log(f"🔒 SECURITY: Converting business analytics to customer-specific for customer {customer_id}", 'warning')
+                    # Convert business-wide analytics to customer-specific analytics
+                    if 'SELECT order_status, COUNT(*)' in fixed_query:
+                        return f"SELECT order_status, COUNT(*) as order_count, SUM(total_amount) as total_amount FROM orders WHERE customer_id = {customer_id} GROUP BY order_status;"
+                    elif 'SELECT COUNT(*), SUM(total_amount)' in fixed_query:
+                        return f"SELECT COUNT(*) as order_count, SUM(total_amount) as total_amount FROM orders WHERE customer_id = {customer_id};"
+                    else:
+                        # Default to customer's orders only
+                        return f"SELECT * FROM orders WHERE customer_id = {customer_id} ORDER BY created_at DESC;"
+
+            # 🚨 UNAUTHENTICATED USER RESTRICTIONS
+            if not user_authenticated:
+                # Prevent access to full product catalog for unauthenticated users
+                if 'SELECT product_name FROM products' in fixed_query and 'WHERE' not in fixed_query.upper():
+                    print_log("🔒 SECURITY: Limiting product access for unauthenticated user", 'warning')
+                    fixed_query = "SELECT 'Please log in to browse our full product catalog. Contact us for assistance.' as message;"
+
+                # Prevent access to customer data
+                if 'FROM CUSTOMERS' in fixed_query.upper():
+                    print_log("🔒 SECURITY ALERT: Blocking customer data access for unauthenticated user!", 'error')
+                    return "SELECT 'Authentication required to access customer information.' as message;"
+
+                # Prevent access to order data (except with specific order_id)
+                if 'FROM ORDERS' in fixed_query.upper() and 'order_id =' not in fixed_query:
+                    print_log("🔒 SECURITY: Blocking order data access for unauthenticated user", 'warning')
+                    return "SELECT 'Please provide an order number or log in to view order information.' as message;"
+
             # 🚨 CRITICAL SCHEMA VALIDATION: Prevent column misuse between tables
             schema_violations = []
 
@@ -2929,8 +2985,8 @@ CURRENT TIME CONTEXT:
                 print_log(f"🚨 CRITICAL SCHEMA VIOLATIONS DETECTED: {'; '.join(schema_violations)}", 'error')
 
                 # Return a safe fallback based on the original intent
-                if 'customer_id' in entities and entities.get('customer_id'):
-                    return f"SELECT * FROM orders WHERE customer_id = {entities['customer_id']} ORDER BY created_at DESC;"
+                if user_authenticated and customer_id:
+                    return f"SELECT * FROM orders WHERE customer_id = {customer_id} ORDER BY created_at DESC;"
                 else:
                     return "SELECT 'Schema violation detected. Please rephrase your query.' as error_message;"
 
@@ -2945,9 +3001,6 @@ CURRENT TIME CONTEXT:
                                "WHERE customer_id IS NULL", fixed_query, flags=re.IGNORECASE)
 
             # 3. Security: Validate customer_id authentication
-            user_authenticated = entities.get('user_authenticated', False)
-            customer_id = entities.get('customer_id')
-
             # Prevent hard-coded customer IDs for unauthenticated users
             if not user_authenticated and 'customer_id' in fixed_query:
                 # Check for specific hard-coded customer IDs (security risk!)
@@ -2993,12 +3046,13 @@ CURRENT TIME CONTEXT:
                 if table.lower() not in [t.lower() for t in valid_tables]:
                     print_log(f"⚠️ WARNING: Query references unknown table '{table}'", 'warning')
 
+            print_log(f"🔒 SECURITY CHECK PASSED: Query authorized for user (authenticated: {user_authenticated}, customer_id: {customer_id})", 'success')
             return fixed_query
 
         except Exception as e:
             print_log(f"❌ Error in SQL fixes: {e}", 'error')
             # Return safe fallback
-            if entities.get('customer_id'):
-                return f"SELECT * FROM orders WHERE customer_id = {entities['customer_id']};"
+            if user_authenticated and customer_id:
+                return f"SELECT * FROM orders WHERE customer_id = {customer_id};"
             return "SELECT 'Query processing error' as message;"
 
