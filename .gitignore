@@ -68,6 +68,8 @@ Thumbs.db
 *.pdf
 EOL
 *.log
+.cursor/
 
 # deploys
 # deploy.ps1
+

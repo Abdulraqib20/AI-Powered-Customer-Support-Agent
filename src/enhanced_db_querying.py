@@ -38,6 +38,18 @@ logger = logging.getLogger(__name__)
 # Create app_logger as an alias to logger for compatibility
 app_logger = logger
 
+def print_log(message, level='info'):
+    """Logs a message with a specified log level and colors."""
+    levels = {
+        'info': '\033[94m',   # Blue
+        'warning': '\033[93m', # Yellow
+        'error': '\033[91m',   # Red
+        'success': '\033[92m', # Green
+        'reset': '\033[0m'     # Reset color
+    }
+    color = levels.get(level, levels['info'])
+    print(f"{color}[DB_QUERY] {level.upper()}: {message}{levels['reset']}")
+
 class DateTimeJSONEncoder(json.JSONEncoder):
     """Custom JSON encoder to handle datetime and decimal objects"""
     def default(self, obj):
@@ -2785,19 +2797,20 @@ How can I help you today? 😊"""
 - updated_at (TIMESTAMP) - Last profile update timestamp
 
 🛒 ORDERS TABLE (PARTITIONED BY created_at):
+⚠️ CRITICAL: ORDERS TABLE DOES NOT HAVE product_name OR product_id COLUMNS!
 - order_id (SERIAL) - Order identifier (part of composite primary key)
 - customer_id (INTEGER) - Reference to customers.customer_id
 - order_status (ENUM: 'Pending', 'Processing', 'Delivered', 'Returned') - Current order status
 - payment_method (ENUM: 'Pay on Delivery', 'Bank Transfer', 'Card', 'RaqibTechPay') - Nigerian payment methods
 - total_amount (NUMERIC(10,2)) - Total order value in Nigerian Naira (₦)
 - delivery_date (DATE) - Expected or actual delivery date
-- product_category (VARCHAR(50)) - Main product category for analytics
+- product_category (VARCHAR(50)) - ONLY category, NOT specific product names!
 - created_at (TIMESTAMP) - Order creation timestamp
 - updated_at (TIMESTAMP) - Last order update timestamp
 
 📦 PRODUCTS TABLE:
 - product_id (SERIAL PRIMARY KEY) - Unique product identifier
-- product_name (VARCHAR(255)) - Product name/title
+- product_name (VARCHAR(255)) - Product name/title (EXISTS ONLY IN PRODUCTS TABLE!)
 - category (VARCHAR(100)) - Product category (Electronics, Fashion, Books, etc.)
 - brand (VARCHAR(100)) - Product brand/manufacturer
 - description (TEXT) - Detailed product description
@@ -2832,17 +2845,30 @@ How can I help you today? 😊"""
 - chat_messages: message_id, conversation_id, sender_type, message_content, metadata, created_at
 - user_sessions: session_id, user_identifier, created_at, last_active, session_data
 
-🔗 RELATIONSHIPS:
+🚨 CRITICAL TABLE RELATIONSHIPS & CONSTRAINTS:
 - orders.customer_id → customers.customer_id (Foreign Key)
-- chat_conversations.session_id → user_sessions.session_id (Foreign Key)
-- chat_messages.conversation_id → chat_conversations.conversation_id (Foreign Key)
+- ORDERS TABLE HAS NO DIRECT PRODUCT REFERENCE! No product_id or product_name!
+- To get specific product info for orders, you CANNOT JOIN directly
+- Orders only have product_category, not specific product names
 
-📈 COMMON QUERY PATTERNS:
-- Customer orders: SELECT * FROM orders WHERE customer_id = X
+⚠️ SCHEMA RESTRICTIONS:
+1. NEVER use product_name in orders table - IT DOESN'T EXIST!
+2. NEVER use product_id in orders table - IT DOESN'T EXIST!
+3. Orders table only has product_category for product classification
+4. For specific product queries, use products table separately
+5. Cannot determine which specific products were ordered from orders table alone
+
+📈 CORRECT QUERY PATTERNS:
+- Customer orders by category: SELECT * FROM orders WHERE customer_id = X AND product_category = 'Electronics'
 - Product search: SELECT * FROM products WHERE product_name ILIKE '%search%'
-- Order analytics: SELECT COUNT(*), SUM(total_amount) FROM orders WHERE ...
+- Order analytics by category: SELECT product_category, COUNT(*) FROM orders GROUP BY product_category
 - Geographic data: SELECT state, COUNT(*) FROM customers GROUP BY state
 - Payment analytics: SELECT payment_method, COUNT(*) FROM orders GROUP BY payment_method
+
+🚫 INCORRECT QUERY PATTERNS (WILL FAIL):
+- SELECT * FROM orders WHERE product_name = 'iPhone' (product_name NOT in orders!)
+- SELECT o.*, p.product_name FROM orders o JOIN products p... (NO foreign key to join!)
+- UPDATE orders SET product_name = ... (column doesn't exist!)
 
 ⚠️ CRITICAL NOTES:
 - Use IS NULL instead of = NULL for null checks
@@ -2850,6 +2876,7 @@ How can I help you today? 😊"""
 - All monetary amounts are in Nigerian Naira (₦)
 - Phone numbers follow Nigerian format (+234 or 080x)
 - States refer to Nigerian states (36 states + FCT)
+- Orders table is simplified - no direct product references
 """
 
     def _get_database_schema_context(self) -> str:
@@ -2870,67 +2897,108 @@ CURRENT TIME CONTEXT:
         return f"{schema_context}\n{time_context}"
 
     def _apply_critical_sql_fixes(self, sql_query: str, entities: Dict[str, Any]) -> str:
-        """🔧 Apply comprehensive SQL fixes for security, syntax, and authentication"""
+        """
+        🔧 Apply critical SQL fixes for PostgreSQL compatibility and security
+        """
+        try:
+            fixed_query = sql_query.strip()
 
-        # 🚨 CRITICAL FIX 1: Fix NULL syntax issues
-        sql_query = re.sub(r'customer_id\s*=\s*NULL', 'customer_id IS NULL', sql_query, flags=re.IGNORECASE)
-        sql_query = re.sub(r'customer_id\s*=\s*None', 'customer_id IS NULL', sql_query, flags=re.IGNORECASE)
-        sql_query = re.sub(r'WHERE\s+customer_id\s+IS\s+NULL', '', sql_query, flags=re.IGNORECASE)
+            # 🚨 CRITICAL SCHEMA VALIDATION: Prevent column misuse between tables
+            schema_violations = []
 
-        # Fix other NULL variations that PostgreSQL doesn't understand
-        sql_query = re.sub(r'=\s*None\b', 'IS NULL', sql_query, flags=re.IGNORECASE)
-        sql_query = re.sub(r'=\s*NULL\b', 'IS NULL', sql_query, flags=re.IGNORECASE)
+            # Check for product_name usage in orders table (CRITICAL ERROR!)
+            if 'orders' in fixed_query.lower() and 'product_name' in fixed_query.lower():
+                schema_violations.append("❌ SCHEMA ERROR: product_name column does not exist in orders table! Use product_category instead.")
+                # Replace with product_category for orders table
+                if 'WHERE' in fixed_query.upper() and 'product_name' in fixed_query:
+                    fixed_query = fixed_query.replace('product_name', 'product_category')
+                    fixed_query += " -- WARNING: Replaced product_name with product_category for orders table"
 
-        # 🚨 CRITICAL FIX 2: Detect and fix placeholder issues
-        if 'provided_order_id' in sql_query or 'YOUR_ORDER_ID' in sql_query or 'order_id_placeholder' in sql_query:
-            logger.warning(f"⚠️ Detected placeholder in SQL query: {sql_query}")
-            customer_id = entities.get('customer_id')
-            if customer_id and entities.get('customer_verified', False):
-                # Replace with customer-specific query
-                sql_query = f"SELECT * FROM orders WHERE customer_id = {customer_id};"
-                logger.info(f"🔧 Fixed placeholder with customer query for customer_id: {customer_id}")
-            else:
-                # User not authenticated - request login
-                sql_query = "SELECT 'Please log in to view your order information' as message;"
-                logger.info(f"🔒 Replaced placeholder with login requirement for unauthenticated user")
+            # Check for product_id usage in orders table (CRITICAL ERROR!)
+            if 'orders' in fixed_query.lower() and 'product_id' in fixed_query.lower():
+                schema_violations.append("❌ SCHEMA ERROR: product_id column does not exist in orders table!")
+                # Cannot fix this automatically - it's a fundamental schema error
 
-        # 🚨 CRITICAL FIX 3: Authentication state validation
-        if not entities.get('customer_verified', False) or not entities.get('user_authenticated', False):
-            # Check for hard-coded customer_id patterns
-            hardcoded_pattern = r'customer_id\s*=\s*\d+'
-            if re.search(hardcoded_pattern, sql_query):
-                logger.warning(f"🚨 SECURITY ALERT: Hard-coded customer_id detected for unauthenticated user! Query: {sql_query}")
-                if 'order' in sql_query.lower() or 'track' in entities.get('user_query', '').lower():
-                    sql_query = "SELECT 'Please log in to view your order information' as message;"
-                    logger.info(f"🔒 Replaced hard-coded customer query with login requirement")
+            # Check for invalid JOINs between orders and products (no foreign key exists!)
+            if ('JOIN products' in fixed_query.upper() and 'orders' in fixed_query.lower() and
+                ('ON o.product_id = p.product_id' in fixed_query or 'ON orders.product_id = products.product_id' in fixed_query)):
+                schema_violations.append("❌ SCHEMA ERROR: Cannot JOIN orders with products - no foreign key relationship exists!")
+
+            # If critical schema violations found, return a safe fallback query
+            if schema_violations:
+                print_log(f"🚨 CRITICAL SCHEMA VIOLATIONS DETECTED: {'; '.join(schema_violations)}", 'error')
+
+                # Return a safe fallback based on the original intent
+                if 'customer_id' in entities and entities.get('customer_id'):
+                    return f"SELECT * FROM orders WHERE customer_id = {entities['customer_id']} ORDER BY created_at DESC;"
                 else:
-                    # For non-order queries, remove customer_id filter
-                    sql_query = re.sub(r'WHERE\s+customer_id\s*=\s*\d+', '', sql_query)
-                    sql_query = re.sub(r'AND\s+customer_id\s*=\s*\d+', '', sql_query)
-                    logger.info(f"🔧 Removed hard-coded customer_id filter for general query")
+                    return "SELECT 'Schema violation detected. Please rephrase your query.' as error_message;"
 
-        # 🚨 CRITICAL FIX 4: Handle authentication status queries
-        user_query_lower = entities.get('user_query', '').lower()
-        if 'authenticated' in user_query_lower or 'logged in' in user_query_lower:
-            is_auth = entities.get('user_authenticated', False)
-            sql_query = f"SELECT '{is_auth}' as is_authenticated;"
-            logger.info(f"🔒 Authentication status query: user_authenticated={is_auth}")
+            # 1. Fix NULL comparison syntax (PostgreSQL compatibility)
+            fixed_query = re.sub(r'\b(\w+)\s*=\s*NULL\b', r'\1 IS NULL', fixed_query, flags=re.IGNORECASE)
+            fixed_query = re.sub(r'\b(\w+)\s*=\s*None\b', r'\1 IS NULL', fixed_query, flags=re.IGNORECASE)
+            fixed_query = re.sub(r'\b(\w+)\s*!=\s*NULL\b', r'\1 IS NOT NULL', fixed_query, flags=re.IGNORECASE)
+            fixed_query = re.sub(r'\b(\w+)\s*!=\s*None\b', r'\1 IS NOT NULL', fixed_query, flags=re.IGNORECASE)
 
-        # 🚨 CRITICAL FIX 5: Schema fixes for common column issues
-        if 'o.quantity' in sql_query:
-            # The orders table doesn't have a 'quantity' column - it's in order_items
-            sql_query = sql_query.replace('o.quantity', 'oi.quantity')
-            if 'order_items oi' not in sql_query and 'JOIN order_items' not in sql_query:
-                # Add proper JOIN to order_items table
-                sql_query = sql_query.replace(
-                    'FROM orders o',
-                    'FROM orders o JOIN order_items oi ON o.order_id = oi.order_id'
-                )
-            logger.info(f"🔧 Fixed schema issue: replaced o.quantity with proper order_items join")
+            # 2. Replace problematic "column 'none'" references
+            fixed_query = re.sub(r"WHERE\s+customer_id\s*=\s*'?none'?",
+                               "WHERE customer_id IS NULL", fixed_query, flags=re.IGNORECASE)
 
-        # 🚨 CRITICAL FIX 6: Clean up malformed WHERE clauses
-        sql_query = re.sub(r'WHERE\s*;', ';', sql_query)  # Remove empty WHERE clauses
-        sql_query = re.sub(r'WHERE\s+AND', 'WHERE', sql_query)  # Fix WHERE AND without condition
+            # 3. Security: Validate customer_id authentication
+            user_authenticated = entities.get('user_authenticated', False)
+            customer_id = entities.get('customer_id')
 
-        return sql_query
+            # Prevent hard-coded customer IDs for unauthenticated users
+            if not user_authenticated and 'customer_id' in fixed_query:
+                # Check for specific hard-coded customer IDs (security risk!)
+                hardcoded_patterns = re.findall(r'customer_id\s*=\s*(\d+)', fixed_query, re.IGNORECASE)
+                if hardcoded_patterns:
+                    print_log(f"🔒 SECURITY ALERT: Hard-coded customer_id detected for unauthenticated user!", 'error')
+                    return "SELECT 'Authentication required to access customer data.' as message;"
+
+            # 4. Handle authentication status queries properly
+            if 'authentication status' in entities.get('user_query', '').lower():
+                if user_authenticated and customer_id:
+                    return f"SELECT 'authenticated' as status, {customer_id} as customer_id;"
+                else:
+                    return "SELECT 'unauthenticated' as status, NULL as customer_id;"
+
+            # 5. Fix common PostgreSQL syntax issues
+            fixed_query = re.sub(r'\bLIMIT\s+(\d+)\s+OFFSET\s+(\d+)\b',
+                               r'OFFSET \2 LIMIT \1', fixed_query, flags=re.IGNORECASE)
+
+            # 6. Handle placeholder detection and replacement
+            if 'provided_order_id' in fixed_query or 'provided_customer_id' in fixed_query:
+                if customer_id:
+                    fixed_query = fixed_query.replace('provided_customer_id', str(customer_id))
+                    fixed_query = fixed_query.replace('provided_order_id', 'NULL')  # Safe default
+
+            # 7. Fix malformed WHERE clauses
+            fixed_query = re.sub(r'WHERE\s*AND\s+', 'WHERE ', fixed_query, flags=re.IGNORECASE)
+            fixed_query = re.sub(r'WHERE\s*OR\s+', 'WHERE ', fixed_query, flags=re.IGNORECASE)
+
+            # 8. Ensure proper semicolon termination
+            if not fixed_query.rstrip().endswith(';'):
+                fixed_query += ';'
+
+            # 9. Final validation: Check if query references actual tables
+            valid_tables = ['customers', 'orders', 'products', 'analytics', 'conversation_context',
+                          'chat_conversations', 'chat_messages', 'user_sessions']
+
+            # Extract table references from query
+            table_pattern = r'\b(?:FROM|JOIN|UPDATE|INSERT\s+INTO)\s+(\w+)'
+            referenced_tables = re.findall(table_pattern, fixed_query, re.IGNORECASE)
+
+            for table in referenced_tables:
+                if table.lower() not in [t.lower() for t in valid_tables]:
+                    print_log(f"⚠️ WARNING: Query references unknown table '{table}'", 'warning')
+
+            return fixed_query
+
+        except Exception as e:
+            print_log(f"❌ Error in SQL fixes: {e}", 'error')
+            # Return safe fallback
+            if entities.get('customer_id'):
+                return f"SELECT * FROM orders WHERE customer_id = {entities['customer_id']};"
+            return "SELECT 'Query processing error' as message;"
 
