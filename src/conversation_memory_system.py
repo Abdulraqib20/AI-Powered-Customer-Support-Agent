@@ -238,6 +238,10 @@ class WorldClassMemorySystem:
         logger.info(f"🗑️ Session {session_id} memory cleared: {'success' if success else 'partial'}")
         return success
 
+    def clear_session_context(self, session_id: str) -> bool:
+        """🧹 Clear session context - alias for clear_session for compatibility"""
+        return self.clear_session(session_id)
+
     def _generate_turn_id(self, session_id: str, user_input: str) -> str:
         """Generate unique turn ID"""
         timestamp = datetime.now().isoformat()

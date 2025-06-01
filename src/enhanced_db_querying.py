@@ -520,34 +520,8 @@ Classify this query and extract relevant entities. Return JSON format:
         geo_context = self.ni_intelligence.get_geographic_context(user_query)
 
         # Database schema context
-        schema_context = """
-DATABASE SCHEMA FOR NIGERIAN E-COMMERCE PLATFORM:
 
-Tables:
-1. customers: customer_id, name, email, phone, state, lga, address, account_tier, preferences, created_at, updated_at
-2. orders: order_id, customer_id, order_status, payment_method, total_amount, delivery_date, product_category, product_id, created_at, updated_at
-3. analytics: analytics_id, metric_type, metric_value, time_period, created_at
-4. products: product_id, product_name, category, brand, description, price, currency, in_stock, stock_quantity, weight_kg, dimensions_cm, created_at, updated_at
-
-🔗 RELATIONSHIPS:
-- orders.customer_id → customers.customer_id (Foreign Key)
-- orders.product_id → products.product_id (Foreign Key)
-- orders.product_category matches products.category
-
-🏪 PRODUCT CATALOG:
-Categories: Electronics, Fashion, Beauty, Computing, Automotive, Books
-Popular Brands: Samsung, Apple, Tecno, Infinix, LG, Sony, Haier Thermocool, Scanfrost, Nike, Adidas, Zara, MAC Cosmetics, Maybelline, L'Oreal, HP, Dell, Canon, Logitech, Mobil 1, Exide, Dunlop, Bosch, Philips
-Currency: All prices in Nigerian Naira (NGN)
-
-Nigerian States: Lagos, Kano, Rivers, Oyo, Kaduna, Abia, Adamawa, Akwa Ibom, Anambra, Bauchi, Bayelsa, Benue, Borno, Cross River, Delta, Ebonyi, Edo, Ekiti, Enugu, Gombe, Imo, Jigawa, Kebbi, Kogi, Kwara, Nasarawa, Niger, Ondo, Osun, Ogun, Plateau, Sokoto, Taraba, Yobe, Zamfara, Abuja
-
-Payment Methods: 'Pay on Delivery', 'Bank Transfer', 'Card', 'RaqibTechPay'
-Order Status: 'Pending', 'Processing', 'Delivered', 'Returned'
-Account Tiers: 'Bronze', 'Silver', 'Gold', 'Platinum'
-
-PRODUCT CATEGORIES: Electronics, Fashion, Beauty, Computing, Automotive, Books
-POPULAR BRANDS: Samsung, Apple, Tecno, Infinix, LG, Sony, Haier Thermocool, Scanfrost, Nike, Adidas, Zara, MAC Cosmetics, Maybelline, L'Oreal, HP, Dell, Canon, Logitech, Mobil 1, Exide, Dunlop, Bosch, Philips
-"""
+        schema_context = self._get_comprehensive_database_schema()
 
         system_prompt = f"""
 You are a SQL expert for a Nigerian e-commerce platform. Generate ONLY the SQL query - no explanations, comments, or additional text.
@@ -576,7 +550,10 @@ NIGERIAN BUSINESS CONTEXT:
 - User authentication operations
 For these operations, return: SELECT 'APPLICATION_LAYER_OPERATION' as message;
 
-EXTRACTED ENTITIES: {entities}
+🚨 AUTHENTICATION STATE VALIDATION:
+- customer_verified: {entities.get('customer_verified', False)}
+- user_authenticated: {entities.get('user_authenticated', False)}
+- customer_id: {entities.get('customer_id', 'None')}
 
 CRITICAL SQL GENERATION RULES:
 1. Always use proper PostgreSQL syntax
@@ -594,7 +571,41 @@ EXAMPLES:
 - "Track my order" with customer_id=1503: SELECT * FROM orders WHERE customer_id = 1503
 - "Order history" with customer_id=1503: SELECT o.*, c.name FROM orders o JOIN customers c ON o.customer_id = c.customer_id WHERE o.customer_id = 1503
 - "Track order 12345": SELECT * FROM orders WHERE order_id = 12345
-"""
+
+⚠️ CRITICAL AUTHENTICATION RULES:
+1. If customer_verified=False OR user_authenticated=False:
+   - NEVER use specific customer_id values in WHERE clauses
+   - NEVER hardcode customer_id numbers like "1503", "2", etc.
+   - For order tracking by unauthenticated users: return "SELECT 'Please log in to view your order information' as message;"
+   - For general product/payment queries: use generic queries without customer-specific data
+
+2. If customer_verified=True AND user_authenticated=True AND customer_id is provided:
+   - Only then use customer_id in WHERE clauses
+   - Use the exact customer_id from entities: {entities.get('customer_id')}
+
+3. For authentication status queries ("am I authenticated?"):
+   - Return: SELECT '{entities.get('user_authenticated', False)}' as is_authenticated;
+
+📊 CRITICAL SQL SYNTAX RULES:
+- Use IS NULL instead of = NULL for null checks
+- Use IS NOT NULL instead of != NULL for not null checks
+- Never use = None or WHERE customer_id = None
+- Never use WHERE customer_id = NULL (use IS NULL instead)
+- For missing customer_id: omit the WHERE clause entirely or use appropriate filters
+
+🛒 QUERY GUIDELINES:
+- For product information: Use SELECT from products table (no customer restrictions)
+- For payment methods: USE: SELECT DISTINCT payment_method FROM orders;
+- For general information: Use public data only
+- For customer-specific data: Require authentication
+
+📊 EXAMPLES OF CORRECT QUERIES:
+- Unauthenticated order request: SELECT 'Please log in to view your order information' as message;
+- Product search: SELECT * FROM products WHERE product_name ILIKE '%search_term%';
+- Payment methods: SELECT DISTINCT payment_method FROM orders;
+- Authenticated user orders: SELECT * FROM orders WHERE customer_id = [actual_customer_id];
+
+RESPONSE FORMAT: Return ONLY the SQL query, nothing else."""
 
         try:
             response = self.groq_client.chat.completions.create(
@@ -678,27 +689,8 @@ EXAMPLES:
                     sql_query = sql_query.replace('{order_id}', f"'{order_id}'")
                     logger.info(f"🔧 Substituted order_id: {order_id} in SQL query")
 
-            # 🚨 CRITICAL FIX: Detect and fix placeholder issues
-            if 'provided_order_id' in sql_query or 'YOUR_ORDER_ID' in sql_query or 'order_id_placeholder' in sql_query:
-                logger.warning(f"⚠️ Detected placeholder in SQL query: {sql_query}")
-                customer_id = entities.get('customer_id')
-                if customer_id:
-                    # Replace with customer-specific query
-                    sql_query = f"""
-                    SELECT o.order_id, o.order_status, o.payment_method, o.total_amount,
-                           o.delivery_date, o.created_at, p.product_name, c.name as customer_name
-                    FROM orders o
-                    JOIN customers c ON o.customer_id = c.customer_id
-                    LEFT JOIN products p ON o.product_id = p.product_id
-                    WHERE o.customer_id = {customer_id}
-                    ORDER BY o.created_at DESC
-                    LIMIT 10;
-                    """
-                    logger.info(f"🔧 Fixed placeholder issue with customer-specific query for customer_id: {customer_id}")
-                else:
-                    # Fallback for unauthenticated users
-                    sql_query = "SELECT 'Please provide your order ID to track your order' as message;"
-                    logger.info("🔧 Fixed placeholder issue with fallback message")
+            # 🚨 COMPREHENSIVE SQL FIXES
+            sql_query = self._apply_critical_sql_fixes(sql_query, entities)
 
             logger.info(f"🔍 Generated SQL: {sql_query}")
             return sql_query
@@ -2748,4 +2740,197 @@ How can I help you today? 😊"""
                 'context_aware': False,
                 'error': str(e)
             }
+
+    def clear_session_context(self, session_id: str):
+        """Clear all conversation context for a session to prevent data leakage"""
+        try:
+            if self.memory_system:
+                self.memory_system.clear_session_context(session_id)
+                logger.info(f"🧹 Cleared session context for session: {session_id}")
+
+            # Also clear from database
+            conn = self.get_database_connection()
+            if conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM conversation_context WHERE session_id = %s OR user_id = %s",
+                              (session_id, session_id))
+                deleted_count = cursor.rowcount
+                conn.commit()
+                cursor.close()
+                conn.close()
+                logger.info(f"🗂️ Cleared {deleted_count} conversation contexts from database for session: {session_id}")
+
+        except Exception as e:
+            logger.error(f"❌ Error clearing session context for {session_id}: {e}")
+
+    def _get_comprehensive_database_schema(self) -> str:
+        """
+        🗄️ Get comprehensive database schema for AI SQL generation
+        This provides full knowledge of all tables, columns, and their meanings
+        """
+        return """
+=== COMPREHENSIVE DATABASE SCHEMA FOR NIGERIAN E-COMMERCE PLATFORM ===
+
+📊 CUSTOMERS TABLE:
+- customer_id (SERIAL PRIMARY KEY) - Auto-incrementing unique customer identifier
+- name (VARCHAR(100)) - Full customer name (First + Last name)
+- email (VARCHAR(255) UNIQUE) - Unique email address for customer identification
+- phone (VARCHAR(15)) - Nigerian phone format (+234 or 080x format)
+- state (VARCHAR(50)) - Nigerian state (Lagos, Abuja, Kano, Rivers, etc.)
+- lga (VARCHAR(50)) - Local Government Area for precise location
+- address (TEXT) - Full shipping address with street, area, city details
+- account_tier (ENUM: 'Bronze', 'Silver', 'Gold', 'Platinum') - Customer loyalty tier
+- preferences (JSONB) - Customer preferences (language, categories, notifications)
+- created_at (TIMESTAMP) - Account creation timestamp
+- updated_at (TIMESTAMP) - Last profile update timestamp
+
+🛒 ORDERS TABLE (PARTITIONED BY created_at):
+- order_id (SERIAL) - Order identifier (part of composite primary key)
+- customer_id (INTEGER) - Reference to customers.customer_id
+- order_status (ENUM: 'Pending', 'Processing', 'Delivered', 'Returned') - Current order status
+- payment_method (ENUM: 'Pay on Delivery', 'Bank Transfer', 'Card', 'RaqibTechPay') - Nigerian payment methods
+- total_amount (NUMERIC(10,2)) - Total order value in Nigerian Naira (₦)
+- delivery_date (DATE) - Expected or actual delivery date
+- product_category (VARCHAR(50)) - Main product category for analytics
+- created_at (TIMESTAMP) - Order creation timestamp
+- updated_at (TIMESTAMP) - Last order update timestamp
+
+📦 PRODUCTS TABLE:
+- product_id (SERIAL PRIMARY KEY) - Unique product identifier
+- product_name (VARCHAR(255)) - Product name/title
+- category (VARCHAR(100)) - Product category (Electronics, Fashion, Books, etc.)
+- brand (VARCHAR(100)) - Product brand/manufacturer
+- description (TEXT) - Detailed product description
+- price (NUMERIC(10,2)) - Product price in Nigerian Naira (₦)
+- currency (VARCHAR(3)) - Currency code (NGN for Nigerian Naira)
+- in_stock (BOOLEAN) - Product availability status
+- stock_quantity (INTEGER) - Available quantity in inventory
+- created_at (TIMESTAMP) - Product creation timestamp
+- updated_at (TIMESTAMP) - Last product update timestamp
+
+📊 ANALYTICS TABLE:
+- analytics_id (SERIAL PRIMARY KEY) - Analytics record identifier
+- metric_type (VARCHAR(50)) - Type of metric (revenue, customer_count, order_volume, etc.)
+- metric_value (JSONB) - Metric data in flexible JSON format
+- time_period (VARCHAR(20)) - Time period (daily, weekly, monthly, yearly)
+- created_at (TIMESTAMP) - Metric calculation timestamp
+
+💬 CONVERSATION CONTEXT TABLE:
+- context_id (UUID PRIMARY KEY) - Unique context identifier
+- user_id (VARCHAR(100)) - User identifier ('customer_123' or 'anonymous')
+- session_id (VARCHAR(100)) - Session identifier
+- query_type (VARCHAR(50)) - Type of query (order_analytics, product_info, etc.)
+- entities (JSONB) - Extracted entities from conversation
+- sql_query (TEXT) - Generated SQL query
+- execution_result (JSONB) - Query results
+- response_text (TEXT) - Generated AI response
+- user_query (TEXT) - Original user query
+- timestamp (TIMESTAMP) - Conversation timestamp
+
+💬 CHAT TABLES:
+- chat_conversations: conversation_id, session_id, conversation_title, created_at, updated_at, is_active
+- chat_messages: message_id, conversation_id, sender_type, message_content, metadata, created_at
+- user_sessions: session_id, user_identifier, created_at, last_active, session_data
+
+🔗 RELATIONSHIPS:
+- orders.customer_id → customers.customer_id (Foreign Key)
+- chat_conversations.session_id → user_sessions.session_id (Foreign Key)
+- chat_messages.conversation_id → chat_conversations.conversation_id (Foreign Key)
+
+📈 COMMON QUERY PATTERNS:
+- Customer orders: SELECT * FROM orders WHERE customer_id = X
+- Product search: SELECT * FROM products WHERE product_name ILIKE '%search%'
+- Order analytics: SELECT COUNT(*), SUM(total_amount) FROM orders WHERE ...
+- Geographic data: SELECT state, COUNT(*) FROM customers GROUP BY state
+- Payment analytics: SELECT payment_method, COUNT(*) FROM orders GROUP BY payment_method
+
+⚠️ CRITICAL NOTES:
+- Use IS NULL instead of = NULL for null checks
+- customer_id should only be used when user is authenticated
+- All monetary amounts are in Nigerian Naira (₦)
+- Phone numbers follow Nigerian format (+234 or 080x)
+- States refer to Nigerian states (36 states + FCT)
+"""
+
+    def _get_database_schema_context(self) -> str:
+        """Get comprehensive database schema context for SQL generation"""
+        schema_context = self._get_comprehensive_database_schema()
+
+        # Add current timestamp and timezone info
+        current_time = datetime.now()
+        time_context = f"""
+CURRENT TIME CONTEXT:
+- Current timestamp: {current_time.strftime('%Y-%m-%d %H:%M:%S')} WAT (West Africa Time)
+- Current date: {current_time.strftime('%Y-%m-%d')}
+- Current year: {current_time.year}
+- Current month: {current_time.strftime('%B %Y')}
+- Time zone: WAT (UTC+1)
+"""
+
+        return f"{schema_context}\n{time_context}"
+
+    def _apply_critical_sql_fixes(self, sql_query: str, entities: Dict[str, Any]) -> str:
+        """🔧 Apply comprehensive SQL fixes for security, syntax, and authentication"""
+
+        # 🚨 CRITICAL FIX 1: Fix NULL syntax issues
+        sql_query = re.sub(r'customer_id\s*=\s*NULL', 'customer_id IS NULL', sql_query, flags=re.IGNORECASE)
+        sql_query = re.sub(r'customer_id\s*=\s*None', 'customer_id IS NULL', sql_query, flags=re.IGNORECASE)
+        sql_query = re.sub(r'WHERE\s+customer_id\s+IS\s+NULL', '', sql_query, flags=re.IGNORECASE)
+
+        # Fix other NULL variations that PostgreSQL doesn't understand
+        sql_query = re.sub(r'=\s*None\b', 'IS NULL', sql_query, flags=re.IGNORECASE)
+        sql_query = re.sub(r'=\s*NULL\b', 'IS NULL', sql_query, flags=re.IGNORECASE)
+
+        # 🚨 CRITICAL FIX 2: Detect and fix placeholder issues
+        if 'provided_order_id' in sql_query or 'YOUR_ORDER_ID' in sql_query or 'order_id_placeholder' in sql_query:
+            logger.warning(f"⚠️ Detected placeholder in SQL query: {sql_query}")
+            customer_id = entities.get('customer_id')
+            if customer_id and entities.get('customer_verified', False):
+                # Replace with customer-specific query
+                sql_query = f"SELECT * FROM orders WHERE customer_id = {customer_id};"
+                logger.info(f"🔧 Fixed placeholder with customer query for customer_id: {customer_id}")
+            else:
+                # User not authenticated - request login
+                sql_query = "SELECT 'Please log in to view your order information' as message;"
+                logger.info(f"🔒 Replaced placeholder with login requirement for unauthenticated user")
+
+        # 🚨 CRITICAL FIX 3: Authentication state validation
+        if not entities.get('customer_verified', False) or not entities.get('user_authenticated', False):
+            # Check for hard-coded customer_id patterns
+            hardcoded_pattern = r'customer_id\s*=\s*\d+'
+            if re.search(hardcoded_pattern, sql_query):
+                logger.warning(f"🚨 SECURITY ALERT: Hard-coded customer_id detected for unauthenticated user! Query: {sql_query}")
+                if 'order' in sql_query.lower() or 'track' in entities.get('user_query', '').lower():
+                    sql_query = "SELECT 'Please log in to view your order information' as message;"
+                    logger.info(f"🔒 Replaced hard-coded customer query with login requirement")
+                else:
+                    # For non-order queries, remove customer_id filter
+                    sql_query = re.sub(r'WHERE\s+customer_id\s*=\s*\d+', '', sql_query)
+                    sql_query = re.sub(r'AND\s+customer_id\s*=\s*\d+', '', sql_query)
+                    logger.info(f"🔧 Removed hard-coded customer_id filter for general query")
+
+        # 🚨 CRITICAL FIX 4: Handle authentication status queries
+        user_query_lower = entities.get('user_query', '').lower()
+        if 'authenticated' in user_query_lower or 'logged in' in user_query_lower:
+            is_auth = entities.get('user_authenticated', False)
+            sql_query = f"SELECT '{is_auth}' as is_authenticated;"
+            logger.info(f"🔒 Authentication status query: user_authenticated={is_auth}")
+
+        # 🚨 CRITICAL FIX 5: Schema fixes for common column issues
+        if 'o.quantity' in sql_query:
+            # The orders table doesn't have a 'quantity' column - it's in order_items
+            sql_query = sql_query.replace('o.quantity', 'oi.quantity')
+            if 'order_items oi' not in sql_query and 'JOIN order_items' not in sql_query:
+                # Add proper JOIN to order_items table
+                sql_query = sql_query.replace(
+                    'FROM orders o',
+                    'FROM orders o JOIN order_items oi ON o.order_id = oi.order_id'
+                )
+            logger.info(f"🔧 Fixed schema issue: replaced o.quantity with proper order_items join")
+
+        # 🚨 CRITICAL FIX 6: Clean up malformed WHERE clauses
+        sql_query = re.sub(r'WHERE\s*;', ';', sql_query)  # Remove empty WHERE clauses
+        sql_query = re.sub(r'WHERE\s+AND', 'WHERE', sql_query)  # Fix WHERE AND without condition
+
+        return sql_query
 

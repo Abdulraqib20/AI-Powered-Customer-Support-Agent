@@ -1,5 +1,10 @@
 ---
 description:
 globs:
-alwaysApply: false
+alwaysApply: true
 ---
+**Rules to Always Follow**:
+- Strictly preserve my existing code logic and workflow without any changes.
+- Don't just jump to implementation, always plan code modifications meticulously to prevent new errors or codebase disruptions.
+- Guarantee full compatibility with my Flask app, PostgreSQL database, and AI entire pipeline
+

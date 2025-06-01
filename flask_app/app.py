@@ -1626,7 +1626,46 @@ def logout():
         # 🔧 FIX: Log current session before clearing
         current_user = session.get('customer_name', 'Unknown')
         customer_id = session.get('customer_id', 'Unknown')
+        session_id = session.get('session_id')
         app_logger.info(f"🚪 User logging out: {current_user} (ID: {customer_id})")
+
+        # 🔧 CRITICAL FIX: Clear conversation context from AI memory system
+        if session_id and enhanced_db:
+            try:
+                # Clear the conversation memory for this session
+                if hasattr(enhanced_db, 'memory_system') and enhanced_db.memory_system:
+                    enhanced_db.memory_system.clear_session_context(session_id)
+                    app_logger.info(f"🧠 Cleared AI conversation memory for session: {session_id}")
+            except Exception as memory_clear_error:
+                app_logger.error(f"❌ Error clearing AI memory: {memory_clear_error}")
+
+        # 🔧 CRITICAL FIX: Clear database conversation context
+        try:
+            # Clear conversation context from database to prevent leakage
+            db_config = {
+                'host': os.getenv('DB_HOST', 'localhost'),
+                'port': os.getenv('DB_PORT', '5432'),
+                'database': os.getenv('DB_NAME', 'nigerian_ecommerce'),
+                'user': os.getenv('DB_USER', 'postgres'),
+                'password': os.getenv('DB_PASSWORD', 'oracle'),
+            }
+
+            import psycopg2
+            conn = psycopg2.connect(**db_config)
+            cursor = conn.cursor()
+
+            # Clear conversation context for this customer to prevent leakage
+            if customer_id and customer_id != 'Unknown':
+                cursor.execute("DELETE FROM conversation_context WHERE user_id = %s", (f"customer_{customer_id}",))
+                deleted_contexts = cursor.rowcount
+                app_logger.info(f"🗂️ Cleared {deleted_contexts} conversation contexts for customer {customer_id}")
+
+            conn.commit()
+            cursor.close()
+            conn.close()
+
+        except Exception as db_clear_error:
+            app_logger.error(f"❌ Error clearing database conversation context: {db_clear_error}")
 
         # 🔧 FIX: Clear ALL session data to prevent contamination
         session.clear()
