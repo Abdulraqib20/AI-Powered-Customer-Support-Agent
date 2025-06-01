@@ -219,7 +219,7 @@
 
 .chat-modal-messages {
     flex: 1;
-    padding: 0; /* Remove padding for full width messages */
+    padding: 24px 0 0 0; /* Add top padding to prevent messages from touching navbar */
     overflow-y: auto;
     background: #f8f9fa; /* White background like ChatGPT */
     display: flex;
@@ -2539,221 +2539,14 @@ class CustomerSupportPortal {
     }
 
     createWelcomeMessage() {
+        // ChatGPT-style simple welcome message
         return `
-            <div class="message ai welcome">
-                <div class="message-avatar">
-                    <div class="ai-avatar-icon">🚀</div>
-                </div>
+            <div class="message ai">
                 <div class="message-content">
                     <div class="message-bubble">
-                        <div class="welcome-content">
-                            ${this.userAuthenticated ?
-                                this.createAuthenticatedWelcome() :
-                                this.createGuestWelcome()
-                            }
-                                    </div>
-                                </div>
-                    <div class="message-meta">
-                        <span class="welcome-timestamp">${new Date().toLocaleTimeString()}</span>
-                        <span class="response-time">${this.userAuthenticated ?
-                            "🌟 Your Personal AI Assistant" :
-                            "🎯 Ready to Help You Explore"
-                        }</span>
-                                    </div>
-                                </div>
-            </div>
-        `;
-    }
-
-    createAuthenticatedWelcome() {
-        return `
-            <div class="welcome-header">
-                <div class="welcome-brand">
-                    <div class="brand-icon">🚀</div>
-                    <div class="brand-text">
-                        <h5 class="brand-title">raqibtech<span class="domain">.com</span></h5>
-                        <p class="brand-subtitle">Your Personal AI Support Assistant</p>
-                        </div>
-                    </div>
-                    </div>
-
-            <div class="welcome-greeting">
-                <h6 class="greeting-text">🌟 Welcome back! Ready to supercharge your experience?</h6>
-                <p class="greeting-subtitle">I'm your dedicated AI assistant, powered by advanced technology to make your shopping and support experience seamless! ✨</p>
-                </div>
-
-            <div class="capabilities-grid">
-                <div class="capability-card primary">
-                    <div class="capability-icon">📦</div>
-                    <div class="capability-content">
-                        <h6>Order Management</h6>
-                        <p>Track, modify, and manage all your orders with real-time updates</p>
+                        <p>🤗 Hello! I'm your AI Support assistant. How can I help you today?</p>
                     </div>
                 </div>
-                <div class="capability-card secondary">
-                    <div class="capability-icon">🛍️</div>
-                    <div class="capability-content">
-                        <h6>Smart Shopping</h6>
-                        <p>Get personalized recommendations and exclusive deals</p>
-                    </div>
-                </div>
-                <div class="capability-card accent">
-                    <div class="capability-icon">💳</div>
-                    <div class="capability-content">
-                        <h6>Payment & Billing</h6>
-                        <p>Secure payment assistance and billing support</p>
-                    </div>
-                </div>
-                <div class="capability-card success">
-                    <div class="capability-icon">🚚</div>
-                    <div class="capability-content">
-                        <h6>Delivery Control</h6>
-                        <p>Manage addresses, schedules, and delivery preferences</p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="quick-actions-section">
-                <h6 class="section-title">🎯 Popular Actions</h6>
-                <div class="action-grid">
-                    <button class="action-btn primary" onclick="customerPortal.sendCustomerMessage('Track my recent orders')">
-                        <span class="action-icon">📦</span>
-                        <span class="action-text">My Orders</span>
-                    </button>
-                    <button class="action-btn secondary" onclick="customerPortal.sendCustomerMessage('Show my account summary')">
-                        <span class="action-icon">👤</span>
-                        <span class="action-text">Account Info</span>
-                    </button>
-                    <button class="action-btn accent" onclick="customerPortal.sendCustomerMessage('Browse your product catalog')">
-                        <span class="action-icon">🏪</span>
-                        <span class="action-text">Browse Store</span>
-                    </button>
-                    <button class="action-btn success" onclick="customerPortal.sendCustomerMessage('Show me trending electronics')">
-                        <span class="action-icon">📱</span>
-                        <span class="action-text">Electronics</span>
-                    </button>
-                    <button class="action-btn warning" onclick="customerPortal.sendCustomerMessage('What are the latest deals and offers?')">
-                        <span class="action-icon">🏷️</span>
-                        <span class="action-text">Deals & Offers</span>
-                    </button>
-                    <button class="action-btn info" onclick="customerPortal.sendCustomerMessage('Contact customer support')">
-                        <span class="action-icon">💬</span>
-                        <span class="action-text">Support</span>
-                    </button>
-                </div>
-            </div>
-
-            <div class="welcome-footer">
-                <div class="footer-stats">
-                    <div class="stat-item">
-                        <span class="stat-icon"> </span>
-                        <span class="stat-text">Nationwide Delivery</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-icon">⚡</span>
-                        <span class="stat-text">Instant Support</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-icon">🔒</span>
-                        <span class="stat-text">Secure Platform</span>
-                    </div>
-                </div>
-                <p class="footer-cta">💬 <strong>Ready to get started?</strong> Just type your question or tap any action above!</p>
-            </div>
-        `;
-    }
-
-    createGuestWelcome() {
-        return `
-            <div class="welcome-header">
-                <div class="welcome-brand">
-                    <div class="brand-icon">🚀</div>
-                    <div class="brand-text">
-                        <h5 class="brand-title">raqibtech<span class="domain">.com</span></h5>
-                        <p class="brand-subtitle">Nigeria's Premier E-commerce Platform</p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="welcome-greeting">
-                <h6 class="greeting-text">👋 Welcome to the Future of Shopping!</h6>
-                <p class="greeting-subtitle">I'm your AI shopping guide! Discover amazing products, unbeatable prices, and seamless delivery across Nigeria!  ✨</p>
-            </div>
-
-            <div class="platform-showcase">
-                <div class="showcase-card featured">
-                    <div class="showcase-header">
-                        <span class="showcase-icon">🏪</span>
-                        <h6>Amazing Product Range</h6>
-                    </div>
-                    <div class="showcase-tags">
-                        <span class="tag electronics">📱 Electronics</span>
-                        <span class="tag fashion">👗 Fashion</span>
-                        <span class="tag beauty">💄 Beauty</span>
-                        <span class="tag computing">💻 Computing</span>
-                        <span class="tag automotive">🚗 Automotive</span>
-                        <span class="tag books">📚 Books</span>
-                    </div>
-                </div>
-
-                <div class="showcase-features">
-                    <div class="feature-item">
-                        <span class="feature-icon"> </span>
-                        <span class="feature-text">All 36 States + FCT Delivery</span>
-                    </div>
-                    <div class="feature-item">
-                        <span class="feature-icon">💳</span>
-                        <span class="feature-text">Pay on Delivery Available</span>
-                    </div>
-                    <div class="feature-item">
-                        <span class="feature-icon">⭐</span>
-                        <span class="feature-text">Premium Account Tiers</span>
-                    </div>
-                    <div class="feature-item">
-                        <span class="feature-icon">📞</span>
-                        <span class="feature-text">24/7 AI + Human Support</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="quick-actions-section">
-                <h6 class="section-title">🎯 Explore Our Platform</h6>
-                <div class="action-grid">
-                    <a href="/login" class="action-btn primary">
-                        <span class="action-icon">🔐</span>
-                        <span class="action-text">Login</span>
-                    </a>
-                    <button class="action-btn secondary" onclick="customerPortal.sendCustomerMessage('How do I create an account?')">
-                        <span class="action-icon">📝</span>
-                        <span class="action-text">Sign Up</span>
-                    </button>
-                    <button class="action-btn accent" onclick="customerPortal.sendCustomerMessage('Browse your product catalog')">
-                        <span class="action-icon">🏪</span>
-                        <span class="action-text">Browse Store</span>
-                    </button>
-                    <button class="action-btn success" onclick="customerPortal.sendCustomerMessage('Show me trending electronics')">
-                        <span class="action-icon">📱</span>
-                        <span class="action-text">Electronics</span>
-                    </button>
-                    <button class="action-btn warning" onclick="customerPortal.sendCustomerMessage('What are your delivery areas?')">
-                        <span class="action-icon">🚚</span>
-                        <span class="action-text">Delivery Info</span>
-                    </button>
-                    <button class="action-btn info" onclick="customerPortal.sendCustomerMessage('Contact customer support')">
-                        <span class="action-icon">💬</span>
-                        <span class="action-text">Support</span>
-                    </button>
-                </div>
-            </div>
-
-            <div class="welcome-footer">
-                <div class="cta-section">
-                    <div class="cta-highlight">
-                        <span class="cta-icon">🎉</span>
-                        <span class="cta-text">Ready to start shopping? Create your account for personalized experiences!</span>
-                    </div>
-                </div>
-                <p class="footer-cta">💬 <strong>Ask me anything!</strong> I'm here to help you discover our amazing platform!</p>
             </div>
         `;
     }
@@ -3220,13 +3013,20 @@ class CustomerSupportPortal {
                     chatMessages.innerHTML = '';
                 }
 
-                data.messages.forEach(msg => {
-                    const senderType = msg.sender_type === 'user' ? 'customer' : 'ai';
-                    const metadata = msg.metadata || {};
-                    this.addMessageToChatDisplay(msg.content, senderType, false, metadata);
-                });
-
-                console.log(`✅ Loaded ${data.messages.length} messages for conversation ${conversationId}`);
+                if (data.messages.length === 0) {
+                    // Show welcome message for new chats (ChatGPT style)
+                    const welcomeHtml = this.createWelcomeMessage();
+                    chatMessages.innerHTML = welcomeHtml;
+                    console.log('✅ Welcome message displayed for new chat');
+                } else {
+                    // Load existing messages
+                    data.messages.forEach(msg => {
+                        const senderType = msg.sender_type === 'user' ? 'customer' : 'ai';
+                        const metadata = msg.metadata || {};
+                        this.addMessageToChatDisplay(msg.content, senderType, false, metadata);
+                    });
+                    console.log(`✅ Loaded ${data.messages.length} messages for conversation ${conversationId}`);
+                }
             }
         } catch (error) {
             console.error('❌ Error loading conversation messages:', error);

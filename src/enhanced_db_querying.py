@@ -576,13 +576,24 @@ NIGERIAN BUSINESS CONTEXT:
 - User authentication operations
 For these operations, return: SELECT 'APPLICATION_LAYER_OPERATION' as message;
 
-QUERY GENERATION RULES:
+EXTRACTED ENTITIES: {entities}
+
+CRITICAL SQL GENERATION RULES:
 1. Always use proper PostgreSQL syntax
-2. Include appropriate WHERE clauses for Nigerian context. If 'order_id' is present in EXTRACTED ENTITIES, prioritize filtering by `orders.order_id`.
-3. If 'customer_id' is present in EXTRACTED ENTITIES (from conversation history), use it to filter customer-related queries.
-4. For "order history" queries with customer_id: SELECT o.*, c.name FROM orders o JOIN customers c ON o.customer_id = c.customer_id WHERE o.customer_id = [customer_id]
-5. If 'needs_customer_lookup' is true and order_id is available: First get customer_id from the order, then get all orders for that customer
-6. For product browsing/search queries: Use products table with appropriate filters
+2. For authenticated customers with customer_id in entities, use it directly in WHERE clauses
+3. For "track my order" or "order history" without specific order_id:
+   - If customer_id is available: SELECT * FROM orders WHERE customer_id = {entities.get('customer_id', 'NULL')}
+   - If no customer_id: Ask user to provide order ID
+4. NEVER use placeholders like 'provided_order_id' or undefined variables
+5. Always use actual entity values or return appropriate queries for missing data
+6. For order tracking without order_id, show ALL orders for the authenticated customer
+7. If 'needs_customer_lookup' is true and order_id is available: First get customer_id from the order, then get all orders for that customer
+8. For product browsing/search queries: Use products table with appropriate filters
+
+EXAMPLES:
+- "Track my order" with customer_id=1503: SELECT * FROM orders WHERE customer_id = 1503
+- "Order history" with customer_id=1503: SELECT o.*, c.name FROM orders o JOIN customers c ON o.customer_id = c.customer_id WHERE o.customer_id = 1503
+- "Track order 12345": SELECT * FROM orders WHERE order_id = 12345
 """
 
         try:
@@ -666,6 +677,28 @@ QUERY GENERATION RULES:
                     sql_query = sql_query.replace('[order_id]', f"'{order_id}'")
                     sql_query = sql_query.replace('{order_id}', f"'{order_id}'")
                     logger.info(f"🔧 Substituted order_id: {order_id} in SQL query")
+
+            # 🚨 CRITICAL FIX: Detect and fix placeholder issues
+            if 'provided_order_id' in sql_query or 'YOUR_ORDER_ID' in sql_query or 'order_id_placeholder' in sql_query:
+                logger.warning(f"⚠️ Detected placeholder in SQL query: {sql_query}")
+                customer_id = entities.get('customer_id')
+                if customer_id:
+                    # Replace with customer-specific query
+                    sql_query = f"""
+                    SELECT o.order_id, o.order_status, o.payment_method, o.total_amount,
+                           o.delivery_date, o.created_at, p.product_name, c.name as customer_name
+                    FROM orders o
+                    JOIN customers c ON o.customer_id = c.customer_id
+                    LEFT JOIN products p ON o.product_id = p.product_id
+                    WHERE o.customer_id = {customer_id}
+                    ORDER BY o.created_at DESC
+                    LIMIT 10;
+                    """
+                    logger.info(f"🔧 Fixed placeholder issue with customer-specific query for customer_id: {customer_id}")
+                else:
+                    # Fallback for unauthenticated users
+                    sql_query = "SELECT 'Please provide your order ID to track your order' as message;"
+                    logger.info("🔧 Fixed placeholder issue with fallback message")
 
             logger.info(f"🔍 Generated SQL: {sql_query}")
             return sql_query
