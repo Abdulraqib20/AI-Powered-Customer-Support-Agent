@@ -1772,137 +1772,195 @@
 
                 <!-- My Account Tab -->
                 <div class="tab-pane fade" id="account" role="tabpanel">
-                    <div class="p-4">
-                        <!-- raqibtech.com Branding Header -->
-                        {% if session.get('user_authenticated') %}
-                        <div class="mb-4 text-center">
-                            <div class="raqibtech-branding">
-                                <h2 class="brand-title mb-2">
-                                    <span class="brand-logo">🚀</span>
-                                    <span class="brand-text">raqibtech</span>
-                                    <span class="brand-domain">.com</span>
-                                </h2>
-                                <p class="brand-subtitle">Your Trusted Nigerian E-commerce Partner</p>
-                                <div class="brand-stats">
-                                    <span class="badge bg-success me-2">  36 States + FCT</span>
-                                    <span class="badge bg-primary me-2">📦 1M+ Deliveries</span>
-                                    <span class="badge bg-warning">⭐ 4.8/5 Rating</span>
+                    <div class="account-container">
+                        <!-- Enhanced Brand Header -->
+                        <div class="account-hero-section">
+                            <div class="hero-content">
+                                <div class="brand-logo-account">
+                                    <img src="/static/logo.svg" alt="raqibtech.com" width="56" height="56">
+                                </div>
+                                <h2 class="account-brand-title">raqibtech.com</h2>
+                                <p class="account-brand-subtitle">Your Trusted Nigerian E-commerce Partner</p>
+                                <div class="account-brand-stats">
+                                    <div class="stat-badge">
+                                        <i class="bi bi-geo-alt-fill"></i>
+                                        <span>36 States + FCT</span>
+                                    </div>
+                                    <div class="stat-badge">
+                                        <span>📦</span>
+                                        <span>1M+ Deliveries</span>
+                                    </div>
+                                    <div class="stat-badge">
+                                        <span>⭐</span>
+                                        <span>4.8/5 Rating</span>
+                                    </div>
                                 </div>
                             </div>
+                            <div class="hero-pattern"></div>
                         </div>
-                        {% endif %}
 
-                        <div class="mb-4">
-                            <h4 class="mb-3">
-                                <i class="bi bi-person-gear text-warning me-2"></i>
-                                My Account & Profile
-                            </h4>
+                        <!-- Welcome Section -->
+                        <div class="welcome-section">
                             {% if session.get('user_authenticated') %}
-                                <p class="text-muted">
-                                    Welcome back! Manage your account information and explore personalized features.
-                                </p>
+                                <div class="welcome-card authenticated">
+                                    <div class="welcome-icon">
+                                        <i class="bi bi-person-check-fill"></i>
+                                    </div>
+                                    <div class="welcome-content">
+                                        <h4>Welcome back!</h4>
+                                        <p>Manage your account information and explore personalized features.</p>
+                                    </div>
+                                    <div class="account-tier-display">
+                                        <span class="tier-badge gold">
+                                            <i class="bi bi-star-fill me-1"></i>Gold Member
+                                        </span>
+                                    </div>
+                                </div>
                             {% else %}
-                                <p class="text-muted">
-                                    <a href="/login" class="text-decoration-none">Login</a> to access your account settings and order history.
-                                </p>
+                                <div class="welcome-card guest">
+                                    <div class="welcome-icon">
+                                        <i class="bi bi-person-plus-fill"></i>
+                                    </div>
+                                    <div class="welcome-content">
+                                        <h4>Join raqibtech.com</h4>
+                                        <p>Create an account to unlock exclusive benefits and personalized shopping experience.</p>
+                                    </div>
+                                    <div class="auth-actions">
+                                        <a href="/login" class="btn btn-primary">
+                                            <i class="bi bi-box-arrow-in-right me-2"></i>Sign In
+                                        </a>
+                                        <a href="/signup" class="btn btn-outline-primary">
+                                            <i class="bi bi-person-plus me-2"></i>Sign Up
+                                        </a>
+                                    </div>
+                                </div>
                             {% endif %}
                         </div>
 
                         {% if session.get('user_authenticated') %}
-                        <!-- Enhanced Quick Actions Dashboard for Logged-in Users -->
-                        <div class="row mb-4">
-                            <div class="col-12">
-                                <div class="account-dashboard">
-                                    <h5 class="mb-3">
-                                        <i class="bi bi-speedometer2 text-primary me-2"></i>
-                                        Personal Dashboard
-                                    </h5>
-                                    <div class="dashboard-actions">
-                                        <button class="dashboard-action-btn" onclick="sendQuickMessage('Show my recent orders')">
-                                            <div class="action-icon">📦</div>
-                                            <div class="action-text">
-                                                <strong>Recent Orders</strong>
-                                                <small>Track & manage</small>
-                                            </div>
-                                        </button>
-                                        <button class="dashboard-action-btn" onclick="sendQuickMessage('What are my account benefits?')">
-                                            <div class="action-icon">⭐</div>
-                                            <div class="action-text">
-                                                <strong>Account Benefits</strong>
-                                                <small>Tier & rewards</small>
-                                            </div>
-                                        </button>
-                                        <button class="dashboard-action-btn" onclick="sendQuickMessage('Recommend products for me')">
-                                            <div class="action-icon">🛍️</div>
-                                            <div class="action-text">
-                                                <strong>For You</strong>
-                                                <small>Personalized picks</small>
-                                            </div>
-                                        </button>
-                                        <button class="dashboard-action-btn" onclick="sendQuickMessage('Help with payments')">
-                                            <div class="action-icon">💳</div>
-                                            <div class="action-text">
-                                                <strong>Payments</strong>
-                                                <small>Methods & billing</small>
-                                            </div>
-                                        </button>
+                        <!-- Quick Actions Dashboard -->
+                        <div class="dashboard-section">
+                            <h5 class="section-title">
+                                <i class="bi bi-speedometer2 me-2"></i>
+                                Account Dashboard
+                            </h5>
+                            <div class="dashboard-grid">
+                                <div class="dashboard-card" onclick="sendQuickMessage('Show my recent orders')">
+                                    <div class="card-icon orders">
+                                        <i class="bi bi-box-seam"></i>
+                                    </div>
+                                    <div class="card-content">
+                                        <h6>Recent Orders</h6>
+                                        <p>Track & manage your purchases</p>
+                                        <span class="card-badge">5 Active</span>
+                                    </div>
+                                </div>
+
+                                <div class="dashboard-card" onclick="sendQuickMessage('What are my account benefits?')">
+                                    <div class="card-icon benefits">
+                                        <i class="bi bi-award"></i>
+                                    </div>
+                                    <div class="card-content">
+                                        <h6>Account Benefits</h6>
+                                        <p>Tier privileges & rewards</p>
+                                        <span class="card-badge">Gold Tier</span>
+                                    </div>
+                                </div>
+
+                                <div class="dashboard-card" onclick="sendQuickMessage('Recommend products for me')">
+                                    <div class="card-icon recommendations">
+                                        <i class="bi bi-heart"></i>
+                                    </div>
+                                    <div class="card-content">
+                                        <h6>For You</h6>
+                                        <p>Personalized recommendations</p>
+                                        <span class="card-badge">12 New</span>
+                                    </div>
+                                </div>
+
+                                <div class="dashboard-card" onclick="sendQuickMessage('Help with payments')">
+                                    <div class="card-icon payments">
+                                        <i class="bi bi-credit-card"></i>
+                                    </div>
+                                    <div class="card-content">
+                                        <h6>Payment Methods</h6>
+                                        <p>Manage billing & cards</p>
+                                        <span class="card-badge">2 Saved</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
                         {% endif %}
 
-                        <div class="row">
-                            <!-- Account Actions -->
-                            <div class="col-lg-6">
-                                <div class="card">
-                                    <div class="card-header">
-                                        <h6 class="mb-0">Account Services</h6>
-                                    </div>
-                                    <div class="card-body">
-                                        <div class="d-grid gap-2">
-                                            <button class="btn btn-outline-primary" onclick="sendQuickMessage('Update my profile information')">
-                                                <i class="bi bi-person-fill-gear me-2"></i>Update Profile Information
+                        <!-- Account Services -->
+                        <div class="services-section">
+                            <div class="row">
+                                <div class="col-lg-6 mb-4">
+                                    <div class="service-card">
+                                        <div class="service-header">
+                                            <i class="bi bi-gear-fill me-2"></i>
+                                            <h6>Account Management</h6>
+                                        </div>
+                                        <div class="service-actions">
+                                            <button class="service-btn" onclick="sendQuickMessage('Update my profile information')">
+                                                <i class="bi bi-person-fill-gear"></i>
+                                                <span>Update Profile</span>
+                                                <i class="bi bi-chevron-right ms-auto"></i>
                                             </button>
-                                            <button class="btn btn-outline-success" onclick="sendQuickMessage('Change my delivery address')">
-                                                <i class="bi bi-geo-alt-fill me-2"></i>Update Delivery Address
+                                            <button class="service-btn" onclick="sendQuickMessage('Change my delivery address')">
+                                                <i class="bi bi-geo-alt-fill"></i>
+                                                <span>Delivery Address</span>
+                                                <i class="bi bi-chevron-right ms-auto"></i>
                                             </button>
-                                            <button class="btn btn-outline-warning" onclick="sendQuickMessage('Check my account tier and benefits')">
-                                                <i class="bi bi-star-fill me-2"></i>View Account Tier & Benefits
-                                            </button>
-                                            <button class="btn btn-outline-info" onclick="sendQuickMessage('Update my payment methods')">
-                                                <i class="bi bi-credit-card-fill me-2"></i>Manage Payment Methods
+                                            <button class="service-btn" onclick="sendQuickMessage('Update my payment methods')">
+                                                <i class="bi bi-credit-card-fill"></i>
+                                                <span>Payment Methods</span>
+                                                <i class="bi bi-chevron-right ms-auto"></i>
                                             </button>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            <!-- Account Benefits -->
-                            <div class="col-lg-6">
-                                <div class="card">
-                                    <div class="card-header bg-success text-white">
-                                        <h6 class="mb-0">Account Tiers & Benefits</h6>
-                                    </div>
-                                    <div class="card-body">
-                                        <div class="tier-info">
-                                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                                <span class="badge bg-secondary">Bronze</span>
-                                                <small>Standard benefits</small>
+                                <div class="col-lg-6 mb-4">
+                                    <div class="service-card tier-card">
+                                        <div class="service-header">
+                                            <i class="bi bi-trophy-fill me-2"></i>
+                                            <h6>Membership Tiers</h6>
+                                        </div>
+                                        <div class="tier-progression">
+                                            <div class="tier-item bronze">
+                                                <span class="tier-dot"></span>
+                                                <div class="tier-info">
+                                                    <strong>Bronze</strong>
+                                                    <small>Standard benefits</small>
+                                                </div>
                                             </div>
-                                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                                <span class="badge bg-primary">Silver</span>
-                                                <small>5% discount + priority support</small>
+                                            <div class="tier-item silver">
+                                                <span class="tier-dot"></span>
+                                                <div class="tier-info">
+                                                    <strong>Silver</strong>
+                                                    <small>5% discount + priority support</small>
+                                                </div>
                                             </div>
-                                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                                <span class="badge bg-warning">Gold</span>
-                                                <small>10% discount + free delivery</small>
+                                            <div class="tier-item gold active">
+                                                <span class="tier-dot"></span>
+                                                <div class="tier-info">
+                                                    <strong>Gold</strong>
+                                                    <small>10% discount + free delivery</small>
+                                                </div>
+                                                <span class="current-badge">Current</span>
                                             </div>
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <span class="badge bg-info">Platinum</span>
-                                                <small>15% discount + premium perks</small>
+                                            <div class="tier-item platinum">
+                                                <span class="tier-dot"></span>
+                                                <div class="tier-info">
+                                                    <strong>Platinum</strong>
+                                                    <small>15% discount + premium perks</small>
+                                                </div>
                                             </div>
                                         </div>
+                                        <button class="btn btn-outline-primary w-100 mt-3" onclick="sendQuickMessage('How to upgrade to platinum tier?')">
+                                            <i class="bi bi-arrow-up-circle me-2"></i>Upgrade to Platinum
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -5157,6 +5215,548 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
     </div>
 </div>
+
+<!-- Enhanced raqibtech.com Account Section Styles -->
+<style>
+/* Account Container */
+.account-container {
+    padding: 0;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    min-height: 100vh;
+}
+
+/* Account Hero Section */
+.account-hero-section {
+    background: linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-primary-dark) 100%);
+    color: white;
+    padding: 3rem 2rem;
+    position: relative;
+    overflow: hidden;
+    border-radius: 0 0 2rem 2rem;
+    margin-bottom: 2rem;
+}
+
+.hero-content {
+    text-align: center;
+    position: relative;
+    z-index: 2;
+}
+
+.brand-logo-account {
+    width: 80px;
+    height: 80px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 1rem;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    backdrop-filter: blur(10px);
+}
+
+.account-brand-title {
+    font-size: 2.5rem;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+    letter-spacing: -1px;
+}
+
+.account-brand-subtitle {
+    font-size: 1.2rem;
+    opacity: 0.9;
+    margin-bottom: 1.5rem;
+    font-weight: 500;
+}
+
+.account-brand-stats {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.stat-badge {
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 25px;
+    padding: 0.75rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    backdrop-filter: blur(10px);
+}
+
+.hero-pattern {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 200px;
+    height: 200px;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+    border-radius: 50%;
+}
+
+/* Welcome Section */
+.welcome-section {
+    padding: 0 2rem 2rem;
+}
+
+.welcome-card {
+    background: white;
+    border-radius: 1.5rem;
+    padding: 2rem;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(46, 204, 113, 0.1);
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.welcome-card.authenticated {
+    background: linear-gradient(135deg, rgba(46, 204, 113, 0.05) 0%, rgba(39, 174, 96, 0.1) 100%);
+}
+
+.welcome-card.guest {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(99, 102, 241, 0.1) 100%);
+}
+
+.welcome-icon {
+    width: 64px;
+    height: 64px;
+    background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark));
+    color: white;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+.welcome-content h4 {
+    margin-bottom: 0.5rem;
+    color: #2c3e50;
+    font-weight: 700;
+}
+
+.welcome-content p {
+    margin: 0;
+    color: #6c757d;
+    line-height: 1.5;
+}
+
+.account-tier-display {
+    margin-left: auto;
+}
+
+.tier-badge {
+    background: linear-gradient(135deg, #ffd700, #ffed4e);
+    color: #8b5a00;
+    padding: 0.75rem 1.25rem;
+    border-radius: 25px;
+    font-weight: 700;
+    border: 2px solid rgba(255, 215, 0, 0.3);
+    box-shadow: 0 4px 15px rgba(255, 215, 0, 0.3);
+}
+
+.auth-actions {
+    display: flex;
+    gap: 1rem;
+    margin-left: auto;
+}
+
+/* Dashboard Section */
+.dashboard-section {
+    padding: 0 2rem 2rem;
+}
+
+.section-title {
+    color: #2c3e50;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+}
+
+.section-title i {
+    color: var(--brand-primary);
+}
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+}
+
+.dashboard-card {
+    background: white;
+    border-radius: 1.25rem;
+    padding: 1.5rem;
+    border: 1px solid #e9ecef;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+.dashboard-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px rgba(46, 204, 113, 0.15);
+    border-color: var(--brand-primary);
+}
+
+.card-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    color: white;
+    margin-bottom: 1rem;
+}
+
+.card-icon.orders {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+}
+
+.card-icon.benefits {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+}
+
+.card-icon.recommendations {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+.card-icon.payments {
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+}
+
+.card-content h6 {
+    margin-bottom: 0.5rem;
+    color: #2c3e50;
+    font-weight: 700;
+}
+
+.card-content p {
+    margin-bottom: 1rem;
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.card-badge {
+    background: var(--brand-primary);
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+/* Services Section */
+.services-section {
+    padding: 0 2rem 2rem;
+}
+
+.service-card {
+    background: white;
+    border-radius: 1.25rem;
+    border: 1px solid #e9ecef;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    height: 100%;
+}
+
+.service-header {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    padding: 1.25rem;
+    border-bottom: 1px solid #e9ecef;
+    display: flex;
+    align-items: center;
+}
+
+.service-header i {
+    color: var(--brand-primary);
+    font-size: 1.1rem;
+}
+
+.service-header h6 {
+    margin: 0;
+    color: #2c3e50;
+    font-weight: 600;
+}
+
+.service-actions {
+    padding: 1rem;
+}
+
+.service-btn {
+    background: none;
+    border: none;
+    width: 100%;
+    padding: 1rem;
+    text-align: left;
+    border-radius: 0.75rem;
+    margin-bottom: 0.5rem;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    color: #495057;
+}
+
+.service-btn:hover {
+    background: linear-gradient(135deg, rgba(46, 204, 113, 0.05), rgba(39, 174, 96, 0.1));
+    color: var(--brand-primary);
+    transform: translateX(5px);
+}
+
+.service-btn i:first-child {
+    color: var(--brand-primary);
+    font-size: 1.1rem;
+}
+
+.service-btn i:last-child {
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+/* Tier Card Specific */
+.tier-card {
+    border: 2px solid var(--brand-light);
+}
+
+.tier-progression {
+    padding: 1rem;
+}
+
+.tier-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 0;
+    position: relative;
+}
+
+.tier-item:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    left: 6px;
+    top: 100%;
+    width: 2px;
+    height: 0.75rem;
+    background: #e9ecef;
+}
+
+.tier-item.active::after {
+    background: var(--brand-primary);
+}
+
+.tier-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #e9ecef;
+    flex-shrink: 0;
+}
+
+.tier-item.bronze .tier-dot {
+    background: #cd7f32;
+}
+
+.tier-item.silver .tier-dot {
+    background: #c0c0c0;
+}
+
+.tier-item.gold .tier-dot {
+    background: #ffd700;
+}
+
+.tier-item.platinum .tier-dot {
+    background: #e5e4e2;
+}
+
+.tier-item.active .tier-dot {
+    background: var(--brand-primary);
+    box-shadow: 0 0 0 3px rgba(46, 204, 113, 0.2);
+}
+
+.tier-info strong {
+    display: block;
+    color: #2c3e50;
+    font-weight: 600;
+}
+
+.tier-info small {
+    color: #6c757d;
+    font-size: 0.8rem;
+}
+
+.current-badge {
+    background: var(--brand-primary);
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    margin-left: auto;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .account-hero-section {
+        padding: 2rem 1rem;
+    }
+
+    .account-brand-title {
+        font-size: 2rem;
+    }
+
+    .account-brand-stats {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .welcome-section,
+    .dashboard-section,
+    .services-section {
+        padding: 0 1rem 1rem;
+    }
+
+    .welcome-card {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .auth-actions {
+        margin-left: 0;
+        width: 100%;
+        justify-content: center;
+    }
+
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .tier-badge {
+        margin-top: 1rem;
+    }
+}
+
+/* Legacy styles for compatibility */
+.raqibtech-branding {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 24px;
+    border-radius: 20px;
+    box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+.brand-title {
+    font-size: 28px;
+    font-weight: 800;
+    margin: 0;
+}
+
+.brand-logo {
+    font-size: 32px;
+    margin-right: 8px;
+}
+
+.brand-text {
+    color: #ffd700;
+    letter-spacing: 1px;
+}
+
+.brand-domain {
+    color: #ffffff;
+    font-weight: 600;
+}
+
+.brand-subtitle {
+    font-size: 16px;
+    margin-bottom: 16px;
+    opacity: 0.9;
+    font-weight: 500;
+}
+
+.brand-stats .badge {
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* Legacy Account Dashboard Styles */
+.account-dashboard {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 16px;
+    padding: 24px;
+    border: 1px solid #dee2e6;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+}
+
+.dashboard-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-top: 20px;
+}
+
+.dashboard-action-btn {
+    background: white;
+    border: 2px solid #e9ecef;
+    border-radius: 12px;
+    padding: 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    text-align: left;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.dashboard-action-btn:hover {
+    border-color: #18bc9c;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(24, 188, 156, 0.2);
+    background: linear-gradient(135deg, #ffffff, #f8f9fa);
+}
+
+.action-icon {
+    font-size: 24px;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #18bc9c, #16a085);
+    border-radius: 12px;
+    flex-shrink: 0;
+}
+
+.action-text strong {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 4px;
+}
+
+.action-text small {
+    font-size: 12px;
+    color: #6c757d;
+    font-weight: 500;
+}
+</style>
 
 {% endblock %}
 

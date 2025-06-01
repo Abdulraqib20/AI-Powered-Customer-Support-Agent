@@ -586,7 +586,7 @@
                                 <div class="col-6">
                                     <div class="metric-item">
                                         <div class="metric-number fw-bold h1">99.9%</div>
-                                        <div class="metric-label small">Satisfaction</div>
+                                        <div class="metric-label small">Customer Satisfaction</div>
                                     </div>
                                 </div>
                             </div>
@@ -600,11 +600,6 @@
                     </div>
                 </div>
             </div>
-        </div>
-
-        <!-- Decorative Elements -->
-        <div class="hero-decoration position-absolute top-0 end-0">
-            <i class="bi bi-chat-dots-fill" style="font-size: 7rem; line-height: 1;"></i>
         </div>
     </div>
 
@@ -629,71 +624,105 @@
         {% block content %}{% endblock %}
     </main>
 
-    <!-- Customer Support Footer -->
-    <footer class="bg-dark text-light py-4 mt-5">
-        <div class="container">
-            <div class="row">
-                <div class="col-md-4 mb-3">
-                    <h6 class="text-primary mb-3">
-                        <i class="bi bi-shop me-2"></i>raqibtech.com
-                    </h6>
-                    <p class="small text-muted">
-                        Your trusted Nigerian e-commerce platform.<br>
-                        Quality products, reliable delivery, excellent support.
-                    </p>
-                </div>
-
-                <div class="col-md-2 mb-3">
-                    <h6 class="mb-3">Quick Help</h6>
-                    <ul class="list-unstyled small">
-                        <li><a href="#track" class="text-muted text-decoration-none">Track Order</a></li>
-                        <li><a href="#returns" class="text-muted text-decoration-none">Returns</a></li>
-                        <li><a href="#payments" class="text-muted text-decoration-none">Payments</a></li>
-                        <li><a href="#delivery" class="text-muted text-decoration-none">Delivery Info</a></li>
-                    </ul>
-                </div>
-
-                <div class="col-md-3 mb-3">
-                    <h6 class="mb-3">Payment Methods</h6>
-                    <div class="payment-methods">
-                        <span class="badge bg-success me-1 mb-1">Pay on Delivery</span>
-                        <span class="badge bg-primary me-1 mb-1">Bank Transfer</span>
-                        <span class="badge bg-warning me-1 mb-1">Card Payment</span>
-                        <span class="badge bg-info me-1 mb-1">RaqibTechPay</span>
+    <!-- Enhanced Customer Support Footer -->
+    <footer class="modern-footer">
+        <div class="footer-main">
+            <div class="container">
+                <!-- Brand Section -->
+                <div class="footer-brand-section text-center py-5">
+                    <div class="brand-logo-footer mb-3">
+                        <img src="/static/logo.svg" alt="raqibtech.com Customer Support" width="48" height="48">
+                    </div>
+                    <h3 class="brand-title mb-2">raqibtech.com</h3>
+                    <p class="brand-tagline mb-3">Your Trusted Nigerian E-commerce Partner</p>
+                    <div class="brand-stats">
+                        <span class="stat-item me-4">
+                            <i class="bi bi-geo-alt-fill me-1"></i>
+                            36 States + FCT
+                        </span>
+                        <span class="stat-item me-4">
+                            📦 1M+ Deliveries
+                        </span>
+                        <span class="stat-item">
+                            ⭐ 4.8/5 Rating
+                        </span>
                     </div>
                 </div>
 
-                <div class="col-md-3 mb-3">
-                    <h6 class="mb-3">Contact Support</h6>
-                    <div class="contact-info small">
-                        <p class="mb-1">
-                            <i class="bi bi-telephone me-2 text-primary"></i>
-                            +234 (702) 5965-922
+                <!-- Links Section -->
+                <div class="row py-4">
+                    <div class="col-lg-3 col-md-6 mb-4">
+                        <h6 class="footer-heading mb-3">Customer Support</h6>
+                        <ul class="footer-links">
+                            <li><a href="#track">Track Your Order</a></li>
+                            <li><a href="#returns">Returns & Refunds</a></li>
+                            <li><a href="#shipping">Shipping Information</a></li>
+                            <li><a href="#faq">Frequently Asked Questions</a></li>
+                            <li><a href="tel:+2347025965922">📞 Call Support</a></li>
+                        </ul>
+                    </div>
+
+                    <div class="col-lg-3 col-md-6 mb-4">
+                        <h6 class="footer-heading mb-3">Quick Links</h6>
+                        <ul class="footer-links">
+                            <li><a href="https://raqibtech.com">🏠 Back to Store</a></li>
+                            <li><a href="#categories">Shop by Category</a></li>
+                            <li><a href="#deals">Today's Deals</a></li>
+                            <li><a href="#new-arrivals">New Arrivals</a></li>
+                            <li><a href="#bestsellers">Best Sellers</a></li>
+                        </ul>
+                    </div>
+
+                    <div class="col-lg-3 col-md-6 mb-4">
+                        <h6 class="footer-heading mb-3">Payment & Delivery</h6>
+                        <div class="payment-badges mb-3">
+                            <span class="payment-badge cod">Pay on Delivery</span>
+                            <span class="payment-badge transfer">Bank Transfer</span>
+                            <span class="payment-badge card">Card Payment</span>
+                            <span class="payment-badge raqibtech">RaqibTechPay</span>
+                        </div>
+                        <p class="footer-text">
+                            <i class="bi bi-shield-check me-1"></i>
+                            Secure payments & reliable delivery across Nigeria
                         </p>
-                        <p class="mb-1">
-                            <i class="bi bi-envelope me-2 text-primary"></i>
-                            support@raqibtech.com
-                        </p>
-                        <p class="mb-0">
-                            <i class="bi bi-clock me-2 text-primary"></i>
-                            24/7 Support Available
-                        </p>
+                    </div>
+
+                    <div class="col-lg-3 col-md-6 mb-4">
+                        <h6 class="footer-heading mb-3">Get in Touch</h6>
+                        <div class="contact-methods">
+                            <div class="contact-item mb-2">
+                                <i class="bi bi-telephone-fill me-2"></i>
+                                <span>+234 (702) 5965-922</span>
+                            </div>
+                            <div class="contact-item mb-2">
+                                <i class="bi bi-envelope-fill me-2"></i>
+                                <span>support@raqibtech.com</span>
+                            </div>
+                            <div class="contact-item mb-3">
+                                <i class="bi bi-clock-fill me-2"></i>
+                                <span>24/7 AI Support Available</span>
+                            </div>
+                            <div class="social-links">
+                                <a href="#" class="social-link"><i class="bi bi-facebook"></i></a>
+                                <a href="#" class="social-link"><i class="bi bi-twitter"></i></a>
+                                <a href="#" class="social-link"><i class="bi bi-instagram"></i></a>
+                                <a href="#" class="social-link"><i class="bi bi-linkedin"></i></a>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <hr class="my-4">
-
-            <div class="row align-items-center">
-                <div class="col-md-6">
-                    <p class="small mb-0 text-muted">
-                        &copy; 2025 raqibtech.com. All rights reserved. | Made in Nigeria
-                    </p>
-                </div>
-                <div class="col-md-6 text-md-end">
-                    <p class="small mb-0 text-muted">
-                        Powered by AI • Serving all Nigerian states
-                    </p>
+        <!-- Footer Bottom -->
+        <div class="footer-bottom">
+            <div class="container">
+                <div class="row align-items-center py-3">
+                    <div class="col-md-6">
+                        <p class="footer-copyright mb-0">
+                            &copy; 2025 raqibtech.com. All rights reserved. Developed by <a href="https://github.com/Abdulraqib20">raqibcodes</a>
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>
