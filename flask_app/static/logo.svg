@@ -1,0 +1,40 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background Circle -->
+  <circle cx="32" cy="32" r="30" fill="#2ECC71" stroke="#27AE60" stroke-width="2"/>
+
+  <!-- Inner Background -->
+  <circle cx="32" cy="32" r="25" fill="#58D68D" opacity="0.3"/>
+
+  <!-- Headset -->
+  <g transform="translate(16, 18)">
+    <!-- Headband -->
+    <path d="M 4 10 Q 4 4 16 4 Q 28 4 28 10" stroke="#FFFFFF" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+
+    <!-- Left Speaker -->
+    <rect x="2" y="8" width="6" height="8" rx="3" fill="#FFFFFF"/>
+    <rect x="3.5" y="9.5" width="3" height="5" rx="1.5" fill="#2ECC71"/>
+
+    <!-- Right Speaker -->
+    <rect x="24" y="8" width="6" height="8" rx="3" fill="#FFFFFF"/>
+    <rect x="25.5" y="9.5" width="3" height="5" rx="1.5" fill="#2ECC71"/>
+
+    <!-- Microphone Arm -->
+    <path d="M 8 12 Q 12 16 16 16" stroke="#FFFFFF" stroke-width="2" fill="none" stroke-linecap="round"/>
+
+    <!-- Microphone -->
+    <circle cx="16" cy="16" r="2.5" fill="#FFFFFF"/>
+    <circle cx="16" cy="16" r="1.5" fill="#2ECC71"/>
+  </g>
+
+  <!-- Chat Bubble -->
+  <g transform="translate(36, 36)">
+    <path d="M 0 4 Q 0 0 4 0 L 16 0 Q 20 0 20 4 L 20 12 Q 20 16 16 16 L 8 16 L 4 20 L 4 16 Q 0 16 0 12 Z" fill="#FFFFFF"/>
+    <!-- Chat dots -->
+    <circle cx="6" cy="8" r="1.5" fill="#2ECC71"/>
+    <circle cx="10" cy="8" r="1.5" fill="#2ECC71"/>
+    <circle cx="14" cy="8" r="1.5" fill="#2ECC71"/>
+  </g>
+
+  <!-- Highlight -->
+  <circle cx="24" cy="24" r="3" fill="#FFFFFF" opacity="0.4"/>
+</svg>

@@ -27,11 +27,20 @@
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-    <!-- Minimal Custom CSS (only for layout, no theme overrides) -->
+    <!-- Enhanced Custom CSS with Brand Identity -->
     <style>
+        :root {
+            --brand-primary: #2ECC71;
+            --brand-primary-dark: #27AE60;
+            --brand-secondary: #58D68D;
+            --brand-light: #A9DFBF;
+            --navbar-height: 80px;
+        }
+
         body {
             font-family: 'Poppins', sans-serif;
             font-size: 0.95rem; /* Slightly reduce base font size */
+            padding-top: var(--navbar-height); /* Account for fixed navbar */
         }
 
         h1, h2, h3, h4, h5, h6 {
@@ -199,25 +208,18 @@
             animation: typing 1.4s infinite ease-in-out both;
         }
 
-        .typing-animation span:nth-child(1) { animation-delay: -0.32s; }
-        .typing-animation span:nth-child(2) { animation-delay: -0.16s; }
+        .typing-animation span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-animation span:nth-child(3) { animation-delay: 0.4s; }
 
         @keyframes typing {
-            0%, 80%, 100% {
-                transform: scale(0.8);
-                opacity: 0.5;
-            }
-            40% {
-                transform: scale(1.2);
-                opacity: 1;
-            }
+            0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+            40% { opacity: 1; transform: scale(1); }
         }
 
-        /* Message slide-in animation */
         @keyframes messageSlideIn {
             from {
                 opacity: 0;
-                transform: translateY(10px);
+                transform: translateY(20px);
             }
             to {
                 opacity: 1;
@@ -225,269 +227,278 @@
             }
         }
 
-        /* Error messages */
-        .message.error .message-bubble {
-            background: var(--bs-danger-bg-subtle);
-            border: 1px solid var(--bs-danger-border-subtle);
-            color: var(--bs-danger-text-emphasis);
-        }
-
-        /* Technical details styling */
-        .technical-info {
-            background: var(--bs-dark-bg-subtle);
-            border: 1px solid var(--bs-dark-border-subtle);
-            color: var(--bs-dark-text-emphasis);
-            font-family: 'Courier New', monospace;
-            font-size: 0.8rem;
-        }
-
-        /* Chat widget fab button */
-        .chat-widget-fab {
-            position: fixed;
-            bottom: 2rem;
-            right: 2rem;
-            z-index: 1050;
-        }
-
-        .chat-widget-fab .btn {
-            box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+        /* Enhanced Navbar Styles */
+        .navbar {
+            height: var(--navbar-height);
+            background: linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-primary-dark) 100%) !important;
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 20px rgba(46, 204, 113, 0.15);
             transition: all 0.3s ease;
         }
 
-        .chat-widget-fab .btn:hover {
-            transform: scale(1.1);
-            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
-        }
-
-        /* Support metrics styling */
-        .support-metrics .metric-item {
-            text-align: center;
-        }
-
-        .support-metrics .metric-item strong {
-            font-size: 1.5rem;
-            font-weight: 700;
-            display: block;
-        }
-
-        /* Professional Header Styling */
-        .navbar {
-            border-bottom: 3px solid rgba(255,255,255,0.1);
-        }
-
-        .brand-logo i {
-            background: rgba(255,255,255,0.2);
-            padding: 0.5rem;
-            border-radius: 0.75rem;
+        .navbar.scrolled {
+            box-shadow: 0 2px 20px rgba(46, 204, 113, 0.2);
         }
 
         .navbar-nav .nav-link {
-            border-radius: 0.5rem;
+            color: rgba(255, 255, 255, 0.9) !important;
+            font-weight: 500;
+            padding: 0.75rem 1rem !important;
+            border-radius: 8px;
             transition: all 0.3s ease;
-            margin: 0 0.25rem;
+            display: flex;
+            align-items: center;
         }
 
         .navbar-nav .nav-link:hover {
-            background: rgba(255,255,255,0.1);
+            color: white !important;
+            background: rgba(255, 255, 255, 0.1);
             transform: translateY(-1px);
         }
 
-        /* Professional Hero Section */
-        .support-hero {
-            background-color: var(--bs-primary-bg-subtle);
-            min-height: auto; /* Allow content to define height */
-            position: relative;
-            overflow: hidden;
-            padding: 2rem 0 1rem 0; /* Adjusted padding, less at bottom */
+        /* Brand Logo Styling */
+        .brand-logo {
+            width: 48px;
+            height: 48px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 12px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
         }
 
-        /* Hero text colors - aim for contrast */
-        .support-hero .hero-content h1 {
-            color: var(--bs-emphasis-color);
-            text-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        .brand-logo:hover {
+            transform: scale(1.05);
+            background: rgba(255, 255, 255, 0.15);
         }
 
-        .support-hero .hero-content p,
-        .support-hero .hero-content span,
-        .support-hero .hero-content small {
-            color: var(--bs-secondary-color);
+        .brand-logo img {
+            width: 32px;
+            height: 32px;
+            filter: brightness(1.1);
         }
 
-        .support-hero .hero-content .support-features i {
-             /* Keep contextual colors for icons if they are meaningful */
-        }
-
-        .support-hero .hero-icon i {
-            background: rgba(0,0,0,0.05); /* Even lighter icon background for subtle effect */
-            padding: 1rem;
-            border-radius: 1rem;
-            color: var(--bs-primary); /* Icon color itself */
-        }
-
-        .metrics-card {
-            /* Glassmorphism will be applied via class */
-        }
-
-        .metric-number {
-            color: var(--bs-emphasis-color) !important;
-            font-weight: 600 !important;
-        }
-
-        .metric-label {
-            color: var(--bs-secondary-color) !important;
-        }
-
-        .support-features i {
-            font-size: 1.1rem;
-        }
-
-        .hero-decoration {
-            right: -1rem;
-            top: 0.5rem;
-            z-index: 1;
-            color: var(--bs-primary-text-emphasis) !important;
-            opacity: 0.07 !important; /* More subtle decoration */
-        }
-
-        /* Professional Welcome Banner Styling */
-        .welcome-banner {
-            background: linear-gradient(45deg, var(--bs-primary-bg-subtle), var(--bs-info-bg-subtle));
-            border: 1px solid var(--bs-primary-border-subtle);
-            border-radius: 1rem;
-        }
-
-        .welcome-banner .card-body {
-            padding: 2rem;
-        }
-
-        .welcome-stats {
-            background: rgba(255,255,255,0.8);
-            border-radius: 0.75rem;
-            padding: 1.5rem;
-        }
-
-        /* Ensure Footer Text is Always White */
-        footer.bg-dark {
-            background-color: #212529 !important;
-        }
-
-        footer.bg-dark,
-        footer.bg-dark * {
+        .navbar-brand {
             color: white !important;
-        }
-
-        footer.bg-dark a {
-            color: rgba(255,255,255,0.8) !important;
             text-decoration: none;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            transition: all 0.3s ease;
         }
 
-        footer.bg-dark a:hover {
+        .navbar-brand:hover {
             color: white !important;
+            transform: translateX(2px);
         }
 
-        footer.bg-dark .text-muted {
-            color: rgba(255,255,255,0.6) !important;
+        .brand-info h4 {
+            margin: 0;
+            font-size: 1.1rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
         }
 
-        footer.bg-dark .text-primary {
-            color: var(--bs-primary) !important;
+        .brand-info small {
+            opacity: 0.8;
+            font-size: 0.75rem;
+            font-weight: 400;
         }
 
-        footer.bg-dark h6,
-        footer.bg-dark h6 a,
-        footer.bg-dark .navbar-brand h4 /* If brand is used in footer */
-        {
-            color: white !important;
+        /* Status Indicator */
+        .ai-status {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 25px;
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            backdrop-filter: blur(10px);
+            animation: pulse-glow 2s infinite;
         }
 
-        /* Ensure footer h6.text-primary (like raqibtech.com) is white */
-        footer.bg-dark h6.text-primary,
-        footer.bg-dark h6.text-primary i /* if icon inside */
-        {
-            color: white !important;
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: #00ff88;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+            box-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
         }
 
-        /* Responsive adjustments for new header */
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes pulse-glow {
+            0% { box-shadow: 0 0 0 rgba(255, 255, 255, 0.2); }
+            50% { box-shadow: 0 0 20px rgba(255, 255, 255, 0.1); }
+            100% { box-shadow: 0 0 0 rgba(255, 255, 255, 0.2); }
+        }
+
+        /* Mobile Responsiveness */
         @media (max-width: 768px) {
-            .support-hero {
-                min-height: auto;
-                padding: 2rem 0;
+            .navbar {
+                height: auto;
+                padding: 1rem 0;
             }
 
-            .hero-content h1 {
-                font-size: 1.75rem;
+            .brand-info h4 {
+                font-size: 1rem;
             }
 
-            .metrics-card {
-                margin-top: 2rem;
-            }
-
-            .hero-decoration {
+            .brand-info small {
                 display: none;
             }
 
-            /* Responsive chat adjustments */
-            .chat-messages {
-                height: 300px;
-                padding: 0.75rem;
+            .brand-logo {
+                width: 40px;
+                height: 40px;
+                margin-right: 8px;
             }
 
-            .message {
-                max-width: 95%;
-            }
-
-            .message.customer .message-bubble,
-            .message.ai .message-bubble {
-                border-radius: 1rem;
-            }
-
-            .quick-actions {
-                flex-direction: column;
-            }
-
-            .quick-action-btn {
-                text-align: center;
+            .brand-logo img {
+                width: 24px;
+                height: 24px;
             }
         }
 
-        /* Dark theme support (if using dark Bootswatch themes) */
-        [data-bs-theme="dark"] .message.ai .message-bubble {
-            background: var(--bs-dark);
-            border-color: var(--bs-border-color-translucent);
+        /* Enhanced Support Hero Section */
+        .support-hero {
+            background: linear-gradient(135deg, rgba(46, 204, 113, 0.05) 0%, rgba(39, 174, 96, 0.1) 100%);
+            border-bottom: 1px solid rgba(46, 204, 113, 0.1);
+            position: relative;
+            overflow: hidden;
         }
 
-        [data-bs-theme="dark"] .message.customer .message-bubble {
-            box-shadow: 0 2px 8px rgba(255,255,255,0.1);
+        .support-hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, rgba(46, 204, 113, 0.1) 0%, transparent 70%);
+            border-radius: 50%;
         }
 
-        /* Clear floats */
-        .chat-messages::after {
-            content: "";
-            display: table;
-            clear: both;
+        .hero-icon {
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark));
+            color: white;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 25px rgba(46, 204, 113, 0.2);
+        }
+
+        .support-features .bi {
+            font-size: 1rem;
+        }
+
+        /* Footer styling updates */
+        footer.bg-dark .navbar-brand h4 /* If brand is used in footer */
+        {
+            color: var(--brand-primary) !important;
+        }
+
+        /* Support features styling */
+        .support-features {
+            font-size: 0.9rem;
+        }
+
+        .support-features .bi {
+            width: 16px;
+        }
+
+        /* Metrics card enhancements */
+        .metrics-card {
+            border: 1px solid rgba(46, 204, 113, 0.2);
+        }
+
+        .metric-number {
+            color: var(--brand-primary-dark);
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 992px) {
+            .support-hero .col-lg-5 {
+                margin-top: 2rem;
+            }
+        }
+
+        /* Contact info in footer */
+        .contact-info .bi {
+            color: var(--brand-primary) !important;
+        }
+
+        /* Payment badges */
+        .badge.bg-success {
+            background-color: var(--brand-primary) !important;
+        }
+
+        /* Alert styling with brand colors */
+        .alert-success {
+            border-color: var(--brand-light);
+            background-color: rgba(46, 204, 113, 0.1);
+        }
+
+        /* Override primary color for consistency */
+        .text-primary {
+            color: var(--brand-primary) !important;
+        }
+
+        .bg-primary {
+            background-color: var(--brand-primary) !important;
+        }
+
+        .btn-primary {
+            background-color: var(--brand-primary);
+            border-color: var(--brand-primary);
+        }
+
+        .btn-primary:hover {
+            background-color: var(--brand-primary-dark);
+            border-color: var(--brand-primary-dark);
+        }
+
+        /* Main content padding adjustment for fixed navbar */
+        main.container-fluid {
+            padding-top: var(--navbar-height);
         }
     </style>
 
     <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
 </head>
 <body>
-    <!-- Customer Support Header -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow">
+    <!-- Enhanced Customer Support Header -->
+    <nav class="navbar navbar-expand-lg navbar-dark fixed-top">
         <div class="container">
             <!-- Brand Logo -->
             <a class="navbar-brand d-flex align-items-center" href="/">
-                <div class="brand-logo me-3">
-                    <i class="bi bi-headset-vr fs-1"></i>
+                <div class="brand-logo">
+                    <img src="/static/logo.svg" alt="Customer Support Logo" />
                 </div>
                 <div class="brand-info">
-                    <h4 class="mb-0 fw-bold">raqibtech.com</h4>
-                    <small class="opacity-75 d-block">Customer Support Portal</small>
+                    <h4 class="mb-0">raqibtech.com</h4>
+                    <small class="d-block">Customer Support Portal</small>
                 </div>
             </a>
 
             <!-- Mobile Toggle -->
-            <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
+            <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent" aria-controls="navbarContent" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
 
@@ -495,28 +506,28 @@
             <div class="collapse navbar-collapse" id="navbarContent">
                 <ul class="navbar-nav ms-auto align-items-center">
                     <li class="nav-item">
-                        <a class="nav-link d-flex align-items-center" href="https://raqibtech.com">
+                        <a class="nav-link" href="https://raqibtech.com">
                             <i class="bi bi-house-door me-2"></i>
                             <span>Back to Store</span>
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link d-flex align-items-center" href="tel:+2348007242242">
+                        <a class="nav-link" href="tel:+2348007242242">
                             <i class="bi bi-telephone-fill me-2"></i>
                             <span>Call Support</span>
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link d-flex align-items-center" href="#help">
+                        <a class="nav-link" href="#help">
                             <i class="bi bi-question-circle-fill me-2"></i>
                             <span>Help Center</span>
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <span class="navbar-text bg-success px-3 py-1 rounded-pill ms-2">
-                            <i class="bi bi-circle-fill text-light me-1" style="font-size: 8px;"></i>
-                            <small class="fw-medium">AI Online</small>
-                        </span>
+                    <li class="nav-item ms-2">
+                        <div class="ai-status">
+                            <div class="status-dot"></div>
+                            <small class="fw-medium text-white">AI Online</small>
+                        </div>
                     </li>
                 </ul>
             </div>

@@ -41,6 +41,7 @@ document.addEventListener('DOMContentLoaded', function () {
     startRealTimeUpdates();
     loadInitialData();
     initializeChat();
+    initializeNavbar();
 });
 
 /**
@@ -1416,5 +1417,55 @@ window.viewCustomerDetails = function (customerId) {
     console.log(`Viewing customer details for ID: ${customerId}`);
     // Customer details viewing will be handled by the integrated system
 };
+
+/**
+ * Initialize enhanced navbar functionality
+ */
+function initializeNavbar() {
+    const navbar = document.querySelector('.navbar');
+    const brandLogo = document.querySelector('.brand-logo');
+
+    if (navbar) {
+        // Add scroll effect to navbar
+        let lastScrollTop = 0;
+        window.addEventListener('scroll', function () {
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+
+            // Add/remove scrolled class for styling
+            if (scrollTop > 50) {
+                navbar.classList.add('scrolled');
+            } else {
+                navbar.classList.remove('scrolled');
+            }
+
+            lastScrollTop = scrollTop <= 0 ? 0 : scrollTop;
+        }, false);
+    }
+
+    // Add logo click animation
+    if (brandLogo) {
+        brandLogo.addEventListener('click', function (e) {
+            e.preventDefault();
+            this.style.transform = 'scale(0.95) rotate(5deg)';
+            setTimeout(() => {
+                this.style.transform = '';
+            }, 150);
+        });
+    }
+
+    // Add AI status pulse effect
+    const statusDot = document.querySelector('.status-dot');
+    if (statusDot) {
+        // Enhance the pulse effect
+        setInterval(() => {
+            statusDot.style.transform = 'scale(1.3)';
+            setTimeout(() => {
+                statusDot.style.transform = 'scale(1)';
+            }, 200);
+        }, 3000);
+    }
+
+    console.log('🎨 Enhanced navbar initialized');
+}
 
 console.log('  Nigerian Customer Support Agent - JavaScript loaded successfully');
