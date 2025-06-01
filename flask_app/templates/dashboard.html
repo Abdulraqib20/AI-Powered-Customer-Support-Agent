@@ -615,9 +615,9 @@
 }
 
 .smart-quick-action-btn {
-    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
-    color: white;
-    border: none;
+    background: transparent; /* Removed background color */
+    color: #007bff; /* Changed to blue text color */
+    border: 1px solid #007bff; /* Added border for visibility */
     border-radius: 16px;
     padding: 6px 12px;
     font-size: 11px;
@@ -625,13 +625,13 @@
     cursor: pointer;
     transition: all 0.3s ease;
     white-space: nowrap;
-    box-shadow: 0 2px 6px rgba(0,123,255,0.2);
+    box-shadow: none; /* Removed box shadow */
 }
 
 .smart-quick-action-btn:hover {
-    background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+    background: linear-gradient(45deg, #0056b3, #004085);
+    color: #fff;
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0,123,255,0.3);
 }
 
 /* Chat Input Area */
@@ -2865,7 +2865,7 @@ class CustomerSupportPortal {
         const timestamp = new Date().toLocaleTimeString();
         const avatar = document.createElement('div');
         avatar.className = 'message-avatar';
-        avatar.innerHTML = sender === 'customer' ? 'U' : 'AI';
+        avatar.innerHTML = ''; // Removed 'U' and 'AI' text
 
         const messageContent = document.createElement('div');
         messageContent.className = 'message-content';
