@@ -7,18 +7,18 @@
 <!-- Enhanced Floating Modal Chat System with Microsoft-style Design -->
 <style>
 /* ===== FLOATING CHAT MODAL SYSTEM ===== */
-/* Floating Chat Button */
+/* Floating Chat Button - Now Draggable */
 .floating-chat-btn {
     position: fixed;
     bottom: 24px;
     right: 24px;
     width: 64px;
     height: 64px;
-    background: linear-gradient(135deg, #2c3e50 0%, #18bc9c 100%);
+    background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark));
     border-radius: 50%;
-    box-shadow: 0 8px 32px rgba(44, 62, 80, 0.3);
+    box-shadow: 0 8px 32px rgba(46, 204, 113, 0.3);
     border: none;
-    cursor: pointer;
+    cursor: grab;
     z-index: 9998;
     display: flex;
     align-items: center;
@@ -28,7 +28,7 @@
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     transform: scale(1);
     pointer-events: auto;
-    touch-action: manipulation;
+    touch-action: none;
     user-select: none;
     -webkit-user-select: none;
     -webkit-touch-callout: none;
@@ -37,12 +37,15 @@
 
 .floating-chat-btn:hover {
     transform: scale(1.1);
-    box-shadow: 0 12px 40px rgba(44, 62, 80, 0.4);
-    background: linear-gradient(135deg, #18bc9c 0%, #2c3e50 100%);
+    box-shadow: 0 12px 40px rgba(46, 204, 113, 0.4);
+    background: linear-gradient(135deg, var(--brand-primary-dark), var(--brand-primary));
 }
 
-.floating-chat-btn:active {
+.floating-chat-btn:active,
+.floating-chat-btn.dragging {
     transform: scale(0.95);
+    cursor: grabbing;
+    box-shadow: 0 20px 60px rgba(46, 204, 113, 0.5);
 }
 
 .floating-chat-btn.active {
@@ -94,15 +97,16 @@
     transform: scale(1) translateY(0);
 }
 
-/* Modal Header */
+/* Modal Header - Updated with Brand Colors */
 .chat-modal-header {
-    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+    background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark));
     color: white;
     padding: 16px 20px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 2px 10px rgba(46, 204, 113, 0.2);
 }
 
 .chat-modal-title {
@@ -115,14 +119,21 @@
 }
 
 .chat-modal-title .brand-logo {
-    width: 28px;
-    height: 28px;
-    background: linear-gradient(135deg, #18bc9c, #16a085);
+    width: 32px;
+    height: 32px;
+    background: rgba(255, 255, 255, 0.2);
     border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.chat-modal-title .brand-logo img {
+    width: 20px;
+    height: 20px;
+    filter: brightness(0) invert(1);
 }
 
 .chat-modal-actions {
@@ -446,14 +457,15 @@
 .message.customer .message-bubble {
     max-width: fit-content; /* Adjust to content width */
     margin-left: auto; /* Push bubble to the right */
-    background: linear-gradient(135deg, #2c3e50, #34495e);
+    background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark));
     color: white;
-    border-color: #2c3e50;
+    border-color: var(--brand-primary);
+    box-shadow: 0 4px 15px rgba(46, 204, 113, 0.2);
 }
 .message.customer .message-bubble {
-    background: linear-gradient(135deg, #2c3e50, #34495e);
+    background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark));
     color: white;
-    border-color: #2c3e50;
+    border-color: var(--brand-primary);
 }
 
 .message:last-child .message-bubble {
@@ -485,8 +497,8 @@
 
 .response-time {
     font-size: 10px;
-    color: #18bc9c;
-    background: rgba(24, 188, 156, 0.1);
+    color: var(--brand-primary);
+    background: rgba(46, 204, 113, 0.1);
     padding: 2px 6px;
     border-radius: 8px;
     white-space: nowrap;
@@ -524,7 +536,7 @@
     left: -50%;
     width: 200%;
     height: 200%;
-    background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(46, 204, 113, 0.1) 0%, transparent 70%);
     pointer-events: none;
     animation: shimmer 3s ease-in-out infinite;
 }
@@ -544,17 +556,6 @@
     font-weight: 700;
     color: #2C3E50;
     margin-bottom: 12px;
-}
-
-/* .welcome-content p {
-    font-size: 14px;
-    line-height: 1.6;
-    margin-bottom: 12px;
-    color: #2C3E50;
-    font-weight: 500;
-} */
-.welcome-content p {
-    color: #000000;
 }
 
 .welcome-quick-actions {
@@ -698,7 +699,7 @@
 .typing-indicator {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
     padding: 24px; /* Match message padding */
     background: #f7f7f8; /* Match AI background */
     border-bottom: 1px solid #ececf1;
@@ -706,17 +707,24 @@
     box-sizing: border-box;
 }
 
+.typing-indicator span {
+    color: var(--brand-primary);
+    font-size: 13px;
+    font-weight: 500;
+}
+
 .typing-dots {
     display: flex;
-    gap: 3px;
+    gap: 4px;
 }
 
 .typing-dot {
-    width: 6px;
-    height: 6px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
-    background-color: #6c757d;
+    background-color: var(--brand-primary);
     animation: typingPulse 1.4s ease-in-out infinite both;
+    opacity: 0.6;
 }
 
 .typing-dot:nth-child(1) { animation-delay: -0.32s; }
@@ -725,12 +733,12 @@
 
 @keyframes typingPulse {
     0%, 80%, 100% {
-        opacity: 0.4;
+        opacity: 0.3;
         transform: scale(0.8);
     }
     40% {
         opacity: 1;
-        transform: scale(1);
+        transform: scale(1.2);
     }
 }
 
@@ -2065,8 +2073,10 @@
         <!-- Modal Header -->
         <div class="chat-modal-header">
             <h6 class="chat-modal-title">
-                <div class="brand-logo">🚀</div>
-                <span>raqibtech.com Assistant</span>
+                <div class="brand-logo">
+                    <img src="/static/logo.svg" alt="raqibtech.com">
+                </div>
+                <span>raqibtech.com AI Assistant</span>
             </h6>
             <div class="chat-modal-actions">
                 <button class="chat-modal-btn" onclick="toggleConversationSidebar()" title="Chat History">
@@ -2284,103 +2294,70 @@ if (typeof bootstrap === 'undefined') {
 // Enhanced Customer-focused support system with floating modal interface
 class CustomerSupportPortal {
     constructor() {
-        console.log('🛍️ Initializing raqibtech.com Floating Modal Chat System...');
+        console.log('🚀 CustomerPortal: Initializing...');
 
-        // Debug: Check if elements exist
-        this.debugElementExistence();
+        // Required DOM elements
+        this.requiredElements = [
+            'chatModalOverlay',
+            'conversationSidebar',
+            'floatingChatBtn',
+        ];
 
+        // Verify all required elements exist
+        this.verifyRequiredElements();
+
+        // Initialize properties
         this.currentConversationId = window.currentConversationId;
-        this.userAuthenticated = window.userAuthenticated;
+        this.conversationLoaded = false;
         this.isTyping = false;
-        this.activeMessageRequest = null;
         this.conversationLocked = false;
         this.modalOpen = false;
         this.sidebarOpen = false;
+        this.activeMessageRequest = null;
 
-        // Add delay to ensure DOM is fully ready
-        setTimeout(() => {
-            this.initializeFloatingChat();
-            this.setupKeyboardShortcuts();
-            console.log('✅ Modal initialization complete');
-        }, 100);
+        // Get DOM elements
+        this.chatModal = document.getElementById('chatModalOverlay');
+        this.conversationSidebar = document.getElementById('conversationSidebar');
+        this.chatBtn = document.getElementById('floatingChatBtn');
+
+        // Verify critical elements
+        if (!this.chatModal || !this.chatBtn) {
+            console.error('❌ Critical elements missing');
+            this.showError('Chat system failed to initialize - missing elements');
+            return;
+        }
+
+        // Set up event listeners
+        this.setupEventListeners();
+        this.setupKeyboardShortcuts();
+        this.setupModalEventListeners();
+
+        // Initialize drag functionality for floating button
+        this.initializeDragFunctionality();
+
+        console.log('✅ CustomerPortal initialized successfully');
     }
 
-    debugElementExistence() {
-        const requiredElements = [
-            'chatModalOverlay',
-            'floatingChatBtn',
-            'conversationSidebar',
-            'chatMessages',
-            'chatInput'
-        ];
-
-        console.log('🔍 Checking required elements...');
-        requiredElements.forEach(id => {
-            const element = document.getElementById(id);
-            if (!element) {
+    verifyRequiredElements() {
+        this.requiredElements.forEach(id => {
+            if (!document.getElementById(id)) {
                 console.error(`❌ Missing element: ${id}`);
-            } else {
-                console.log(`✅ Found element: ${id}`);
             }
         });
     }
 
-    initializeFloatingChat() {
-        // Initialize modal state with error checking
-        this.chatModal = document.getElementById('chatModalOverlay');
-        this.chatBtn = document.getElementById('floatingChatBtn');
-        this.conversationSidebar = document.getElementById('conversationSidebar');
-
-        if (!this.chatModal) {
-            console.error('❌ Chat modal overlay not found!');
-            return;
-        }
-
-        if (!this.chatBtn) {
-            console.error('❌ Floating chat button not found!');
-            return;
-        }
-
-        console.log('✅ Modal elements found and initialized');
-
-        // Ensure proper z-index (fix from WeWeb community issue)
-        this.chatModal.style.zIndex = '9999';
-        this.chatBtn.style.zIndex = '9998';
-
-        // Load conversation when modal is opened
-        this.setupModalEventListeners();
-
-        // 🔧 FIX: Multiple event listeners for better compatibility
-        // Remove any existing listeners first
-        this.chatBtn.replaceWith(this.chatBtn.cloneNode(true));
-        this.chatBtn = document.getElementById('floatingChatBtn');
-
-        // Method 1: Click event listener
-        this.chatBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            console.log('🖱️ Floating button clicked via addEventListener');
-            this.toggleChatModal();
+    setupEventListeners() {
+        // Add event listeners for chat modal
+        this.chatModal.addEventListener('hidden.bs.modal', () => {
+            this.closeChatModal();
         });
 
-        // Method 2: Mouse down/up for better mobile support
-        this.chatBtn.addEventListener('mousedown', (e) => {
-            console.log('🖱️ Mouse down detected on floating button');
+        // Add event listeners for conversation sidebar
+        this.conversationSidebar.addEventListener('hidden.bs.modal', () => {
+            this.closeConversationSidebar();
         });
 
-        // Method 3: Touch events for mobile
-        this.chatBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            console.log('📱 Touch start detected on floating button');
-            this.toggleChatModal();
-        }, { passive: false });
-
-        // Method 4: Pointer events (modern approach)
-        this.chatBtn.addEventListener('pointerdown', (e) => {
-            console.log('👆 Pointer down detected on floating button');
-        });
-
-        console.log('✅ Multiple event listeners attached to floating button');
+        console.log('✅ Base event listeners configured');
     }
 
     setupKeyboardShortcuts() {
@@ -2413,6 +2390,151 @@ class CustomerSupportPortal {
         });
         observer.observe(this.chatModal, { attributes: true });
         console.log('✅ Modal event listeners configured');
+    }
+
+    initializeDragFunctionality() {
+        let isDragging = false;
+        let dragOffset = { x: 0, y: 0 };
+        let initialPosition = { x: 0, y: 0 };
+        let hasMoved = false;
+
+        const onMouseDown = (e) => {
+            e.preventDefault();
+            isDragging = false;
+            hasMoved = false;
+
+            const rect = this.chatBtn.getBoundingClientRect();
+            dragOffset.x = e.clientX - rect.left;
+            dragOffset.y = e.clientY - rect.top;
+
+            initialPosition.x = e.clientX;
+            initialPosition.y = e.clientY;
+
+            this.chatBtn.classList.add('dragging');
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        };
+
+        const onMouseMove = (e) => {
+            const distance = Math.sqrt(
+                Math.pow(e.clientX - initialPosition.x, 2) +
+                Math.pow(e.clientY - initialPosition.y, 2)
+            );
+
+            if (distance > 5) {
+                isDragging = true;
+                hasMoved = true;
+            }
+
+            if (isDragging) {
+                const newX = e.clientX - dragOffset.x;
+                const newY = e.clientY - dragOffset.y;
+
+                const maxX = window.innerWidth - this.chatBtn.offsetWidth;
+                const maxY = window.innerHeight - this.chatBtn.offsetHeight;
+
+                const constrainedX = Math.max(0, Math.min(newX, maxX));
+                const constrainedY = Math.max(0, Math.min(newY, maxY));
+
+                this.chatBtn.style.left = constrainedX + 'px';
+                this.chatBtn.style.top = constrainedY + 'px';
+                this.chatBtn.style.right = 'auto';
+                this.chatBtn.style.bottom = 'auto';
+            }
+        };
+
+        const onMouseUp = (e) => {
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+
+            this.chatBtn.classList.remove('dragging');
+
+            // If the button wasn't dragged, treat it as a click
+            if (!hasMoved) {
+                this.toggleChatModal();
+            }
+
+            isDragging = false;
+        };
+
+        // Touch events for mobile
+        const onTouchStart = (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            isDragging = false;
+            hasMoved = false;
+
+            const rect = this.chatBtn.getBoundingClientRect();
+            dragOffset.x = touch.clientX - rect.left;
+            dragOffset.y = touch.clientY - rect.top;
+
+            initialPosition.x = touch.clientX;
+            initialPosition.y = touch.clientY;
+
+            this.chatBtn.classList.add('dragging');
+
+            document.addEventListener('touchmove', onTouchMove, { passive: false });
+            document.addEventListener('touchend', onTouchEnd);
+        };
+
+        const onTouchMove = (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+
+            const distance = Math.sqrt(
+                Math.pow(touch.clientX - initialPosition.x, 2) +
+                Math.pow(touch.clientY - initialPosition.y, 2)
+            );
+
+            if (distance > 5) {
+                isDragging = true;
+                hasMoved = true;
+            }
+
+            if (isDragging) {
+                const newX = touch.clientX - dragOffset.x;
+                const newY = touch.clientY - dragOffset.y;
+
+                const maxX = window.innerWidth - this.chatBtn.offsetWidth;
+                const maxY = window.innerHeight - this.chatBtn.offsetHeight;
+
+                const constrainedX = Math.max(0, Math.min(newX, maxX));
+                const constrainedY = Math.max(0, Math.min(newY, maxY));
+
+                this.chatBtn.style.left = constrainedX + 'px';
+                this.chatBtn.style.top = constrainedY + 'px';
+                this.chatBtn.style.right = 'auto';
+                this.chatBtn.style.bottom = 'auto';
+            }
+        };
+
+        const onTouchEnd = (e) => {
+            document.removeEventListener('touchmove', onTouchMove);
+            document.removeEventListener('touchend', onTouchEnd);
+
+            this.chatBtn.classList.remove('dragging');
+
+            // If the button wasn't dragged, treat it as a tap
+            if (!hasMoved) {
+                this.toggleChatModal();
+            }
+
+            isDragging = false;
+        };
+
+        // Disable default click handling when dragging
+        this.chatBtn.addEventListener('click', (e) => {
+            if (hasMoved) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        });
+
+        this.chatBtn.addEventListener('mousedown', onMouseDown);
+        this.chatBtn.addEventListener('touchstart', onTouchStart, { passive: false });
+
+        console.log('✅ Drag functionality initialized for floating chat button');
     }
 
     toggleChatModal() {
