@@ -1229,13 +1229,24 @@ RESPONSE FORMAT: Return ONLY the SQL query, nothing else."""
 
                         try:
                             cursor.execute(sql_query)
-                            results = cursor.fetchall()
 
-                            # Convert RealDictRow to regular dict for JSON serialization
-                            json_results = [dict(row) for row in results]
+                            # 🔧 CRITICAL FIX: Handle different types of SQL queries
+                            if sql_query.strip().upper().startswith(('UPDATE', 'DELETE', 'INSERT')):
+                                # For modification queries, get row count instead of results
+                                affected_rows = cursor.rowcount
+                                conn.commit()  # Commit the transaction
 
-                            app_logger.info(f"✅ Query executed successfully, {len(json_results)} rows returned")
-                            return True, json_results, ""
+                                # Return success message with affected rows count
+                                json_results = [{"message": f"Query executed successfully", "affected_rows": affected_rows}]
+                                app_logger.info(f"✅ {sql_query.split()[0]} query executed successfully, {affected_rows} rows affected")
+                                return True, json_results, ""
+                            else:
+                                # For SELECT queries, fetch results normally
+                                results = cursor.fetchall()
+                                # Convert RealDictRow to regular dict for JSON serialization
+                                json_results = [dict(row) for row in results]
+                                app_logger.info(f"✅ Query executed successfully, {len(json_results)} rows returned")
+                                return True, json_results, ""
 
                         except psycopg2.ProgrammingError as pe:
                             error_msg = f"SQL programming error: {pe}"
@@ -1350,6 +1361,72 @@ RESPONSE FORMAT: Return ONLY the SQL query, nothing else."""
         except Exception as e:
             logger.error(f"❌ Database context storage error: {e}")
 
+    def store_shopping_conversation_context(self, user_query: str, response: str, user_id: str, session_id: str,
+                                          shopping_data: Dict[str, Any] = None):
+        """
+        🛒 Store shopping conversation context in database for persistent memory
+        This ensures all shopping conversations are tracked in conversation_context table
+        """
+        try:
+            conn = self.get_database_connection()
+            if not conn:
+                logger.error("❌ No database connection for storing shopping context")
+                return
+
+            cursor = conn.cursor()
+
+            # Create entities from shopping data
+            entities = {
+                'shopping_action': True,
+                'session_id': session_id,
+                'user_id': user_id
+            }
+
+            if shopping_data:
+                entities.update({
+                    'action': shopping_data.get('action'),
+                    'success': shopping_data.get('success', False),
+                    'cart_summary': shopping_data.get('cart_summary', {}),
+                    'order_info': shopping_data.get('order_summary', {}),
+                    'product_added': shopping_data.get('product_added', {})
+                })
+
+            # Prepare execution result to store product information if available
+            execution_result = []
+            if shopping_data and shopping_data.get('product_added'):
+                product = shopping_data['product_added']
+                execution_result = [{
+                    'product_id': product.get('product_id'),
+                    'product_name': product.get('product_name'),
+                    'price': product.get('price'),
+                    'category': product.get('category'),
+                    'brand': product.get('brand')
+                }]
+
+            cursor.execute("""
+                INSERT INTO conversation_context
+                (user_id, session_id, query_type, entities, sql_query, execution_result, response_text, user_query, timestamp)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                user_id,
+                session_id,
+                'shopping_action',
+                safe_json_dumps(entities),
+                None,  # No SQL query for shopping actions
+                safe_json_dumps(execution_result),
+                response,
+                user_query,
+                datetime.now()
+            ))
+
+            conn.commit()
+            cursor.close()
+            conn.close()
+            logger.info(f"✅ Shopping context stored in database for user {user_id}, session {session_id}")
+
+        except Exception as e:
+            logger.error(f"❌ Failed to store shopping context in database: {e}")
+
     def get_conversation_history(self, user_id: str = "anonymous", limit: int = 5) -> List[Dict]:
         """Get recent conversation history with enhanced database fallback"""
 
@@ -1440,11 +1517,30 @@ RESPONSE FORMAT: Return ONLY the SQL query, nothing else."""
             last_product_context = None
 
             for row in cursor.fetchall():
+                # 🔧 CRITICAL FIX: Handle both string and dict data types properly
+                entities_data = row[2]
+                if isinstance(entities_data, str):
+                    try:
+                        entities_data = json.loads(entities_data)
+                    except (json.JSONDecodeError, TypeError):
+                        entities_data = {}
+                elif not isinstance(entities_data, dict):
+                    entities_data = {}
+
+                execution_result_data = row[3]
+                if isinstance(execution_result_data, str):
+                    try:
+                        execution_result_data = json.loads(execution_result_data)
+                    except (json.JSONDecodeError, TypeError):
+                        execution_result_data = []
+                elif not isinstance(execution_result_data, list):
+                    execution_result_data = []
+
                 conv_entry = {
                     "user_query": row[0],
                     "response": row[1],
-                    "entities": json.loads(row[2]) if row[2] else {},
-                    "execution_result": json.loads(row[3]) if row[3] else [],
+                    "entities": entities_data,
+                    "execution_result": execution_result_data,
                     "query_type": row[4],
                     "timestamp": row[5].isoformat() if row[5] else ""
                 }
@@ -1815,24 +1911,57 @@ RESPONSE STYLE:
             # Generate response with enhanced context
             system_prompt = self._build_enhanced_system_prompt(enhanced_context)
 
+            # 🔧 SPECIAL HANDLING: Check if this is an order cancellation/update query
+            is_order_cancellation = (
+                'cancel' in query_context.user_query.lower() or
+                'no longer interested' in query_context.user_query.lower()
+            ) and any(
+                result.get('message') == 'Query executed successfully' and
+                result.get('affected_rows', 0) > 0
+                for result in query_context.execution_result
+            )
+
+            # Generate AI response with special handling for order operations
+            if is_order_cancellation:
+                affected_rows = next(
+                    (result.get('affected_rows', 0) for result in query_context.execution_result
+                     if result.get('affected_rows')), 0
+                )
+
+                # Special response for order cancellation
+                response_content = f"""
+                Based on the customer query: "{query_context.user_query}"
+
+                ✅ Order cancellation successful: {affected_rows} order(s) have been cancelled/returned.
+
+                Customer emotion detected: {sentiment_data['emotion']} (intensity: {sentiment_data['intensity']})
+
+                {memory_guidance}
+
+                Provide a compassionate, understanding response about order cancellation. Acknowledge their decision,
+                confirm the cancellation, and offer assistance for future orders. Use appropriate emojis for the emotional tone.
+                """
+            else:
+                response_content = f"""
+                Based on the customer query: "{query_context.user_query}"
+
+                Query results: {safe_json_dumps(query_context.execution_result, max_items=3)}
+
+                Customer emotion detected: {sentiment_data['emotion']} (intensity: {sentiment_data['intensity']})
+
+                {memory_guidance}
+
+                {f"Intelligent recommendations available: {recommendations_data['total_recommendations']} products across {len(recommendations_data.get('recommendations', {}))} categories" if recommendations_data and recommendations_data.get('success') else ""}
+
+                Provide a helpful, empathetic Nigerian customer support response following the emotional style guidelines. Use appropriate emojis based on the detected emotion.
+                """
+
             # Generate AI response
             response = self.groq_client.chat.completions.create(
                 model="meta-llama/llama-4-scout-17b-16e-instruct",
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"""
-                    Based on the customer query: "{query_context.user_query}"
-
-                    Query results: {safe_json_dumps(query_context.execution_result, max_items=3)}
-
-                    Customer emotion detected: {sentiment_data['emotion']} (intensity: {sentiment_data['intensity']})
-
-                    {memory_guidance}
-
-                    {f"Intelligent recommendations available: {recommendations_data['total_recommendations']} products across {len(recommendations_data.get('recommendations', {}))} categories" if recommendations_data and recommendations_data.get('success') else ""}
-
-                    Provide a helpful, empathetic Nigerian customer support response following the emotional style guidelines. Use appropriate emojis based on the detected emotion.
-                    """}
+                    {"role": "user", "content": response_content}
                 ],
                 temperature=0.7,
                 max_tokens=2000
@@ -2577,6 +2706,20 @@ How can I help you with your raqibtech.com experience today? 🌟"""
                                     except Exception as e_mem_store_shop_log:
                                         logger.warning(f"⚠️ Failed to log shopping turn interaction: {e_mem_store_shop_log}")
 
+                                # 🆕 CRITICAL FIX: Store shopping conversation in database for persistence
+                                try:
+                                    # 🔧 FIX: Ensure user_id_for_history is available in this scope
+                                    user_id_for_shopping = session_context.get('user_id', 'anonymous') if session_context else 'anonymous'
+                                    self.store_shopping_conversation_context(
+                                        user_query=user_query,
+                                        response=enhanced_response_text,
+                                        user_id=user_id_for_shopping,
+                                        session_id=session_id,
+                                        shopping_data=shopping_result
+                                    )
+                                except Exception as e_shopping_db_store:
+                                    logger.warning(f"⚠️ Failed to store shopping context in database: {e_shopping_db_store}")
+
                                 return {
                                     'success': True, 'response': enhanced_response_text,
                                     'query_type': 'shopping_action', 'execution_time': f"{time.time() - start_time:.3f}s",
@@ -2715,17 +2858,52 @@ How can I help you with your raqibtech.com experience today? 🌟"""
                     for order in recent_orders:
                         logger.info(f"   Order {order['order_id']}: {order['order_status']} - ₦{order['total_amount']} ({order['created_at']})")
 
-                    # Check if the specific order exists (either by formatted ID or database ID)
+                    # 🔧 CRITICAL FIX: Handle both formatted order IDs (RQB...) and integer order IDs
                     if order_id.startswith('RQB'):
                         # This is a formatted order ID, extract the numeric part
-                        numeric_part = order_id.replace('RQB', '').replace(datetime.now().strftime('%Y%m%d'), '')
+                        # Format: RQB{YYYYMMDD}{order_id:08d}
                         try:
+                            # Extract date part and order ID part
+                            date_part = order_id[3:11]  # YYYYMMDD (8 chars after RQB)
+                            numeric_part = order_id[11:]  # Remaining digits
                             db_order_id = int(numeric_part)
-                            cursor.execute("SELECT * FROM orders WHERE order_id = %s", (db_order_id,))
-                        except:
-                            cursor.execute("SELECT * FROM orders WHERE customer_id = %s ORDER BY created_at DESC LIMIT 1", (customer_id,))
+
+                            logger.info(f"🔍 Looking for database order ID {db_order_id} extracted from formatted ID {order_id}")
+
+                            cursor.execute("""
+                                SELECT order_id, customer_id, order_status, total_amount, created_at
+                                FROM orders
+                                WHERE order_id = %s AND customer_id = %s
+                            """, (db_order_id, customer_id))
+                        except (ValueError, IndexError) as e:
+                            logger.warning(f"⚠️ Could not parse formatted order ID {order_id}: {e}")
+                            # Fallback to latest order for this customer
+                            cursor.execute("""
+                                SELECT order_id, customer_id, order_status, total_amount, created_at
+                                FROM orders
+                                WHERE customer_id = %s
+                                ORDER BY created_at DESC
+                                LIMIT 1
+                            """, (customer_id,))
                     else:
-                        cursor.execute("SELECT * FROM orders WHERE customer_id = %s ORDER BY created_at DESC LIMIT 1", (customer_id,))
+                        # This is already a numeric order ID
+                        try:
+                            db_order_id = int(order_id)
+                            cursor.execute("""
+                                SELECT order_id, customer_id, order_status, total_amount, created_at
+                                FROM orders
+                                WHERE order_id = %s AND customer_id = %s
+                            """, (db_order_id, customer_id))
+                        except ValueError:
+                            logger.warning(f"⚠️ Invalid order ID format: {order_id}")
+                            # Fallback to latest order for this customer
+                            cursor.execute("""
+                                SELECT order_id, customer_id, order_status, total_amount, created_at
+                                FROM orders
+                                WHERE customer_id = %s
+                                ORDER BY created_at DESC
+                                LIMIT 1
+                            """, (customer_id,))
 
                     order_record = cursor.fetchone()
                     if order_record:
