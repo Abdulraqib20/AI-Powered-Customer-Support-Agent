@@ -356,73 +356,127 @@ class OrderAIAssistant:
 
     def extract_product_info(self, user_message: str, product_name_hint: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
-        🆕 Extract specific product information from user message or hint by querying the database.
-        Prioritizes product_name_hint if provided.
+        🔍 Enhanced product extraction with flexible matching and synonym support
         """
-        target_product_name = product_name_hint
-        if not target_product_name:
-            # Try to extract from user_message if no hint. This is a simplified extraction.
-            # More robust extraction would involve NER or more complex regex.
-            # Example: "add the Tecno Camon 20 Pro 5G for me" -> "Tecno Camon 20 Pro 5G"
-            # This is a simplified version; parse_order_intent is better for primary extraction
-            match = re.search(r'(?:add|buy|get|order|product is|the|a)\s*(.+?)(?:\s*to cart|\s*for me|$)', user_message.lower())
-            if match:
-                target_product_name = match.group(1).strip()
-                # Clean common trailing phrases
-                target_product_name = re.sub(r'\s*(to my cart|to the cart|for me)$', '', target_product_name).strip()
+        from psycopg2.extras import RealDictCursor
 
-        if not target_product_name:
-            logger.warning("⚠️ No product name found in user message or hint for DB lookup.")
-            return None
+        # Use hint if provided, otherwise extract from message
+        target_product_name = product_name_hint or user_message.strip()
 
-        logger.info(f"🔍 Attempting to find product in DB: '{target_product_name}'")
-        conn = None
-        db_manager = initialize_database()
+        # 🆕 ENHANCED: Product name preprocessing and synonym mapping
+        target_product_name = target_product_name.lower().strip()
+
+        # Define product synonyms and variations
+        product_synonyms = {
+            'phone': ['iphone', 'samsung', 'smartphone', 'mobile', 'cell phone'],
+            'phones': ['iphone', 'samsung', 'smartphone', 'mobile', 'cell phone'],
+            'ios': ['iphone', 'ipad', 'apple'],
+            'apple': ['iphone', 'ipad', 'macbook', 'apple'],
+            'ipads': ['ipad'],
+            'tablet': ['ipad', 'samsung tab'],
+            'laptop': ['macbook', 'hp', 'dell', 'lenovo'],
+            'computer': ['macbook', 'hp', 'dell', 'laptop'],
+            'samsung phone': ['samsung galaxy', 'samsung'],
+            'android': ['samsung', 'tecno', 'infinix', 'xiaomi']
+        }
+
+        # 🆕 ENHANCED: Category-based search mapping
+        category_keywords = {
+            'electronics': ['phone', 'smartphone', 'tablet', 'laptop', 'computer', 'iphone', 'ipad', 'samsung'],
+            'computing': ['laptop', 'computer', 'macbook', 'hp', 'dell'],
+            'mobile': ['phone', 'smartphone', 'iphone', 'samsung', 'android']
+        }
+
         try:
+            db_manager = initialize_database()
             with db_manager.get_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                    # Use ILIKE for case-insensitive partial matching. Prioritize exact matches if possible.
-                    # This query can be expanded for more sophisticated matching (e.g., brand + model)
-                    # Ensure spaces are handled correctly by ILIKE.
-                    query = """
-                        SELECT product_id, product_name, category, brand, description, price, currency, in_stock, stock_quantity
-                        FROM products
-                        WHERE product_name ILIKE %s AND in_stock = TRUE
-                        ORDER BY (product_name = %s) DESC, price ASC
-                        LIMIT 1;
-                    """
-                    # The `(product_name = %s) DESC` part tries to give exact matches higher priority
-                    # The actual ILIKE pattern needs '%' for wildcard matching.
-                    search_pattern = f"%{target_product_name}%"
-                    exact_match_term = target_product_name # For exact match prioritization
 
-                    cursor.execute(query, (search_pattern, exact_match_term))
-                    product_data = cursor.fetchone()
+                    # 🆕 ENHANCED: Multi-stage search strategy
+                    search_attempts = []
 
-                    if product_data:
-                        logger.info(f"✅ Product found in DB: {product_data['product_name']}")
-                        # Convert Decimal to float for easier handling if price is Decimal
-                        if 'price' in product_data and hasattr(product_data['price'], 'quantize'): # Check if Decimal
-                            product_data['price'] = float(product_data['price'])
-                        return dict(product_data)
-                    else:
-                        logger.warning(f"🟡 Product '{target_product_name}' not found in DB with ILIKE '%{target_product_name}%'.")
-                        # Try a broader search if initial one fails, e.g. splitting words
-                        words = target_product_name.split()
-                        if len(words) > 1:
-                            broader_search_pattern = "%" + "%".join(words) + "%"
-                            logger.info(f" AgamaTrying broader search with pattern: {broader_search_pattern}")
-                            cursor.execute(query, (broader_search_pattern, exact_match_term)) # exact_match_term remains for priority sort
+                    # Stage 1: Direct name match
+                    search_attempts.append({
+                        'pattern': f"%{target_product_name}%",
+                        'description': 'Direct name match'
+                    })
+
+                    # Stage 2: Synonym expansion
+                    if target_product_name in product_synonyms:
+                        for synonym in product_synonyms[target_product_name]:
+                            search_attempts.append({
+                                'pattern': f"%{synonym}%",
+                                'description': f'Synonym match for {target_product_name} -> {synonym}'
+                            })
+
+                    # Stage 3: Category-based search
+                    for category, keywords in category_keywords.items():
+                        if target_product_name in keywords:
+                            search_attempts.append({
+                                'pattern': f"%{category}%",
+                                'description': f'Category match: {category}',
+                                'search_field': 'category'
+                            })
+
+                    # Stage 4: Partial word matching for compound words
+                    words = target_product_name.split()
+                    if len(words) > 1:
+                        for word in words:
+                            if len(word) > 2:  # Avoid very short words
+                                search_attempts.append({
+                                    'pattern': f"%{word}%",
+                                    'description': f'Word component match: {word}'
+                                })
+
+                    # 🆕 ENHANCED: Execute search attempts in order of priority
+                    for attempt in search_attempts:
+                        search_field = attempt.get('search_field', 'product_name')
+
+                        query = f"""
+                            SELECT product_id, product_name, category, brand, description, price, currency, in_stock, stock_quantity
+                            FROM products
+                            WHERE {search_field} ILIKE %s AND in_stock = TRUE
+                            ORDER BY
+                                (LOWER({search_field}) = LOWER(%s)) DESC,  -- Exact matches first
+                                LENGTH({search_field}) ASC,                -- Shorter names first
+                                price ASC
+                            LIMIT 1;
+                        """
+
+                        cursor.execute(query, (attempt['pattern'], target_product_name))
+                        product_data = cursor.fetchone()
+
+                        if product_data:
+                            logger.info(f"✅ Product found via {attempt['description']}: {product_data['product_name']}")
+                            # Convert Decimal to float for easier handling if price is Decimal
+                            if 'price' in product_data and hasattr(product_data['price'], 'quantize'):
+                                product_data['price'] = float(product_data['price'])
+                            return dict(product_data)
+                        else:
+                            logger.debug(f"🔍 No match for {attempt['description']}: {attempt['pattern']}")
+
+                    # 🆕 ENHANCED: Final fallback - brand-based search
+                    brand_keywords = ['apple', 'samsung', 'hp', 'dell', 'lenovo', 'tecno', 'infinix', 'xiaomi']
+                    for brand in brand_keywords:
+                        if brand in target_product_name:
+                            cursor.execute("""
+                                SELECT product_id, product_name, category, brand, description, price, currency, in_stock, stock_quantity
+                                FROM products
+                                WHERE brand ILIKE %s AND in_stock = TRUE
+                                ORDER BY price ASC
+                                LIMIT 1;
+                            """, (f"%{brand}%",))
+
                             product_data = cursor.fetchone()
                             if product_data:
-                                logger.info(f"✅ Product found in DB (broader search): {product_data['product_name']}")
+                                logger.info(f"✅ Product found via brand match ({brand}): {product_data['product_name']}")
                                 if 'price' in product_data and hasattr(product_data['price'], 'quantize'):
                                     product_data['price'] = float(product_data['price'])
                                 return dict(product_data)
-                            else:
-                                logger.warning(f"🟡 Product '{target_product_name}' still not found with broader search.")
 
-            return None
+                    logger.warning(f"🟡 No product found for '{target_product_name}' after all search attempts.")
+                    return None
+
         except Exception as e:
             logger.error(f"❌ Error querying product from DB: {e}")
             return None

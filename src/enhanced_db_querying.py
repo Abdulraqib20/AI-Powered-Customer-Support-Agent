@@ -1077,6 +1077,126 @@ RESPONSE FORMAT: Return ONLY the SQL query, nothing else."""
                 LIMIT 20;
                 """
 
+        elif query_type == QueryType.PRODUCT_INFO_GENERAL:
+            # 🆕 ENHANCED: More flexible product search with synonyms
+            product_synonyms = {
+                'phone': ['smartphone', 'mobile', 'iphone', 'samsung'],
+                'phones': ['smartphone', 'mobile', 'iphone', 'samsung', 'cell phone'],
+                'ios': ['iphone', 'ipad', 'apple'],
+                'apple': ['iphone', 'ipad', 'macbook'],
+                'ipads': ['ipad'],
+                'tablet': ['ipad', 'samsung tab'],
+                'laptop': ['macbook', 'hp', 'dell', 'lenovo'],
+                'computer': ['laptop', 'macbook', 'hp', 'dell'],
+                'android': ['samsung', 'tecno', 'infinix']
+            }
+
+            if entities.get('product_keywords'):
+                # Enhanced product search with multiple strategies
+                keywords = entities['product_keywords']
+                search_conditions = []
+                search_params = []
+
+                for keyword in keywords[:3]:  # Limit to first 3 keywords
+                    keyword_lower = keyword.lower()
+
+                    # Direct product name matching
+                    search_conditions.append("p.product_name ILIKE %s")
+                    search_params.append(f"%{keyword}%")
+
+                    # Brand matching
+                    search_conditions.append("p.brand ILIKE %s")
+                    search_params.append(f"%{keyword}%")
+
+                    # Category matching
+                    search_conditions.append("p.category ILIKE %s")
+                    search_params.append(f"%{keyword}%")
+
+                    # Synonym expansion
+                    if keyword_lower in product_synonyms:
+                        for synonym in product_synonyms[keyword_lower]:
+                            search_conditions.append("p.product_name ILIKE %s")
+                            search_params.append(f"%{synonym}%")
+                            search_conditions.append("p.brand ILIKE %s")
+                            search_params.append(f"%{synonym}%")
+
+                where_clause = " OR ".join(search_conditions)
+
+                # Add the primary keyword for ordering
+                primary_keyword = keywords[0] if keywords else ''
+
+                # Build the enhanced SQL query
+                search_params_str = []
+                for param in search_params:
+                    search_params_str.append(f"'{param.replace('%', '')}'")
+
+                # Replace parameters in where clause
+                where_clause_with_params = where_clause
+                param_index = 0
+                while '%s' in where_clause_with_params and param_index < len(search_params):
+                    where_clause_with_params = where_clause_with_params.replace('%s', f"'{search_params[param_index]}'", 1)
+                    param_index += 1
+
+                sql_query = f"""
+                SELECT p.product_id, p.product_name, p.category, p.brand, p.description,
+                       p.price, p.currency, p.in_stock, p.stock_quantity,
+                       CASE
+                           WHEN p.stock_quantity = 0 THEN 'Out of Stock'
+                           WHEN p.stock_quantity <= 5 THEN 'Low Stock'
+                           WHEN p.stock_quantity <= 15 THEN 'Limited Stock'
+                           ELSE 'In Stock'
+                       END as stock_status
+                FROM products p
+                WHERE ({where_clause_with_params}) AND p.in_stock = TRUE
+                ORDER BY
+                    -- Prioritize exact matches
+                    (p.product_name ILIKE '%{primary_keyword}%') DESC,
+                    -- Then prioritize by stock availability
+                    p.stock_quantity DESC,
+                    -- Finally by price
+                    p.price ASC
+                LIMIT 10;
+                """
+
+                logger.info(f"🔍 Enhanced product search SQL generated for keywords: {keywords}")
+                return sql_query
+
+            elif entities.get('brands'):
+                brand = entities['brands'][0]
+                return f"""
+                SELECT p.product_id, p.product_name, p.category, p.brand, p.description,
+                       p.price, p.currency, p.in_stock, p.stock_quantity,
+                       CASE
+                           WHEN p.stock_quantity = 0 THEN 'Out of Stock'
+                           WHEN p.stock_quantity <= 5 THEN 'Low Stock'
+                           WHEN p.stock_quantity <= 15 THEN 'Limited Stock'
+                           ELSE 'In Stock'
+                       END as stock_status
+                FROM products p
+                WHERE p.brand ILIKE '%{brand}%' AND p.in_stock = TRUE
+                ORDER BY p.price ASC
+                LIMIT 10;
+                """
+            else:
+                # Fallback: show popular products
+                return """
+                SELECT p.product_id, p.product_name, p.category, p.brand, p.description,
+                       p.price, p.currency, p.in_stock, p.stock_quantity,
+                       CASE
+                           WHEN p.stock_quantity = 0 THEN 'Out of Stock'
+                           WHEN p.stock_quantity <= 5 THEN 'Low Stock'
+                           ELSE 'In Stock'
+                       END as stock_status,
+                       COUNT(o.order_id) as popularity
+                FROM products p
+                LEFT JOIN orders o ON p.product_id = o.product_id
+                WHERE p.in_stock = TRUE AND p.stock_quantity > 0
+                GROUP BY p.product_id, p.product_name, p.category, p.brand, p.description,
+                         p.price, p.currency, p.in_stock, p.stock_quantity
+                ORDER BY popularity DESC, p.price ASC
+                LIMIT 15;
+                """
+
         else:
             return "SELECT 'Fallback query executed' as message;"
 
@@ -1156,7 +1276,7 @@ RESPONSE FORMAT: Return ONLY the SQL query, nothing else."""
 
     def store_conversation_context(self, query_context: QueryContext, user_id: str = "anonymous"):
         """
-        📝 Store conversation context in "notepad" format
+        📝 Store conversation context in both Redis and database for persistent memory
         """
 
         notepad_entry = {
@@ -1171,7 +1291,7 @@ RESPONSE FORMAT: Return ONLY the SQL query, nothing else."""
             "error_message": query_context.error_message
         }
 
-        # Store in Redis or memory
+        # Store in Redis or memory (existing functionality)
         try:
             if self.redis_client:
                 key = f"conversation:{user_id}:{query_context.timestamp.strftime('%Y%m%d_%H%M%S')}"
@@ -1192,14 +1312,48 @@ RESPONSE FORMAT: Return ONLY the SQL query, nothing else."""
                 if len(self._memory_store[user_id]) > 20:
                     self._memory_store[user_id] = self._memory_store[user_id][-20:]
 
-            logger.info(f"📝 Context stored for user {user_id}")
+            logger.info(f"📝 Context stored in Redis for user {user_id}")
 
         except Exception as e:
-            logger.error(f"❌ Context storage error: {e}")
+            logger.error(f"❌ Context storage error in Redis: {e}")
+
+        # 🆕 CRITICAL FIX: Also store in database for persistent memory
+        try:
+            conn = self.get_database_connection()
+            if conn:
+                cursor = conn.cursor()
+
+                # Extract session_id from user_id if available
+                session_id = query_context.entities.get('session_id', user_id)
+
+                cursor.execute("""
+                    INSERT INTO conversation_context
+                    (user_id, session_id, query_type, entities, sql_query, execution_result, response_text, user_query, timestamp)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    user_id,
+                    session_id,
+                    query_context.query_type.value,
+                    safe_json_dumps(query_context.entities),
+                    query_context.sql_query,
+                    safe_json_dumps(query_context.execution_result),
+                    query_context.response,
+                    query_context.user_query,
+                    query_context.timestamp
+                ))
+
+                conn.commit()
+                cursor.close()
+                conn.close()
+                logger.info(f"✅ Context stored in database for user {user_id}")
+
+        except Exception as e:
+            logger.error(f"❌ Database context storage error: {e}")
 
     def get_conversation_history(self, user_id: str = "anonymous", limit: int = 5) -> List[Dict]:
-        """Get recent conversation history for context"""
+        """Get recent conversation history with enhanced database fallback"""
 
+        # First try Redis
         try:
             if self.redis_client:
                 history_key = f"conversation_history:{user_id}"
@@ -1211,14 +1365,131 @@ RESPONSE FORMAT: Return ONLY the SQL query, nothing else."""
                     if entry_data:
                         history.append(json.loads(entry_data))
 
-                return history
+                if history:
+                    logger.info(f"🔍 Retrieved {len(history)} conversation entries from Redis for {user_id}")
+                    return history
             else:
                 # Memory fallback
-                return self._memory_store.get(user_id, [])[-limit:]
+                memory_history = self._memory_store.get(user_id, [])[-limit:]
+                if memory_history:
+                    logger.info(f"🔍 Retrieved {len(memory_history)} conversation entries from memory for {user_id}")
+                    return memory_history
 
         except Exception as e:
-            logger.error(f"❌ History retrieval error: {e}")
-            return []
+            logger.error(f"❌ Redis history retrieval error: {e}")
+
+        # 🆕 ENHANCED: Fallback to database for persistent memory
+        try:
+            conn = self.get_database_connection()
+            if conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT user_query, response_text, entities, execution_result, query_type, timestamp
+                    FROM conversation_context
+                    WHERE user_id = %s OR session_id = %s
+                    ORDER BY timestamp DESC
+                    LIMIT %s
+                """, (user_id, user_id, limit))
+
+                db_history = []
+                for row in cursor.fetchall():
+                    db_history.append({
+                        "user_query": row[0],
+                        "response": row[1],
+                        "entities": json.loads(row[2]) if row[2] else {},
+                        "execution_result": json.loads(row[3]) if row[3] else [],
+                        "query_type": row[4],
+                        "timestamp": row[5].isoformat() if row[5] else ""
+                    })
+
+                cursor.close()
+                conn.close()
+
+                if db_history:
+                    logger.info(f"🔍 Retrieved {len(db_history)} conversation entries from database for {user_id}")
+                    return db_history
+
+        except Exception as e:
+            logger.error(f"❌ Database history retrieval error: {e}")
+
+        logger.warning(f"⚠️ No conversation history found for {user_id}")
+        return []
+
+    def get_enhanced_conversation_memory(self, user_id: str, session_id: str = None, limit: int = 10) -> Dict[str, Any]:
+        """🧠 Get enhanced conversation memory with context-aware product and entity tracking"""
+
+        try:
+            conn = self.get_database_connection()
+            if not conn:
+                return {"recent_context": [], "mentioned_products": [], "conversation_summary": "No database connection"}
+
+            cursor = conn.cursor()
+
+            # Get recent conversation with product mentions
+            cursor.execute("""
+                SELECT user_query, response_text, entities, execution_result, query_type, timestamp
+                FROM conversation_context
+                WHERE (user_id = %s OR session_id = %s)
+                AND timestamp >= NOW() - INTERVAL '2 hours'
+                ORDER BY timestamp DESC
+                LIMIT %s
+            """, (user_id, session_id or user_id, limit))
+
+            recent_conversations = []
+            mentioned_products = []
+            last_product_context = None
+
+            for row in cursor.fetchall():
+                conv_entry = {
+                    "user_query": row[0],
+                    "response": row[1],
+                    "entities": json.loads(row[2]) if row[2] else {},
+                    "execution_result": json.loads(row[3]) if row[3] else [],
+                    "query_type": row[4],
+                    "timestamp": row[5].isoformat() if row[5] else ""
+                }
+                recent_conversations.append(conv_entry)
+
+                # Extract product information from execution results
+                if conv_entry["execution_result"]:
+                    for result in conv_entry["execution_result"]:
+                        if isinstance(result, dict) and 'product_name' in result:
+                            product_info = {
+                                "product_name": result.get('product_name'),
+                                "product_id": result.get('product_id'),
+                                "price": result.get('price'),
+                                "category": result.get('category'),
+                                "brand": result.get('brand'),
+                                "mentioned_in_query": conv_entry["user_query"],
+                                "timestamp": conv_entry["timestamp"]
+                            }
+                            mentioned_products.append(product_info)
+                            last_product_context = product_info
+
+            cursor.close()
+            conn.close()
+
+            # Create conversation summary
+            conversation_summary = ""
+            if recent_conversations:
+                last_query = recent_conversations[0]["user_query"]
+                if mentioned_products:
+                    last_product = mentioned_products[0]["product_name"]
+                    conversation_summary = f"Recent discussion about {last_product}. Last query: {last_query[:100]}..."
+                else:
+                    conversation_summary = f"Recent conversation. Last query: {last_query[:100]}..."
+
+            return {
+                "recent_context": recent_conversations,
+                "mentioned_products": mentioned_products,
+                "last_product_context": last_product_context,
+                "conversation_summary": conversation_summary,
+                "context_available": len(recent_conversations) > 0
+            }
+
+        except Exception as e:
+            logger.error(f"❌ Error getting enhanced conversation memory: {e}")
+            return {"recent_context": [], "mentioned_products": [], "conversation_summary": "Error retrieving memory"}
 
     def _get_user_friendly_error_message(self, error_message: str, user_query: str) -> str:
         """
@@ -1438,15 +1709,79 @@ RESPONSE STYLE:
 - End positively: "Hope this helps! ✨"
 """
 
-    def generate_nigerian_response(self, query_context: QueryContext, conversation_history: List[Dict], session_context: Dict[str, Any] = None) -> str:
+    def generate_nigerian_response(self, query_context: QueryContext, conversation_history: List[Dict] = None, session_context: Dict[str, Any] = None) -> str:
         """🇳🇬 Generate Nigerian-style empathetic response with intelligent recommendations"""
         try:
+            # 🆕 ENHANCED: Get enhanced conversation memory
+            user_id = session_context.get('user_id', 'anonymous') if session_context else 'anonymous'
+            session_id = session_context.get('session_id') if session_context else None
+
+            enhanced_memory = self.get_enhanced_conversation_memory(user_id, session_id, limit=5)
+
+            # Detect if this is a contextual reference (like "it", "this", "that product")
+            contextual_words = ['it', 'this', 'that', 'they', 'them', 'one', 'the product', 'the item']
+            user_query_lower = query_context.user_query.lower()
+            is_contextual_reference = any(word in user_query_lower for word in contextual_words)
+
+            # Enhanced memory guidance for AI
+            memory_guidance = ""
+            if enhanced_memory.get("context_available"):
+                memory_guidance = f"""
+                🧠 ENHANCED CONVERSATION MEMORY:
+                - {enhanced_memory['conversation_summary']}
+                - Products recently discussed: {len(enhanced_memory['mentioned_products'])} items
+                """
+
+                # If user is making contextual reference and we have product context
+                if is_contextual_reference and enhanced_memory.get('last_product_context'):
+                    last_product = enhanced_memory['last_product_context']
+                    memory_guidance += f"""
+                - ⚠️ CONTEXTUAL REFERENCE DETECTED: User likely referring to "{last_product['product_name']}"
+                - Last mentioned product: {last_product['product_name']} (₦{last_product.get('price', 'N/A')})
+                - CRITICAL: When user says "it", "this", or "that", they mean: {last_product['product_name']}
+                """
+
+                    # If it's an order/purchase request with contextual reference
+                    order_intents = ['order', 'buy', 'purchase', 'add to cart', 'want to order']
+                    if any(intent in user_query_lower for intent in order_intents) and is_contextual_reference:
+                        memory_guidance += f"""
+                - 🛒 SHOPPING ACTION WITH CONTEXT: User wants to {user_query_lower} the {last_product['product_name']}
+                - Provide shopping assistance for: {last_product['product_name']}
+                """
+
             customer_id = session_context.get('customer_id') if session_context else None
 
             # 🆕 DETECT USER SENTIMENT AND GET EMOTIONAL RESPONSE STYLE
             sentiment_data = self.detect_user_sentiment(query_context.user_query)
             empathetic_style = self.get_empathetic_response_style(sentiment_data, query_context)
             logger.info(f"🎭 Detected emotion: {sentiment_data['emotion']} (intensity: {sentiment_data['intensity']})")
+
+            # Get conversation context for reference
+            conversation_memory = None
+            if self.memory_system:
+                try:
+                    conversation_memory = self.memory_system.get_conversation_context(session_id or user_id)
+                except Exception as e:
+                    logger.warning(f"⚠️ Could not get conversation memory: {e}")
+
+            if conversation_memory:
+                buffer_memory = conversation_memory.get('buffer_memory', {})
+                session_state = conversation_memory.get('session_state', {})
+                entity_memory = conversation_memory.get('entity_memory', {})
+
+                # Recent conversation awareness
+                if buffer_memory.get('recent_turns'):
+                    recent_turns = buffer_memory['recent_turns'][:3]  # Last 3 turns
+                    last_user_input = buffer_memory.get('last_user_input', '')
+                    last_ai_response = buffer_memory.get('last_ai_response', '')
+
+                    memory_guidance += f"""
+                    🧠 CONVERSATION MEMORY CONTEXT:
+                    - Previous user input: "{last_user_input[:100]}..."
+                    - Previous AI response: "{last_ai_response[:100]}..."
+                    - Recent conversation turns: {len(recent_turns)}
+                    - CRITICAL: Reference what was just discussed to maintain context!
+                    """
 
             # Get intelligent recommendations for product-related queries
             recommendations_data = None
@@ -1461,14 +1796,16 @@ RESPONSE STYLE:
                 'query_result': query_context.execution_result,
                 'query_type': query_context.query_type.value,
                 'user_query': query_context.user_query,
-                'conversation_history': conversation_history[-3:],  # Last 3 exchanges
+                'conversation_history': conversation_history[-3:] if conversation_history else [],  # Last 3 exchanges
                 'nigerian_time_context': NigerianBusinessIntelligence.get_nigerian_timezone_context(),
                 'session_context': session_context or {},
                 'recommendations': recommendations_data,
                 'customer_mood': sentiment_data['emotion'],  # 🆕 Add detected emotion
                 'sentiment_data': sentiment_data,  # 🆕 Add full sentiment data
                 'empathetic_style': empathetic_style,  # 🆕 Add emotional response style
-                'support_context': None
+                'support_context': None,
+                'enhanced_memory': enhanced_memory,  # 🆕 Add enhanced memory
+                'memory_guidance': memory_guidance  # 🆕 Add memory guidance
             }
 
             # Add support context if available
@@ -1489,6 +1826,8 @@ RESPONSE STYLE:
                     Query results: {safe_json_dumps(query_context.execution_result, max_items=3)}
 
                     Customer emotion detected: {sentiment_data['emotion']} (intensity: {sentiment_data['intensity']})
+
+                    {memory_guidance}
 
                     {f"Intelligent recommendations available: {recommendations_data['total_recommendations']} products across {len(recommendations_data.get('recommendations', {}))} categories" if recommendations_data and recommendations_data.get('success') else ""}
 
