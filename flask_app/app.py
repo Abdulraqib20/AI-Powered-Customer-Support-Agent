@@ -3001,6 +3001,131 @@ def confirm_order():
         }), 500
 
 
+# @app.route('/api/customer/profile', methods=['GET'])
+# def get_customer_profile():
+#     """Get comprehensive customer profile data for Account Hero section"""
+#     try:
+#         customer_id = session.get('customer_id') if session.get('user_authenticated') else None
+
+#         if not customer_id:
+#             return jsonify({
+#                 'success': False,
+#                 'error': 'Authentication required'
+#             }), 401
+
+#         # Get customer basic info
+#         customer = customer_repo.get_customer_by_id(customer_id)
+#         if not customer:
+#             return jsonify({
+#                 'success': False,
+#                 'error': 'Customer not found'
+#             }), 404
+
+#         # Get recent orders for statistics
+#         recent_orders = order_repo.get_orders_by_customer(customer_id, limit=20)
+
+#         # Count active orders (Pending and Processing)
+#         active_orders_count = len([order for order in recent_orders
+#                                  if order['order_status'] in ['Pending', 'Processing']])
+
+#         # Get total order count for tier progression
+#         total_orders_count = len(recent_orders)
+
+#         # Calculate member since date
+#         from datetime import datetime
+#         created_date = customer['created_at']
+#         if isinstance(created_date, str):
+#             try:
+#                 created_date = datetime.fromisoformat(created_date.replace('Z', '+00:00'))
+#             except:
+#                 created_date = datetime.now()
+#         member_since_formatted = created_date.strftime('%B %Y')
+
+#         # Simulate personalized recommendations count (in a real implementation,
+#         # this would come from the recommendation engine)
+#         recommendations_count = 12
+
+#         # Simulate saved payment methods count (would come from payment methods table)
+#         payment_methods_count = 2
+
+#         # Define tier benefits
+#         tier_benefits = {
+#             'Bronze': {
+#                 'discount': 0,
+#                 'description': 'Standard benefits',
+#                 'features': ['Basic support', 'Standard delivery']
+#             },
+#             'Silver': {
+#                 'discount': 5,
+#                 'description': '5% discount + priority support',
+#                 'features': ['5% discount on all orders', 'Priority customer support', 'Faster response times']
+#             },
+#             'Gold': {
+#                 'discount': 10,
+#                 'description': '10% discount + free delivery',
+#                 'features': ['10% discount on all orders', 'Free delivery nationwide', 'Priority support', 'Early access to sales']
+#             },
+#             'Platinum': {
+#                 'discount': 15,
+#                 'description': '15% discount + premium perks',
+#                 'features': ['15% discount on all orders', 'Free express delivery', 'Premium support', 'Exclusive products', 'VIP customer service']
+#             }
+#         }
+
+#         # Calculate next tier and progress
+#         tier_order = ['Bronze', 'Silver', 'Gold', 'Platinum']
+#         current_tier = customer['account_tier']
+#         current_tier_index = tier_order.index(current_tier) if current_tier in tier_order else 0
+#         next_tier = tier_order[current_tier_index + 1] if current_tier_index < len(tier_order) - 1 else None
+
+#         # Define tier requirements for progression
+#         tier_requirements = {'Silver': 5, 'Gold': 15, 'Platinum': 30}
+
+#         # Simple tier progression based on order count (you can implement more complex logic)
+#         orders_needed_for_next_tier = None
+#         if next_tier:
+#             required_orders = tier_requirements.get(next_tier, 999)
+#             orders_needed_for_next_tier = max(0, required_orders - total_orders_count)
+
+#         profile_data = {
+#             'customer_id': customer['customer_id'],
+#             'name': customer['name'],
+#             'email': customer['email'],
+#             'phone': customer['phone'],
+#             'state': customer['state'],
+#             'lga': customer['lga'],
+#             'address': customer['address'],
+#             'account_tier': current_tier,
+#             'member_since': member_since_formatted,
+#             'active_orders_count': active_orders_count,
+#             'total_orders_count': total_orders_count,
+#             'recommendations_count': recommendations_count,
+#             'payment_methods_count': payment_methods_count,
+#             'tier_benefits': tier_benefits.get(current_tier, tier_benefits['Bronze']),
+#             'next_tier': next_tier,
+#             'orders_needed_for_next_tier': orders_needed_for_next_tier,
+#             'tier_progression': {
+#                 'current': current_tier,
+#                 'next': next_tier,
+#                 'progress_percentage': min(100, (total_orders_count / tier_requirements.get(next_tier, total_orders_count + 1)) * 100) if next_tier else 100
+#             }
+#         }
+
+#         return jsonify({
+#             'success': True,
+#             'profile': profile_data,
+#             'message': 'Profile loaded successfully'
+#         })
+
+#     except Exception as e:
+#         app_logger.error(f"❌ Customer profile fetch error: {e}")
+#         return jsonify({
+#             'success': False,
+#             'error': 'Profile fetch failed',
+#             'message': str(e)
+#         }), 500
+
+
 if __name__ == '__main__':
     # Initialize session
     app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)
