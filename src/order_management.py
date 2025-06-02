@@ -490,7 +490,7 @@ class OrderManagementSystem:
             }
 
     def get_order_status(self, order_id: str, customer_id: int = None) -> Dict[str, Any]:
-        """📦 Get order status and tracking information"""
+        """📦 Get order status and tracking information with detailed pricing breakdown"""
         try:
             # Check Redis cache first
             if self.redis_client:
@@ -511,6 +511,7 @@ class OrderManagementSystem:
                     cursor.execute("""
                         SELECT DISTINCT
                             o.order_id,
+                            o.customer_id,
                             o.order_status as status,
                             o.payment_method,
                             o.total_amount,
@@ -520,7 +521,8 @@ class OrderManagementSystem:
                             c.address as delivery_address,
                             c.state,
                             c.lga,
-                            c.name as customer_name
+                            c.name as customer_name,
+                            c.account_tier
                         FROM orders o
                         JOIN customers c ON o.customer_id = c.customer_id
                         WHERE o.order_id = %s
@@ -554,6 +556,44 @@ class OrderManagementSystem:
                     products = [dict(row) for row in cursor.fetchall()]
                     order_data['products'] = products
                     order_data['items_count'] = len(products)
+
+                    # 🔧 CALCULATE DETAILED PRICING BREAKDOWN
+                    if products:
+                        # Calculate subtotal from actual product prices
+                        subtotal = sum(float(product['price']) * int(product['quantity']) for product in products)
+
+                        # Calculate delivery fee based on customer's state
+                        delivery_fee, delivery_days, delivery_zone = self.delivery_calculator.calculate_delivery_fee(
+                            order_data['state'], 1.0, subtotal
+                        )
+
+                        # Calculate tier discount
+                        tier_discount_rate = self._get_tier_discount_rate(order_data['account_tier'])
+                        tier_discount = subtotal * tier_discount_rate
+
+                        # Apply free delivery for Gold and Platinum tiers
+                        if order_data['account_tier'] in ['Gold', 'Platinum']:
+                            delivery_fee = 0
+
+                        # Calculate accurate total
+                        calculated_total = subtotal - tier_discount + delivery_fee
+
+                        # Add detailed pricing breakdown to order data
+                        order_data['pricing_breakdown'] = {
+                            'subtotal': subtotal,
+                            'delivery_fee': delivery_fee,
+                            'tier_discount': tier_discount,
+                            'tier_discount_rate': tier_discount_rate * 100,  # Convert to percentage
+                            'calculated_total': calculated_total,
+                            'original_total': float(order_data['total_amount']),
+                            'delivery_zone': delivery_zone,
+                            'delivery_days': delivery_days
+                        }
+
+                        # Use calculated total for consistency
+                        order_data['total_amount'] = calculated_total
+
+                        logger.info(f"🧮 Order {order_id} pricing breakdown: Subtotal=₦{subtotal:,.2f}, Delivery=₦{delivery_fee:,.2f}, Discount=₦{tier_discount:,.2f}, Total=₦{calculated_total:,.2f}")
 
                     # Ensure proper field formatting
                     if order_data.get('order_date'):

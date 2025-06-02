@@ -1573,9 +1573,11 @@
                                             <i class="bi bi-clock-history text-info me-2"></i>
                                             My Order History
                                         </h6>
-                                        <button class="btn btn-outline-primary btn-sm" onclick="loadMyOrders()" id="refreshOrdersBtn">
-                                            <i class="bi bi-arrow-clockwise me-1"></i>Refresh
-                                        </button>
+                                        <div class="btn-group">
+                                            <button class="btn btn-outline-primary btn-sm" onclick="loadMyOrders()" id="refreshOrdersBtn">
+                                                <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+                                            </button>
+                                        </div>
                                     </div>
                                     <div class="card-body">
                                         <!-- Order Loading State -->
@@ -3925,14 +3927,49 @@ function displayEnhancedOrderModal(order) {
                         <h6 class="card-title">
                             <i class="bi bi-currency-exchange text-success me-2"></i>Payment & Total
                         </h6>
+                        ${order.pricing_breakdown ? `
+                        <!-- Detailed Pricing Breakdown -->
+                        <div class="pricing-breakdown mb-3">
+                            <div class="d-flex justify-content-between mb-1">
+                                <span>Subtotal:</span>
+                                <span class="fw-medium">₦${parseFloat(order.pricing_breakdown.subtotal || 0).toLocaleString()}</span>
+                            </div>
+                            ${order.pricing_breakdown.tier_discount > 0 ? `
+                            <div class="d-flex justify-content-between mb-1 text-success">
+                                <span>Tier Discount (${order.pricing_breakdown.tier_discount_rate.toFixed(0)}%):</span>
+                                <span>-₦${parseFloat(order.pricing_breakdown.tier_discount || 0).toLocaleString()}</span>
+                            </div>
+                            ` : ''}
+                            <div class="d-flex justify-content-between mb-1">
+                                <span>Delivery Fee (${order.pricing_breakdown.delivery_zone || 'Standard'}):</span>
+                                <span class="fw-medium">${order.pricing_breakdown.delivery_fee > 0 ? '₦' + parseFloat(order.pricing_breakdown.delivery_fee).toLocaleString() : 'FREE'}</span>
+                            </div>
+                            <hr class="my-2">
+                            <div class="d-flex justify-content-between fw-bold">
+                                <span>Total Amount:</span>
+                                <span class="text-success">₦${parseFloat(order.pricing_breakdown.calculated_total || 0).toLocaleString()}</span>
+                            </div>
+                        </div>
+                        ` : `
+                        <!-- Fallback for orders without detailed breakdown -->
                         <div class="d-flex justify-content-between align-items-center">
                             <span class="fw-bold text-success">₦${parseFloat(order.total_amount || 0).toLocaleString()}</span>
                             <span class="badge bg-info">${order.payment_method || 'Not specified'}</span>
+                        </div>
+                        `}
+                        <div class="mt-2 d-flex justify-content-between align-items-center">
+                            <span class="badge bg-info">${order.payment_method || 'Not specified'}</span>
+                            ${order.pricing_breakdown && order.pricing_breakdown.tier_discount > 0 ? `
+                            <small class="text-success">
+                                <i class="bi bi-star-fill me-1"></i>Tier discount applied
+                            </small>
+                            ` : ''}
                         </div>
                         ${expectedDeliveryDate !== 'Not specified' ? `
                         <div class="mt-2">
                             <small class="text-muted">
                                 <i class="bi bi-truck me-1"></i>Expected delivery: ${expectedDeliveryDate}
+                                ${order.pricing_breakdown ? ` (${order.pricing_breakdown.delivery_days} days)` : ''}
                             </small>
                         </div>
                         ` : ''}
@@ -4101,63 +4138,47 @@ async function refreshOrderDetails(orderId) {
                 </div>
             `;
 
-            // Set a timeout to prevent infinite loading
-            window.modalRefreshTimeout = setTimeout(() => {
-                console.log('⏰ Refresh timeout reached');
-                if (modalBody) {
-                    modalBody.innerHTML = `
-                        <div class="text-center py-4">
-                            <i class="bi bi-exclamation-triangle text-warning" style="font-size: 2rem;"></i>
-                            <h6 class="mt-3">Refresh Timeout</h6>
-                            <p class="text-muted">The refresh is taking longer than expected.</p>
-                            <button class="btn btn-primary btn-sm" onclick="viewOrderDetails('${orderId}')">
-                                Try Again
-                            </button>
-                        </div>
-                    `;
-                }
-            }, 15000); // 15 second timeout
+            // Set timeout to refresh
+            window.modalRefreshTimeout = setTimeout(async () => {
+                const controller = new AbortController();
+                const fetchTimeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
 
-            // Use the fetch with AbortController from viewOrderDetails
-            const controller = new AbortController();
-            const fetchTimeoutId = setTimeout(() => controller.abort(), 10000);
+                try {
+                    const response = await fetch(`/api/orders/status/${orderId}`, {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        signal: controller.signal
+                    });
 
-            try {
-                const response = await fetch(`/api/orders/status/${orderId}`, {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    signal: controller.signal
-                });
+                    clearTimeout(fetchTimeoutId);
 
-                clearTimeout(fetchTimeoutId);
-                clearTimeout(window.modalRefreshTimeout);
-                window.modalRefreshTimeout = null;
+                    if (!response.ok) {
+                        throw new Error(`Failed to refresh order details (${response.status})`);
+                    }
 
-                if (!response.ok) {
-                    throw new Error(`Failed to refresh order details (${response.status})`);
-                }
+                    const data = await response.json();
 
-                const data = await response.json();
+                    if (data.success && data.order) {
+                        console.log('✅ Order details refreshed successfully');
+                        displayEnhancedOrderModal(data.order);
+                    } else {
+                        throw new Error(data.message || data.error || 'Order details not available');
+                    }
 
-                if (data.success && data.order) {
-                    console.log('✅ Order details refreshed successfully');
-                    displayEnhancedOrderModal(data.order);
-                } else {
-                    throw new Error(data.message || data.error || 'Order details not available');
+                } catch (fetchError) {
+                    clearTimeout(fetchTimeoutId);
+                    clearTimeout(window.modalRefreshTimeout);
+                    window.modalRefreshTimeout = null;
+
+                    if (fetchError.name === 'AbortError') {
+                        throw new Error('Refresh timed out. Please try again.');
+                    }
+                    throw fetchError;
                 }
 
-            } catch (fetchError) {
-                clearTimeout(fetchTimeoutId);
-                clearTimeout(window.modalRefreshTimeout);
-                window.modalRefreshTimeout = null;
-
-                if (fetchError.name === 'AbortError') {
-                    throw new Error('Refresh timed out. Please try again.');
-                }
-                throw fetchError;
-            }
+            }, 1500); // 1.5 second delay for UX
 
         } else {
             // Fallback: Just refresh normally if modal body not found
@@ -4198,6 +4219,47 @@ async function refreshOrderDetails(orderId) {
             `;
         }
     }
+}
+
+// 🔧 NEW: Demo function to show proper pricing breakdown
+function showSampleOrderModal() {
+    console.log('📋 Displaying sample order with proper pricing breakdown');
+
+    // Sample order data with detailed pricing breakdown (Car Battery example)
+    const sampleOrder = {
+        order_id: 'RQB202501011',
+        customer_name: 'Sample Customer',
+        status: 'Processing',
+        payment_method: 'Bank Transfer',
+        created_at: '2025-05-26T10:00:00Z',
+        delivery_address: 'Lagos, Nigeria',
+        state: 'Lagos',
+        products: [{
+            product_name: 'Car Battery 12V 75Ah',
+            category: 'Automotive',
+            brand: 'Exide',
+            price: 85000.00,
+            quantity: 1
+        }],
+        pricing_breakdown: {
+            subtotal: 85000.00,
+            delivery_fee: 2500.00,
+            tier_discount: 8500.00,
+            tier_discount_rate: 10,
+            calculated_total: 79000.00,
+            original_total: 56897.61,
+            delivery_zone: 'Lagos Metro',
+            delivery_days: 2
+        },
+        total_amount: 79000.00
+    };
+
+    // Show modal with sample data
+    const modalElement = document.getElementById('orderTrackingModal');
+    const modal = new bootstrap.Modal(modalElement);
+    modal.show();
+
+    displayEnhancedOrderModal(sampleOrder);
 }
 
 function contactSupportAboutOrder(orderId) {
