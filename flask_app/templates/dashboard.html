@@ -3941,7 +3941,7 @@ function displayEnhancedOrderModal(order) {
                             </div>
                             ` : ''}
                             <div class="d-flex justify-content-between mb-1">
-                                <span>Delivery Fee (${order.pricing_breakdown.delivery_zone || 'Standard'}):</span>
+                                <span>Delivery Fee${order.pricing_breakdown.tier_delivery_benefit ? ' (FREE for ' + order.pricing_breakdown.account_tier + ' tier)' : ' (' + (order.pricing_breakdown.delivery_zone || 'Standard') + ')'}:</span>
                                 <span class="fw-medium">${order.pricing_breakdown.delivery_fee > 0 ? '₦' + parseFloat(order.pricing_breakdown.delivery_fee).toLocaleString() : 'FREE'}</span>
                             </div>
                             <hr class="my-2">

@@ -578,8 +578,11 @@ class OrderManagementSystem:
                         tier_discount = subtotal * tier_discount_rate
 
                         # Apply free delivery for Gold and Platinum tiers
+                        original_delivery_fee = delivery_fee
+                        tier_delivery_benefit = False
                         if order_data['account_tier'] in ['Gold', 'Platinum']:
                             delivery_fee = 0
+                            tier_delivery_benefit = True
 
                         # Calculate accurate total
                         calculated_total = subtotal - tier_discount + delivery_fee
@@ -588,6 +591,9 @@ class OrderManagementSystem:
                         order_data['pricing_breakdown'] = {
                             'subtotal': subtotal,
                             'delivery_fee': delivery_fee,
+                            'original_delivery_fee': original_delivery_fee,
+                            'tier_delivery_benefit': tier_delivery_benefit,
+                            'account_tier': order_data['account_tier'],
                             'tier_discount': tier_discount,
                             'tier_discount_rate': tier_discount_rate * 100,  # Convert to percentage
                             'calculated_total': calculated_total,
