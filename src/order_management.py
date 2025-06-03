@@ -959,9 +959,63 @@ Ready to place your order? 🚀"""
 
             if result.get('success'):
                 order_id = result.get('order_id')
-                order_details = result.get('order_details', {})
+                order_summary = result.get('order_summary')  # This is the OrderSummary dataclass
                 logger.info(f"✅ Order {order_id} placed successfully for customer {customer_id}")
-                return order_id, order_details, None
+
+                # Convert OrderSummary dataclass to dict for proper serialization
+                if hasattr(order_summary, '__dataclass_fields__'):
+                    # Convert OrderSummary dataclass to dict
+                    order_details_dict = {
+                        'order_id': order_summary.order_id,
+                        'customer_id': order_summary.customer_id,
+                        'customer_name': order_summary.customer_name,
+                        'total_amount': order_summary.total_amount,
+                        'subtotal': order_summary.subtotal,
+                        'delivery_fee': order_summary.delivery_fee,
+                        'tier_discount': order_summary.tier_discount,
+                        'tax_amount': order_summary.tax_amount,
+                        'payment_method': order_summary.payment_method.value if hasattr(order_summary.payment_method, 'value') else str(order_summary.payment_method),
+                        'order_status': order_summary.order_status.value if hasattr(order_summary.order_status, 'value') else str(order_summary.order_status),
+                        'status': order_summary.order_status.value if hasattr(order_summary.order_status, 'value') else str(order_summary.order_status),
+                        'created_at': order_summary.created_at.isoformat() if hasattr(order_summary.created_at, 'isoformat') else str(order_summary.created_at),
+                        'estimated_delivery': order_summary.estimated_delivery.isoformat() if hasattr(order_summary.estimated_delivery, 'isoformat') else str(order_summary.estimated_delivery),
+                        'items': [],
+                        'order_items': []
+                    }
+
+                    # Add delivery address from delivery_info
+                    if hasattr(order_summary, 'delivery_info') and order_summary.delivery_info:
+                        order_details_dict['delivery_address'] = order_summary.delivery_info.full_address
+                        order_details_dict['delivery_info'] = {
+                            'full_address': order_summary.delivery_info.full_address,
+                            'state': order_summary.delivery_info.state,
+                            'lga': order_summary.delivery_info.lga,
+                            'delivery_fee': order_summary.delivery_info.delivery_fee,
+                            'delivery_zone': order_summary.delivery_info.delivery_zone,
+                            'estimated_delivery_days': order_summary.delivery_info.estimated_delivery_days
+                        }
+                    else:
+                        order_details_dict['delivery_address'] = str(delivery_address)
+
+                    # Add items in both formats for compatibility
+                    for item in order_summary.items:
+                        item_dict = {
+                            'product_id': item.product_id,
+                            'product_name': item.product_name,
+                            'category': item.category,
+                            'brand': item.brand,
+                            'price': item.price,
+                            'quantity': item.quantity,
+                            'subtotal': item.subtotal,
+                            'availability_status': item.availability_status
+                        }
+                        order_details_dict['items'].append(item_dict)
+                        order_details_dict['order_items'].append(item_dict)
+
+                    return order_id, order_details_dict, None
+                else:
+                    # Fallback if order_summary is already a dict
+                    return order_id, order_summary, None
             else:
                 error_msg = result.get('error', 'Unknown error occurred')
                 logger.error(f"❌ Failed to place order for customer {customer_id}: {error_msg}")
@@ -974,6 +1028,50 @@ Ready to place your order? 🚀"""
     def format_order_summary(self, order_details):
         """🎉 Format order details into a readable confirmation summary"""
         try:
+            # Handle OrderSummary dataclass objects
+            if hasattr(order_details, '__dataclass_fields__'):
+                # This is an OrderSummary dataclass object
+                items_text = ""
+                for item in order_details.items:
+                    if hasattr(item, 'product_name'):
+                        items_text += f"• {item.product_name} x{item.quantity} - ₦{item.subtotal:,.2f}\n"
+
+                # Handle delivery address formatting
+                delivery_str = "Not specified"
+                if hasattr(order_details, 'delivery_info') and order_details.delivery_info:
+                    delivery_str = order_details.delivery_info.full_address
+
+                # Handle payment method formatting
+                payment_method_str = "Not specified"
+                if hasattr(order_details, 'payment_method'):
+                    if hasattr(order_details.payment_method, 'value'):
+                        payment_method_str = order_details.payment_method.value
+                    else:
+                        payment_method_str = str(order_details.payment_method)
+
+                # Handle order status formatting
+                status_str = "Pending"
+                if hasattr(order_details, 'order_status'):
+                    if hasattr(order_details.order_status, 'value'):
+                        status_str = order_details.order_status.value
+                    else:
+                        status_str = str(order_details.order_status)
+
+                summary = f"""🎉 **Order Confirmation**
+
+📋 Order ID: {order_details.order_id}
+{items_text}
+💰 Total: ₦{order_details.total_amount:,.2f}
+📍 Delivery: {delivery_str}
+💳 Payment: {payment_method_str}
+📦 Status: {status_str}
+
+Your order has been successfully placed! 🚀
+We'll send you updates as it progresses."""
+
+                return summary.strip()
+
+            # Handle dictionary format (existing logic)
             items_text = ""
 
             # Handle different order_details formats
@@ -1021,4 +1119,11 @@ We'll send you updates as it progresses."""
             return summary.strip()
         except Exception as e:
             logger.error(f"❌ Error formatting order confirmation: {e}")
-            return f"Order {order_details.get('order_id', 'Unknown')} confirmed - ₦{order_details.get('total_amount', 0):,.2f}"
+            # Safe fallback that works with both formats
+            if hasattr(order_details, 'order_id'):
+                order_id = order_details.order_id
+                total_amount = getattr(order_details, 'total_amount', 0)
+            else:
+                order_id = order_details.get('order_id', 'Unknown')
+                total_amount = order_details.get('total_amount', 0)
+            return f"Order {order_id} confirmed - ₦{total_amount:,.2f}"

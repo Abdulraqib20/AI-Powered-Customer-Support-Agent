@@ -1470,11 +1470,30 @@ RESPONSE FORMAT: Return ONLY the SQL query, nothing else."""
 
                 db_history = []
                 for row in cursor.fetchall():
+                    # 🔧 ENHANCED: Safely handle JSON data that might be already parsed
+                    entities_data = row[2]
+                    if isinstance(entities_data, str):
+                        try:
+                            entities_data = json.loads(entities_data)
+                        except (json.JSONDecodeError, TypeError):
+                            entities_data = {}
+                    elif not isinstance(entities_data, dict):
+                        entities_data = {}
+
+                    execution_result_data = row[3]
+                    if isinstance(execution_result_data, str):
+                        try:
+                            execution_result_data = json.loads(execution_result_data)
+                        except (json.JSONDecodeError, TypeError):
+                            execution_result_data = []
+                    elif not isinstance(execution_result_data, list):
+                        execution_result_data = []
+
                     db_history.append({
                         "user_query": row[0],
                         "response": row[1],
-                        "entities": json.loads(row[2]) if row[2] else {},
-                        "execution_result": json.loads(row[3]) if row[3] else [],
+                        "entities": entities_data,
+                        "execution_result": execution_result_data,
                         "query_type": row[4],
                         "timestamp": row[5].isoformat() if row[5] else ""
                     })

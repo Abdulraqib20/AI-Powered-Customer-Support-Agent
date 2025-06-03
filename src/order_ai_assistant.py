@@ -638,37 +638,35 @@ class OrderAIAssistant:
 
             # Place order using order management system
             logger.info("📞 Calling OrderManagementSystem.create_order()...")
-            order_result = self.order_system.create_order(
+            order_id, order_details, error = self.order_system.place_order(
                 customer_id=customer_id,
-                items=order_items,
+                cart_items=order_items,
                 delivery_address=delivery_address,
-                payment_method=payment_method
+                payment_method=payment_method,
+                notes="Order placed via AI Assistant"
             )
 
-            logger.info(f"📋 Order creation result: {order_result.get('success', False)}")
-            if not order_result['success']:
-                logger.error(f"❌ Order creation failed: {order_result.get('error', 'Unknown error')}")
-
-            if order_result['success']:
+            logger.info(f"📋 Order creation result: {order_id is not None}")
+            if order_id:
                 # Clear cart after successful order
                 del self.active_carts[cart_key]
 
-                logger.info(f"✅ ORDER SUCCESSFULLY PLACED! Order ID: {order_result['order_id']}")
-                logger.info(f"💾 Database order ID: {order_result.get('database_order_id', 'N/A')}")
+                logger.info(f"✅ ORDER SUCCESSFULLY PLACED! Order ID: {order_id}")
+                logger.info(f"💾 Database order ID: {order_details.get('database_order_id', 'N/A')}")
 
-                order_summary = order_result['order_summary']
+                order_summary = order_details.get('order_summary', order_details)
                 return {
                     'success': True,
-                    'message': f"🎉 Order placed successfully! Your order ID is {order_result['order_id']}",
+                    'message': f"🎉 Order placed successfully! Your order ID is {order_id}",
                     'action': 'order_placed',
-                    'order_id': order_result['order_id'],
+                    'order_id': order_id,
                     'order_summary': self._format_placed_order_summary(order_summary),
                     'next_actions': ['Track order', 'Continue shopping', 'View order details']
                 }
             else:
                 return {
                     'success': False,
-                    'message': f"Order placement failed: {order_result['error']}",
+                    'message': f"Order placement failed: {error}",
                     'action': 'order_failed'
                 }
 
@@ -1068,7 +1066,7 @@ class OrderAIAssistant:
                 customer_id=customer_id,
                 cart_items=session_state.cart_items,
                 delivery_address=session_state.delivery_address,
-                payment_method=PaymentMethod(session_state.payment_method),
+                payment_method=session_state.payment_method,
                 notes="Order placed via AI Assistant"
             )
             if order_id:

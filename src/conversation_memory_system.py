@@ -456,12 +456,23 @@ class SessionMemory:
             key = f"session:{session_id}"
             state_data = asdict(current_state)
 
-            # Convert datetime objects to strings and handle Decimal objects
+            # Convert datetime objects to strings and handle Decimal objects and Enum objects
             for k, v in state_data.items():
                 if isinstance(v, datetime):
                     state_data[k] = v.isoformat()
                 elif isinstance(v, Decimal):
                     state_data[k] = float(v)
+                elif hasattr(v, '__class__') and hasattr(v.__class__, '__bases__'):
+                    # Check if it's an enum by checking if it has a 'value' attribute
+                    if hasattr(v, 'value'):
+                        state_data[k] = v.value
+                    elif hasattr(v, 'name'):
+                        state_data[k] = v.name
+                    # Handle nested dictionaries that might contain enums
+                elif isinstance(v, dict):
+                    state_data[k] = self._convert_enums_in_dict(v)
+                elif isinstance(v, list):
+                    state_data[k] = self._convert_enums_in_list(v)
 
             if self.redis:
                 self.redis.setex(key, 7200, safe_json_dumps(state_data))  # 2 hour expiration
@@ -506,6 +517,41 @@ class SessionMemory:
             self.redis.delete(f"session:{session_id}")
         else:
             self.fallback_storage.pop(session_id, None)
+
+    def _convert_enums_in_dict(self, d: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert enum values in a dictionary"""
+        for k, v in d.items():
+            if hasattr(v, '__class__') and hasattr(v.__class__, '__bases__'):
+                # Check if it's an enum by checking if it has a 'value' attribute
+                if hasattr(v, 'value'):
+                    d[k] = v.value
+                elif hasattr(v, 'name'):
+                    d[k] = v.name
+            elif isinstance(v, dict):
+                d[k] = self._convert_enums_in_dict(v)
+            elif isinstance(v, list):
+                d[k] = self._convert_enums_in_list(v)
+        return d
+
+    def _convert_enums_in_list(self, l: List[Any]) -> List[Any]:
+        """Convert enum values in a list"""
+        result = []
+        for item in l:
+            if hasattr(item, '__class__') and hasattr(item.__class__, '__bases__'):
+                # Check if it's an enum by checking if it has a 'value' attribute
+                if hasattr(item, 'value'):
+                    result.append(item.value)
+                elif hasattr(item, 'name'):
+                    result.append(item.name)
+                else:
+                    result.append(item)
+            elif isinstance(item, dict):
+                result.append(self._convert_enums_in_dict(item))
+            elif isinstance(item, list):
+                result.append(self._convert_enums_in_list(item))
+            else:
+                result.append(item)
+        return result
 
 class SummaryMemory:
     """📄 Summarizes and stores distant conversation history"""
