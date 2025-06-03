@@ -312,6 +312,12 @@ class OrderManagementSystem:
                 delivery_state, float(total_weight), float(subtotal)
             )
 
+            # 🔧 FIX: Apply tier-based delivery benefits
+            # Gold and Platinum customers get FREE delivery
+            if customer['account_tier'] in ['Gold', 'Platinum']:
+                delivery_fee = 0.0
+                logger.info(f"🎁 Free delivery applied for {customer['account_tier']} tier customer")
+
             # Calculate tier discount
             tier_discount_rate = self._get_tier_discount_rate(customer['account_tier'])
             tier_discount = subtotal * Decimal(str(tier_discount_rate))
