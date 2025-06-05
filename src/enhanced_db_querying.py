@@ -458,7 +458,7 @@ Classify this query and extract relevant entities. Return JSON format:
         elif any(keyword in query_lower for keyword in ['order', 'orders', 'purchase', 'transaction', 'history', 'delivery', 'track', 'tracking', 'where is', 'status', 'shipped', 'shipping']):
             return QueryType.ORDER_ANALYTICS, entities
 
-        elif any(keyword in query_lower for keyword in ['revenue', 'sales', 'money', 'naira', '₦', 'income']):
+        elif any(keyword in query_lower for keyword in ['revenue', 'sales', 'money', 'naira', '₦', 'income', 'spent', 'spending', 'spend', 'total spent', 'how much', 'breakdown', 'calculation', 'calculate', 'are you sure', 'verify', 'double check', 'give me the details', 'details', 'confirm']):
             return QueryType.REVENUE_INSIGHTS, entities
 
         elif any(keyword in query_lower for keyword in ['product', 'category', 'item', 'goods']) or entities.get('product_categories') or entities.get('brands') or entities.get('product_keywords'):
@@ -583,6 +583,13 @@ EXAMPLES:
 - "Track my order" with customer_id=1503: SELECT * FROM orders WHERE customer_id = 1503
 - "Order history" with customer_id=1503: SELECT o.*, c.name FROM orders o JOIN customers c ON o.customer_id = c.customer_id WHERE o.customer_id = 1503
 - "Track order 12345": SELECT * FROM orders WHERE order_id = 12345
+- "How much have I spent" with customer_id=1503: SELECT COALESCE(SUM(total_amount), 0) AS total_spent FROM orders WHERE customer_id = 1503;
+- "Total spending breakdown" with customer_id=1503: SELECT COALESCE(product_category, 'Uncategorized') as product_category, SUM(total_amount) as category_spending FROM orders WHERE customer_id = 1503 GROUP BY COALESCE(product_category, 'Uncategorized') ORDER BY category_spending DESC;
+- "Which products have I spent most on" with customer_id=1503: SELECT COALESCE(product_category, 'Uncategorized') as product_category, SUM(total_amount) as total_spent FROM orders WHERE customer_id = 1503 GROUP BY COALESCE(product_category, 'Uncategorized') ORDER BY total_spent DESC;
+- "Are you sure that is the total?" with customer_id=1503: SELECT COALESCE(SUM(total_amount), 0) AS total_spent FROM orders WHERE customer_id = 1503;
+- "Verify my total spending" with customer_id=1503: SELECT COALESCE(SUM(total_amount), 0) AS total_spent FROM orders WHERE customer_id = 1503;
+- "Double check my spending" with customer_id=1503: SELECT COALESCE(SUM(total_amount), 0) AS total_spent FROM orders WHERE customer_id = 1503;
+- "Give me the details" with customer_id=1503: SELECT COALESCE(product_category, 'Uncategorized') as product_category, SUM(total_amount) as category_spending FROM orders WHERE customer_id = 1503 GROUP BY COALESCE(product_category, 'Uncategorized') ORDER BY category_spending DESC;
 
 ⚠️ CRITICAL AUTHENTICATION RULES:
 1. If customer_verified=False OR user_authenticated=False:
@@ -827,16 +834,33 @@ RESPONSE FORMAT: Return ONLY the SQL query, nothing else."""
                 return "SELECT 'Guest user - authentication required' as message, 'Please provide your order ID or log in to view your orders' as suggestion;"
 
         elif query_type == QueryType.REVENUE_INSIGHTS:
-            return """
-            SELECT
-                DATE_TRUNC('month', created_at) as month,
-                SUM(total_amount) as total_revenue,
-                COUNT(*) as order_count
-            FROM orders
-            WHERE created_at >= CURRENT_DATE - INTERVAL '6 months'
-            GROUP BY DATE_TRUNC('month', created_at)
-            ORDER BY month DESC;
-            """
+            # 🔧 CRITICAL FIX: Handle customer spending queries properly
+            customer_verified = entities.get('customer_verified', False)
+            customer_id = entities.get('customer_id')
+
+            # If authenticated customer asking about their spending
+            if customer_verified and customer_id:
+                return f"""
+                SELECT
+                    'Total Spending' as metric,
+                    COALESCE(SUM(total_amount), 0) as total_spent,
+                    COUNT(*) as total_orders,
+                    COALESCE(AVG(total_amount), 0) as avg_order_value
+                FROM orders
+                WHERE customer_id = {customer_id};
+                """
+            else:
+                # General revenue insights (business-wide)
+                return """
+                SELECT
+                    DATE_TRUNC('month', created_at) as month,
+                    SUM(total_amount) as total_revenue,
+                    COUNT(*) as order_count
+                FROM orders
+                WHERE created_at >= CURRENT_DATE - INTERVAL '6 months'
+                GROUP BY DATE_TRUNC('month', created_at)
+                ORDER BY month DESC;
+                """
 
         elif query_type == QueryType.GEOGRAPHIC_ANALYSIS:
             return """
@@ -2057,6 +2081,12 @@ Our team is ready to assist you with orders, delivery, payments, and any questio
     def _build_enhanced_system_prompt(self, context: Dict[str, Any]) -> str:
         """🎯 Build enhanced system prompt with recommendation and emotion context"""
 
+        # 🔧 CRITICAL FIX: Extract authentication info from nested session_context
+        session_context = context.get('session_context', {})
+        user_authenticated = session_context.get('user_authenticated', False)
+        customer_id = session_context.get('customer_id')
+        user_id = session_context.get('user_id', 'anonymous')
+
         # 🆕 EMOTIONAL RESPONSE INTEGRATION
         emotion_guidance = ""
         if context.get('sentiment_data'):
@@ -2139,7 +2169,6 @@ Our team is ready to assist you with orders, delivery, payments, and any questio
 
         # 🧠 CONVERSATION MEMORY CONTEXT
         memory_guidance = ""
-        session_context = context.get('session_context', {})
         conversation_memory = session_context.get('conversation_memory', {})
 
         if conversation_memory:
@@ -2196,19 +2225,22 @@ Our team is ready to assist you with orders, delivery, payments, and any questio
         You are a caring customer support agent for raqibtech.com, Nigeria's leading e-commerce platform.
 
         🚨 CRITICAL AUTHORIZATION & SECURITY RULES - MUST FOLLOW:
-        1. AUTHENTICATED CUSTOMERS: Only generate queries for THEIR OWN data using customer_id = {context.get('customer_id', 'NULL')}
+        1. AUTHENTICATED CUSTOMERS: Only generate queries for THEIR OWN data using customer_id = {customer_id}
         2. UNAUTHENTICATED USERS: No access to customer data, orders (except with order_id), or full product catalogs
         3. BUSINESS ANALYTICS: NEVER give business-wide analytics to regular customers (e.g., total orders, revenue)
         4. DATA ISOLATION: Each customer sees ONLY their own orders, never system-wide data
 
         🔒 CURRENT USER AUTHORIZATION:
-        - User authenticated: {context.get('user_authenticated', False)}
-        - Customer ID: {context.get('customer_id', 'None')}
-        - User type: {'Customer' if context.get('customer_id') else 'Anonymous'}
+        - User authenticated: {user_authenticated}
+        - Customer ID: {customer_id or 'None'}
+        - User type: {'Customer' if customer_id else 'Anonymous'}
+
+        🚨 CRITICAL: The customer is {"AUTHENTICATED" if user_authenticated else "NOT AUTHENTICATED"}!
+        {f"- This is customer {customer_id} - provide personalized responses for THEIR data" if user_authenticated and customer_id else "- This is an anonymous user - do NOT provide customer-specific data"}
 
         🚨 AUTHORIZATION EXAMPLES:
         - WRONG (for customer): SELECT COUNT(*) FROM orders GROUP BY order_status (shows all business data!)
-        - CORRECT (for customer): SELECT order_status, COUNT(*) FROM orders WHERE customer_id = {context.get('customer_id', 'NULL')} GROUP BY order_status
+        - CORRECT (for customer): SELECT order_status, COUNT(*) FROM orders WHERE customer_id = {customer_id or 'NULL'} GROUP BY order_status
         - WRONG (unauthenticated): SELECT product_name FROM products (shows all products!)
         - CORRECT (unauthenticated): "Please log in to browse our full catalog"
 
