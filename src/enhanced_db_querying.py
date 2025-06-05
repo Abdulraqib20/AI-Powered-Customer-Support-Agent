@@ -450,7 +450,14 @@ Classify this query and extract relevant entities. Return JSON format:
 
         # Classify query type based on keywords
         if any(keyword in query_lower for keyword in ['customer', 'customers', 'profile', 'account']):
-            if any(keyword in query_lower for keyword in ['where', 'from', 'in', 'state', 'location']):
+            # 🔧 CRITICAL FIX: Check for business analytics keywords to avoid customer-specific conversion
+            business_keywords = ['top', 'highest', 'most', 'best', 'all customers', 'customer ranking', 'customer analytics', 'platform', 'who is', 'which customer']
+            if any(biz_keyword in query_lower for biz_keyword in business_keywords):
+                logger.info(f"🏢 BUSINESS ANALYTICS DETECTED: Query requests platform-wide customer data")
+                entities['business_analytics'] = True
+                entities['customer_id'] = None  # Override customer-specific context for business queries
+                return QueryType.CUSTOMER_ANALYSIS, entities
+            elif any(keyword in query_lower for keyword in ['where', 'from', 'in', 'state', 'location']):
                 return QueryType.GEOGRAPHIC_ANALYSIS, entities
             else:
                 return QueryType.CUSTOMER_ANALYSIS, entities
@@ -590,6 +597,10 @@ EXAMPLES:
 - "Verify my total spending" with customer_id=1503: SELECT COALESCE(SUM(total_amount), 0) AS total_spent FROM orders WHERE customer_id = 1503;
 - "Double check my spending" with customer_id=1503: SELECT COALESCE(SUM(total_amount), 0) AS total_spent FROM orders WHERE customer_id = 1503;
 - "Give me the details" with customer_id=1503: SELECT COALESCE(product_category, 'Uncategorized') as product_category, SUM(total_amount) as category_spending FROM orders WHERE customer_id = 1503 GROUP BY COALESCE(product_category, 'Uncategorized') ORDER BY category_spending DESC;
+- "Categories I purchased from" with customer_id=1503: SELECT DISTINCT COALESCE(product_category, 'Uncategorized') as product_category FROM orders WHERE customer_id = 1503 ORDER BY product_category;
+- "Who is the top spending customer" with business_analytics=True: SELECT c.customer_id, c.name, SUM(o.total_amount) as total_spent FROM customers c JOIN orders o ON c.customer_id = o.customer_id GROUP BY c.customer_id, c.name ORDER BY total_spent DESC LIMIT 10;
+- "Which customers spend the most" with business_analytics=True: SELECT c.customer_id, c.name, c.account_tier, SUM(o.total_amount) as total_spent FROM customers c JOIN orders o ON c.customer_id = o.customer_id GROUP BY c.customer_id, c.name, c.account_tier ORDER BY total_spent DESC LIMIT 10;
+- "Debug total calculation" with customer_id=1503: SELECT 'Individual orders' as source, COUNT(*) as order_count, SUM(total_amount) as total_spent FROM orders WHERE customer_id = 1503 UNION ALL SELECT 'Category breakdown' as source, COUNT(DISTINCT order_id) as order_count, SUM(total_amount) as total_spent FROM orders WHERE customer_id = 1503;
 
 ⚠️ CRITICAL AUTHENTICATION RULES:
 1. If customer_verified=False OR user_authenticated=False:
@@ -2694,7 +2705,15 @@ How can I help you with your raqibtech.com experience today? 🌟"""
 
             logger.info(f"🔍 Shopping check: order_ai_assistant_instance_exists={bool(self.order_ai_assistant)}, session_context_provided={bool(session_context)}, user_is_authenticated={session_context.get('user_authenticated') if session_context else False}")
 
-            if self.order_ai_assistant and session_context and session_context.get('user_authenticated'):
+            # 🔧 CRITICAL FIX: Check for spending/financial queries BEFORE shopping intent detection
+            spending_keywords = ['spent', 'spending', 'spend', 'total spent', 'how much', 'breakdown', 'calculation', 'calculate', 'are you sure', 'verify', 'double check', 'give me the details', 'details', 'confirm', 'revenue', 'sales', 'money', 'naira', '₦']
+            is_spending_query = any(keyword in user_query.lower() for keyword in spending_keywords)
+
+            if is_spending_query:
+                logger.info(f"💰 SPENDING QUERY DETECTED: Bypassing shopping intent detection entirely")
+                # Skip shopping assistant and go directly to revenue insights processing
+                pass
+            elif self.order_ai_assistant and session_context and session_context.get('user_authenticated'):
                 customer_id = session_context.get('customer_id')
 
                 if customer_id:
@@ -3494,8 +3513,11 @@ CURRENT TIME CONTEXT:
             user_query = entities.get('user_query', '').lower()
 
             # 🚨 BUSINESS ANALYTICS PROTECTION: Prevent customers from accessing business-wide data
+            # 🔧 CRITICAL FIX: Check for legitimate business analytics flag first
+            is_business_analytics = entities.get('business_analytics', False)
+
             if ('GROUP BY' in fixed_query.upper() and 'orders' in fixed_query.lower() and
-                'WHERE customer_id' not in fixed_query):
+                'WHERE customer_id' not in fixed_query and not is_business_analytics):
                 if not user_authenticated:
                     print_log("🔒 SECURITY ALERT: Preventing business analytics access for unauthenticated user!", 'error')
                     return "SELECT 'Access denied: Business analytics require authentication.' as message;"
@@ -3509,6 +3531,8 @@ CURRENT TIME CONTEXT:
                     else:
                         # Default to customer's orders only
                         return f"SELECT * FROM orders WHERE customer_id = {customer_id} ORDER BY created_at DESC;"
+            elif is_business_analytics:
+                print_log(f"🏢 BUSINESS ANALYTICS APPROVED: Allowing platform-wide query for legitimate business request", 'info')
 
             # 🚨 UNAUTHENTICATED USER RESTRICTIONS
             if not user_authenticated:

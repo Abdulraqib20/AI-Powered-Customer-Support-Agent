@@ -68,6 +68,7 @@ Thumbs.db
 *.pdf
 EOL
 *.log
+config/logs/config.log.1
 .cursor/
 
 # deploys
