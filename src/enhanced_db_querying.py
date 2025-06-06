@@ -103,6 +103,7 @@ class QueryType(Enum):
     """Query classification types"""
     CUSTOMER_ANALYSIS = "customer_analysis"
     ORDER_ANALYTICS = "order_analytics"
+    CUSTOMER_SUPPORT = "customer_support"  # NEW: Customer support queries
     REVENUE_INSIGHTS = "revenue_insights"
     GEOGRAPHIC_ANALYSIS = "geographic_analysis"
     PRODUCT_PERFORMANCE = "product_performance"
@@ -429,9 +430,9 @@ Classify this query and extract relevant entities. Return JSON format:
 }}
 """
 
-        # 🔧 CRITICAL FIX: Conversation history inheritance (only for guest users with missing context)
-        if conversation_history and not entities['order_id']:
-            # Look for order_id from recent conversation
+        # 🔧 CRITICAL FIX: Conversation context extraction for customer support
+        if conversation_history:
+            # Look for customer references in recent conversation
             for conversation in conversation_history[:3]:  # Check last 3 conversations
                 if 'entities' in conversation:
                     conv_entities = conversation['entities']
@@ -441,7 +442,18 @@ Classify this query and extract relevant entities. Return JSON format:
                         entities['order_id'] = conv_entities['order_id']
                         logger.info(f"🔄 Inherited order_id from conversation history: {entities['order_id']}")
 
-                    # 🔧 CRITICAL FIX: NEVER inherit customer_id from conversation history
+                # 🆕 NEW: Extract customer ID from conversation context for support agents
+                if 'user_query' in conversation or 'query' in conversation:
+                    prev_query = conversation.get('user_query', conversation.get('query', ''))
+                    if prev_query:
+                        # Look for customer ID patterns in previous conversation
+                        import re
+                        customer_match = re.search(r'customer\s+(\d+)', prev_query.lower())
+                        if customer_match and not entities.get('context_customer_id'):
+                            entities['context_customer_id'] = int(customer_match.group(1))
+                            logger.info(f"🔄 Extracted customer context from conversation: {entities['context_customer_id']}")
+
+                    # 🔧 CRITICAL FIX: NEVER inherit logged-in customer_id from conversation history
                     # This was causing cross-user contamination
                     # Let the calling function handle customer_id from session instead
 
@@ -452,16 +464,24 @@ Classify this query and extract relevant entities. Return JSON format:
             entities['needs_customer_lookup'] = True
             logger.info(f"🔍 Order history query detected - will lookup customer_id for order_id: {entities['order_id']}")
 
-        # Classify query type based on keywords
-        if any(keyword in query_lower for keyword in ['customer', 'customers', 'profile', 'account']):
+        # Classify query type based on keywords - PRIORITIZE CUSTOMER_SUPPORT over CUSTOMER_ANALYSIS
+        if any(keyword in query_lower for keyword in ['order', 'orders', 'purchase', 'transaction', 'history', 'delivery', 'track', 'tracking', 'where is', 'status', 'shipped', 'shipping']):
+            return QueryType.ORDER_ANALYTICS, entities
+
+        # 🆕 NEW: Customer support queries (support agents asking about customer details for support)
+        elif any(keyword in query_lower for keyword in ['name of', 'customer name', 'customer details', 'payment method', 'contact information', 'address', 'phone number', 'email', 'account information', 'customer info', 'profile details', 'who is', 'customer profile', 'this customer', 'what payment', 'which customer', 'customer use', 'account tier', 'tier', 'when did', 'joined', 'products has', 'purchase history', 'buying history']):
+            return QueryType.CUSTOMER_SUPPORT, entities
+
+        # 🆕 NEW: Simple customer ID references (e.g., "customer 1503")
+        elif any(keyword in query_lower for keyword in ['customer 1503', 'customer 1504', 'customer 1502']) or (len(query_lower.split()) <= 3 and 'customer' in query_lower and any(char.isdigit() for char in query_lower)):
+            return QueryType.CUSTOMER_SUPPORT, entities
+
+        elif any(keyword in query_lower for keyword in ['customer', 'customers', 'profile', 'account']):
             # Removed business analytics bypass - now handled by RBAC
             if any(keyword in query_lower for keyword in ['where', 'from', 'in', 'state', 'location']):
                 return QueryType.GEOGRAPHIC_ANALYSIS, entities
             else:
                 return QueryType.CUSTOMER_ANALYSIS, entities
-
-        elif any(keyword in query_lower for keyword in ['order', 'orders', 'purchase', 'transaction', 'history', 'delivery', 'track', 'tracking', 'where is', 'status', 'shipped', 'shipping']):
-            return QueryType.ORDER_ANALYTICS, entities
 
         elif any(keyword in query_lower for keyword in ['revenue', 'sales', 'money', 'naira', '₦', 'income', 'spent', 'spending', 'spend', 'total spent', 'how much', 'breakdown', 'calculation', 'calculate', 'are you sure', 'verify', 'double check', 'give me the details', 'details', 'confirm']):
             return QueryType.REVENUE_INSIGHTS, entities
@@ -577,25 +597,31 @@ For these operations, return: SELECT 'APPLICATION_LAYER_OPERATION' as message;
 - can_access_analytics: {entities.get('can_access_analytics', False)}
 - rbac_customer_filter: {entities.get('rbac_customer_filter', 'None')}
 - rbac_restrict_to_own: {entities.get('rbac_restrict_to_own', True)}
+- context_customer_id: {entities.get('context_customer_id', 'None')} (customer being discussed in support conversation)
 
 🛡️ RBAC SQL GENERATION RULES:
 1. For user_role='customer': ALWAYS add WHERE customer_id = {entities.get('rbac_customer_filter', 'NULL')} to queries accessing customer data
 2. For user_role='guest': NO access to customer-specific data, return generic queries only
 3. For user_role in ['support_agent', 'admin', 'super_admin']: Full access to all customer data
-4. If can_access_analytics=False: BLOCK queries for revenue, business analytics, customer rankings
-5. For business analytics queries when can_access_analytics=False: Return 'SELECT 'Access Denied: Insufficient privileges for business analytics' as message;'
+4. For support agents with context_customer_id: Use WHERE customer_id = {entities.get('context_customer_id', 'NULL')} when querying about "this customer"
+5. If can_access_analytics=False: BLOCK queries for revenue, business analytics, customer rankings
+6. For business analytics queries when can_access_analytics=False: Return 'SELECT 'Access Denied: Insufficient privileges for business analytics' as message;'
 
 CRITICAL SQL GENERATION RULES:
 1. Always use proper PostgreSQL syntax
 2. For authenticated customers with customer_id in entities, use it directly in WHERE clauses
-3. For "track my order" or "order history" without specific order_id:
+3. For support agents discussing a specific customer:
+   - If context_customer_id exists: Use WHERE customer_id = {entities.get('context_customer_id', 'NULL')}
+   - If query mentions "this customer" or "the customer": Use context_customer_id from conversation
+   - If query asks about payment methods for "this customer": Use context_customer_id, not logged-in customer_id
+4. For "track my order" or "order history" without specific order_id:
    - If customer_id is available: SELECT * FROM orders WHERE customer_id = {entities.get('customer_id', 'NULL')}
    - If no customer_id: Ask user to provide order ID
-4. NEVER use placeholders like 'provided_order_id' or undefined variables
-5. Always use actual entity values or return appropriate queries for missing data
-6. For order tracking without order_id, show ALL orders for the authenticated customer
-7. If 'needs_customer_lookup' is true and order_id is available: First get customer_id from the order, then get all orders for that customer
-8. For product browsing/search queries: Use products table with appropriate filters
+5. NEVER use placeholders like 'provided_order_id' or undefined variables
+6. Always use actual entity values or return appropriate queries for missing data
+7. For order tracking without order_id, show ALL orders for the authenticated customer
+8. If 'needs_customer_lookup' is true and order_id is available: First get customer_id from the order, then get all orders for that customer
+9. For product browsing/search queries: Use products table with appropriate filters
 
 EXAMPLES:
 - "Track my order" with customer_id=1503: SELECT * FROM orders WHERE customer_id = 1503
@@ -716,12 +742,20 @@ RESPONSE FORMAT: Return ONLY the SQL query, nothing else."""
 
             # 🆕 PARAMETER SUBSTITUTION: Replace placeholders with actual values from entities
             if entities:
-                # Handle customer_id substitution - SAFE SCOPING FIX
-                customer_id = entities.get('customer_id')  # Define in proper scope
-                if customer_id is not None:
-                    sql_query = sql_query.replace('[customer_id]', str(customer_id))
-                    sql_query = sql_query.replace('{customer_id}', str(customer_id))
-                    logger.info(f"🔧 Substituted customer_id: {customer_id} in SQL query")
+                # 🔧 CRITICAL FIX: Handle context_customer_id for support agents first
+                context_customer_id = entities.get('context_customer_id')
+                customer_id = entities.get('customer_id')
+
+                # Priority order: context_customer_id (from conversation) > logged-in customer_id
+                effective_customer_id = context_customer_id or customer_id
+
+                if effective_customer_id is not None:
+                    sql_query = sql_query.replace('[customer_id]', str(effective_customer_id))
+                    sql_query = sql_query.replace('{customer_id}', str(effective_customer_id))
+                    if context_customer_id:
+                        logger.info(f"🔧 Substituted context_customer_id: {context_customer_id} in SQL query")
+                    else:
+                        logger.info(f"🔧 Substituted customer_id: {customer_id} in SQL query")
 
                 # Handle order_id substitution
                 order_id = entities.get('order_id')  # Define in proper scope
@@ -2247,10 +2281,21 @@ Our team is ready to assist you with orders, delivery, payments, and any questio
         You are a caring customer support agent for raqibtech.com, Nigeria's leading e-commerce platform.
 
         🚨 CRITICAL AUTHORIZATION & SECURITY RULES - MUST FOLLOW:
-        1. AUTHENTICATED CUSTOMERS: Only generate queries for THEIR OWN data using customer_id = {customer_id}
-        2. UNAUTHENTICATED USERS: No access to customer data, orders (except with order_id), or full product catalogs
-        3. BUSINESS ANALYTICS: NEVER give business-wide analytics to regular customers (e.g., total orders, revenue)
-        4. DATA ISOLATION: Each customer sees ONLY their own orders, never system-wide data
+        🔐 ROLE-BASED ACCESS CONTROL (RBAC):
+        - User Role: {determine_user_role(session_context).value}
+        - Access Level: {RoleBasedAccessControl.get_user_role_info(determine_user_role(session_context)).max_data_access_level}
+
+        📋 PERMISSION RULES BY ROLE:
+        1. CUSTOMERS: Only access THEIR OWN data using customer_id = {customer_id}
+        2. SUPPORT AGENTS: Can access ALL customer data for customer support purposes
+        3. ADMINS: Can access ALL data including business analytics
+        4. GUESTS: No access to customer data, orders (except with order_id), or full product catalogs
+
+        🛡️ DATA ACCESS SCOPE:
+        {"- CUSTOMER ACCESS: This customer can only see their own data (customer_id = " + str(customer_id) + ")" if determine_user_role(session_context).value == 'customer' else ""}
+        {"- SUPPORT AGENT ACCESS: You can access all customer data for support purposes" if determine_user_role(session_context).value == 'support_agent' else ""}
+        {"- ADMIN ACCESS: You have full access to all data and business analytics" if determine_user_role(session_context).value in ['admin', 'super_admin'] else ""}
+        {"- GUEST ACCESS: No access to customer-specific data" if determine_user_role(session_context).value == 'guest' else ""}
 
         🔒 CURRENT USER AUTHORIZATION:
         - User authenticated: {user_authenticated}
@@ -2258,14 +2303,14 @@ Our team is ready to assist you with orders, delivery, payments, and any questio
         - User role: {determine_user_role(session_context).value}
         - Access level: {RoleBasedAccessControl.get_user_role_info(determine_user_role(session_context)).max_data_access_level}
 
-        🚨 CRITICAL: The customer is {"AUTHENTICATED" if user_authenticated else "NOT AUTHENTICATED"}!
-        {f"- This is customer {customer_id} - provide personalized responses for THEIR data" if user_authenticated and customer_id else "- This is an anonymous user - do NOT provide customer-specific data"}
+        🚨 CRITICAL: The user is {"AUTHENTICATED" if user_authenticated else "NOT AUTHENTICATED"}!
+        {"- SUPPORT AGENT: Help customers by providing accurate data from our platform" if determine_user_role(session_context).value == 'support_agent' else f"- This is customer {customer_id} - provide personalized responses for THEIR data" if user_authenticated and customer_id and determine_user_role(session_context).value == 'customer' else "- This is an anonymous user - do NOT provide customer-specific data"}
 
         🚨 AUTHORIZATION EXAMPLES:
-        - WRONG (for customer): SELECT COUNT(*) FROM orders GROUP BY order_status (shows all business data!)
-        - CORRECT (for customer): SELECT order_status, COUNT(*) FROM orders WHERE customer_id = {customer_id or 'NULL'} GROUP BY order_status
-        - WRONG (unauthenticated): SELECT product_name FROM products (shows all products!)
-        - CORRECT (unauthenticated): "Please log in to browse our full catalog"
+        - CUSTOMER QUERY: SELECT order_status, COUNT(*) FROM orders WHERE customer_id = {customer_id or 'NULL'} GROUP BY order_status (own data only)
+        - SUPPORT AGENT QUERY: SELECT * FROM orders WHERE customer_id = 1503 (can access any customer for support)
+        - ADMIN QUERY: SELECT COUNT(*) FROM orders GROUP BY order_status (can access business analytics)
+        - GUEST QUERY: "Please log in to browse our full catalog" (no customer data access)
 
         PLATFORM IDENTITY:
         - Always mention "raqibtech.com" naturally in responses to build brand familiarity
@@ -2717,7 +2762,7 @@ How can I help you with your raqibtech.com experience today? 🌟"""
                 'business performance', 'analytics', 'top customer', 'highest spending',
                 'revenue report', 'sales report', 'business insights', 'best customers',
                 'worst customers', 'customers from', 'which customers', 'customers in',
-                'customers who', 'customer spending', 'customer orders', 'customers with',
+                'customers who', 'customer spending', 'customers with',
                 'most profitable', 'least profitable', 'customer behavior', 'customer segments',
                 'cross customer', 'other customers', 'all customers', 'compare customers',
                 'customer comparison', 'customer analytics', 'customer metrics'
@@ -3634,6 +3679,9 @@ CURRENT TIME CONTEXT:
             # 🚨 CRITICAL AUTHORIZATION & SECURITY VALIDATION
             user_authenticated = entities.get('user_authenticated', False)
             customer_id = entities.get('customer_id')
+            context_customer_id = entities.get('context_customer_id')
+            # 🔧 CRITICAL FIX: Prioritize context_customer_id for support agents
+            effective_customer_id = context_customer_id or customer_id
             user_query = entities.get('user_query', '').lower()
 
             # 🚨 BUSINESS ANALYTICS PROTECTION: Prevent customers from accessing business-wide data
@@ -3645,16 +3693,16 @@ CURRENT TIME CONTEXT:
                 if not user_authenticated:
                     print_log("🔒 SECURITY ALERT: Preventing business analytics access for unauthenticated user!", 'error')
                     return "SELECT 'Access denied: Business analytics require authentication.' as message;"
-                elif user_authenticated and customer_id:
-                    print_log(f"🔒 SECURITY: Converting business analytics to customer-specific for customer {customer_id}", 'warning')
+                elif user_authenticated and effective_customer_id:
+                    print_log(f"🔒 SECURITY: Converting business analytics to customer-specific for customer {effective_customer_id}", 'warning')
                     # Convert business-wide analytics to customer-specific analytics
                     if 'SELECT order_status, COUNT(*)' in fixed_query:
-                        return f"SELECT order_status, COUNT(*) as order_count, SUM(total_amount) as total_amount FROM orders WHERE customer_id = {customer_id} GROUP BY order_status;"
+                        return f"SELECT order_status, COUNT(*) as order_count, SUM(total_amount) as total_amount FROM orders WHERE customer_id = {effective_customer_id} GROUP BY order_status;"
                     elif 'SELECT COUNT(*), SUM(total_amount)' in fixed_query:
-                        return f"SELECT COUNT(*) as order_count, SUM(total_amount) as total_amount FROM orders WHERE customer_id = {customer_id};"
+                        return f"SELECT COUNT(*) as order_count, SUM(total_amount) as total_amount FROM orders WHERE customer_id = {effective_customer_id};"
                     else:
                         # Default to customer's orders only
-                        return f"SELECT * FROM orders WHERE customer_id = {customer_id} ORDER BY created_at DESC;"
+                        return f"SELECT * FROM orders WHERE customer_id = {effective_customer_id} ORDER BY created_at DESC;"
             elif is_business_analytics:
                 print_log(f"🏢 BUSINESS ANALYTICS APPROVED: Allowing platform-wide query for legitimate business request", 'info')
 
@@ -3701,8 +3749,8 @@ CURRENT TIME CONTEXT:
                 print_log(f"🚨 CRITICAL SCHEMA VIOLATIONS DETECTED: {'; '.join(schema_violations)}", 'error')
 
                 # Return a safe fallback based on the original intent
-                if user_authenticated and customer_id:
-                    return f"SELECT * FROM orders WHERE customer_id = {customer_id} ORDER BY created_at DESC;"
+                if user_authenticated and effective_customer_id:
+                    return f"SELECT * FROM orders WHERE customer_id = {effective_customer_id} ORDER BY created_at DESC;"
                 else:
                     return "SELECT 'Schema violation detected. Please rephrase your query.' as error_message;"
 
@@ -3727,8 +3775,8 @@ CURRENT TIME CONTEXT:
 
             # 4. Handle authentication status queries properly
             if 'authentication status' in entities.get('user_query', '').lower():
-                if user_authenticated and customer_id:
-                    return f"SELECT 'authenticated' as status, {customer_id} as customer_id;"
+                if user_authenticated and effective_customer_id:
+                    return f"SELECT 'authenticated' as status, {effective_customer_id} as customer_id;"
                 else:
                     return "SELECT 'unauthenticated' as status, NULL as customer_id;"
 
@@ -3738,8 +3786,8 @@ CURRENT TIME CONTEXT:
 
             # 6. Handle placeholder detection and replacement
             if 'provided_order_id' in fixed_query or 'provided_customer_id' in fixed_query:
-                if customer_id:
-                    fixed_query = fixed_query.replace('provided_customer_id', str(customer_id))
+                if effective_customer_id:
+                    fixed_query = fixed_query.replace('provided_customer_id', str(effective_customer_id))
                     fixed_query = fixed_query.replace('provided_order_id', 'NULL')  # Safe default
 
             # 7. Fix malformed WHERE clauses
@@ -3762,13 +3810,13 @@ CURRENT TIME CONTEXT:
                 if table.lower() not in [t.lower() for t in valid_tables]:
                     print_log(f"⚠️ WARNING: Query references unknown table '{table}'", 'warning')
 
-            print_log(f"🔒 SECURITY CHECK PASSED: Query authorized for user (authenticated: {user_authenticated}, customer_id: {customer_id})", 'success')
+            print_log(f"🔒 SECURITY CHECK PASSED: Query authorized for user (authenticated: {user_authenticated}, customer_id: {effective_customer_id})", 'success')
             return fixed_query
 
         except Exception as e:
             print_log(f"❌ Error in SQL fixes: {e}", 'error')
             # Return safe fallback
-            if user_authenticated and customer_id:
-                return f"SELECT * FROM orders WHERE customer_id = {customer_id};"
+            if user_authenticated and effective_customer_id:
+                return f"SELECT * FROM orders WHERE customer_id = {effective_customer_id};"
             return "SELECT 'Query processing error' as message;"
 

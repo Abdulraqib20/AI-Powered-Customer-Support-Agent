@@ -966,19 +966,22 @@ def api_enhanced_query():
                 'message': 'Query is required'
             }), 400
 
-        # 🔧 CRITICAL FIX: Build proper session context for authentication
+        # 🔧 CRITICAL FIX: Build proper session context for authentication with RBAC
         session_context = {
             'user_authenticated': session.get('user_authenticated', False),
             'customer_verified': session.get('user_authenticated', False),  # 🔧 FIX: Use correct key
             'customer_id': session.get('customer_id'),  # 🔧 FIX: Use authenticated customer_id
             'customer_name': session.get('customer_name', 'valued customer'),
             'customer_email': session.get('customer_email'),
+            'user_role': session.get('user_role', 'guest'),  # 🆕 RBAC: User role
+            'is_staff': session.get('is_staff', False),      # 🆕 RBAC: Staff status
+            'is_admin': session.get('is_admin', False),      # 🆕 RBAC: Admin status
             'user_id': session.get('user_id', 'anonymous'),
             'session_id': session.get('session_id')
         }
 
         # 🔧 DEBUG: Log session context for troubleshooting
-        app_logger.info(f"🔍 Session context: user_authenticated={session_context['user_authenticated']}, customer_id={session_context['customer_id']}, user_id={session_context['user_id']}")
+        app_logger.info(f"🔍 Session context: user_authenticated={session_context['user_authenticated']}, customer_id={session_context['customer_id']}, user_role={session_context['user_role']}, is_staff={session_context['is_staff']}")
 
         # Process the query with session context
         result = enhanced_db.process_enhanced_query(user_query, session_context)
@@ -1447,8 +1450,12 @@ def login_api():
         cursor = conn.cursor()
 
         try:
-            # Step 1: Verify customer exists
-            cursor.execute("SELECT customer_id, name, email FROM customers WHERE email = %s", (email,))
+            # Step 1: Verify customer exists and get RBAC information
+            cursor.execute("""
+                SELECT customer_id, name, email, user_role, is_staff, is_admin, account_status
+                FROM customers
+                WHERE email = %s
+            """, (email,))
             customer = cursor.fetchone()
 
             if not customer:
@@ -1459,17 +1466,29 @@ def login_api():
                     'message': 'Email not found in our system. Please check your email address or contact support.'
                 }), 401
 
-            customer_id, customer_name, customer_email = customer
+            customer_id, customer_name, customer_email, user_role, is_staff, is_admin, account_status = customer
+
+            # Check account status
+            if account_status != 'active':
+                cursor.close()
+                conn.close()
+                return jsonify({
+                    'success': False,
+                    'message': f'Account is {account_status}. Please contact support.'
+                }), 401
             current_session_id = session.get('session_id')  # Get current Flask session_id
 
             if not current_session_id:
                 current_session_id = str(uuid.uuid4())
 
-            # Create session data
+            # Create session data with RBAC information
             session_data = {
                 'customer_id': customer_id,
                 'customer_name': customer_name,
                 'customer_email': customer_email,
+                'user_role': user_role,
+                'is_staff': is_staff,
+                'is_admin': is_admin,
                 'authenticated': True,
                 'login_time': datetime.now().isoformat()
             }
@@ -1568,11 +1587,14 @@ def login_api():
             cursor.close()
             conn.close()
 
-        # Step 4: Update Flask session
+        # Step 4: Update Flask session with RBAC information
         session['user_authenticated'] = True
         session['customer_id'] = customer_id
         session['customer_name'] = customer_name
         session['customer_email'] = customer_email
+        session['user_role'] = user_role
+        session['is_staff'] = is_staff
+        session['is_admin'] = is_admin
         session['session_id'] = authenticated_session_id
         session['user_id'] = f"customer_{customer_id}"
 

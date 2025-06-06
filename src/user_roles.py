@@ -196,6 +196,21 @@ class RoleBasedAccessControl:
                     "alternative": "Request access from administrator or query your own data"
                 }
 
+        # Customer support queries (support agents can access all customer data for support)
+        if query_type == "customer_support":
+            if user_role in [UserRole.SUPPORT_AGENT, UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+                return {
+                    "authorized": True,
+                    "scope": query_scope,
+                    "reason": "Customer support query authorized for staff"
+                }
+            else:
+                return {
+                    "authorized": False,
+                    "reason": f"Role '{user_role.value}' cannot access customer support functions",
+                    "alternative": "Customer support access is restricted to staff members"
+                }
+
         # Cross-customer queries
         if target_customer_id and target_customer_id != customer_id:
             if not query_scope["cross_customer"]:
