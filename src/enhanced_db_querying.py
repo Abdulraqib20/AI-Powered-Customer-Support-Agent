@@ -2278,7 +2278,7 @@ Our team is ready to assist you with orders, delivery, payments, and any questio
         - Concise but caring - keep responses under 3 sentences when possible
         - Focus on the customer's feelings and immediate needs first
         - Nigerian cultural awareness with authentic warmth
-        - Never use markdown formatting (no **, ##, etc.) - use plain text only
+        - Use simple markdown formatting for emphasis: **bold text** for important points
         - ALWAYS include appropriate emojis based on customer emotion
 
         {emotion_guidance}
@@ -2313,9 +2313,9 @@ Our team is ready to assist you with orders, delivery, payments, and any questio
         - Never forget what was just mentioned in the immediate previous interaction
 
         FORMATTING RULES:
-        - Use plain text only - NO markdown formatting
-        - NO bold (**text**), NO headers (###), NO code blocks
-        - Keep emojis for warmth but no markdown styling
+        - Use simple markdown formatting: **bold** for important information like product names, prices, order numbers
+        - Emphasize key details with **bold text** but keep it minimal and natural
+        - Keep emojis for warmth and markdown for clarity
         - Simple sentences with natural flow
 
         BRAND INTEGRATION:
@@ -2336,39 +2336,32 @@ Our team is ready to assist you with orders, delivery, payments, and any questio
 
     def _strip_markdown_formatting(self, text: str) -> str:
         """
-        🔧 Strip markdown formatting from AI responses while keeping emojis
-        Based on OpenAI community recommendations for plain text output
+        🔧 Clean up markdown formatting while preserving basic formatting for frontend rendering
+        Frontend will handle **bold** and other markdown rendering
         """
         try:
             import re
 
-            # Remove markdown bold (**text** or __text__)
-            text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
-            text = re.sub(r'__(.*?)__', r'\1', text)
+            # Keep **bold** and *italic* for frontend rendering - DO NOT REMOVE
 
-            # Remove markdown italic (*text* or _text_)
-            text = re.sub(r'(?<!\*)\*([^*]+)\*(?!\*)', r'\1', text)
-            text = re.sub(r'(?<!_)_([^_]+)_(?!_)', r'\1', text)
+            # Only remove problematic markdown that breaks display
 
-            # Remove headers (### Header)
-            text = re.sub(r'^#{1,6}\s+(.+)$', r'\1', text, flags=re.MULTILINE)
-
-            # Remove code blocks (```code```)
+            # Remove code blocks (```code```) - these can break display
             text = re.sub(r'```[\s\S]*?```', '', text)
 
-            # Remove inline code (`code`)
+            # Remove inline code backticks but keep content (`code` -> code)
             text = re.sub(r'`([^`]+)`', r'\1', text)
 
-            # Remove markdown links [text](url)
+            # Remove markdown links [text](url) -> text
             text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
 
-            # Remove blockquotes (> text)
+            # Remove blockquotes (> text) -> text
             text = re.sub(r'^>\s+(.+)$', r'\1', text, flags=re.MULTILINE)
 
-            # Remove unordered list markers (- item, * item)
+            # Convert unordered list markers to bullet points for better display
             text = re.sub(r'^[-*+]\s+(.+)$', r'• \1', text, flags=re.MULTILINE)
 
-            # Remove ordered list markers (1. item)
+            # Convert ordered list markers to bullet points
             text = re.sub(r'^\d+\.\s+(.+)$', r'• \1', text, flags=re.MULTILINE)
 
             # Clean up extra whitespace but preserve line breaks
@@ -2378,7 +2371,7 @@ Our team is ready to assist you with orders, delivery, payments, and any questio
             return text.strip()
 
         except Exception as e:
-            logger.warning(f"⚠️ Error stripping markdown formatting: {e}")
+            logger.warning(f"⚠️ Error processing markdown formatting: {e}")
             return text
 
     def _enhance_response_with_recommendations(self, base_response: str, recommendations_data: Dict[str, Any]) -> str:

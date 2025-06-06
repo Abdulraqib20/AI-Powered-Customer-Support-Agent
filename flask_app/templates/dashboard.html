@@ -444,12 +444,13 @@
 
 .message.ai .message-bubble ul,
 .message.ai .message-bubble ol {
-    margin: 8px 0 8px 16px;
+    margin: 4px 0 4px 16px;
     padding-left: 0;
 }
 
 .message.ai .message-bubble li {
-    margin: 4px 0;
+    margin: 1px 0;
+    line-height: 1.4;
 }
 
 /* Customer message bubble adjustments */
@@ -2821,6 +2822,35 @@ class CustomerSupportPortal {
         }
     }
 
+    renderMarkdown(text) {
+        // Simple markdown renderer for basic formatting
+        if (!text) return text;
+
+        // Convert **bold** to <strong>
+        text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+        // Convert *italic* to <em> (but avoid double asterisks)
+        text = text.replace(/(?<!\*)\*([^*]+?)\*(?!\*)/g, '<em>$1</em>');
+
+        // Convert ### headers to h3
+        text = text.replace(/^### (.*$)/gm, '<h3>$1</h3>');
+
+        // Convert ## headers to h2
+        text = text.replace(/^## (.*$)/gm, '<h2>$1</h2>');
+
+        // Convert # headers to h1
+        text = text.replace(/^# (.*$)/gm, '<h1>$1</h1>');
+
+        // Convert bullet points (• or -)
+        text = text.replace(/^[•-] (.+)$/gm, '<li>$1</li>');
+
+        // Wrap consecutive <li> elements in <ul> - improved regex
+        text = text.replace(/(<li>.*?<\/li>(?:\s*<li>.*?<\/li>)*)/gm, '<ul>$1</ul>');
+        text = text.replace(/<\/ul>\s*<ul>/g, ''); // merge consecutive lists
+
+        return text;
+    }
+
     addMessageToChatDisplay(message, sender, isError = false, metadata = {}) {
         const chatMessages = document.getElementById('chatMessages');
         if (!chatMessages) {
@@ -2846,14 +2876,18 @@ class CustomerSupportPortal {
         const messageBubble = document.createElement('div');
         messageBubble.className = 'message-bubble';
 
-        // 🔧 FIX: Properly format AI responses with line breaks
+        // 🔧 FIX: Properly format AI responses with markdown rendering and line breaks
         if (sender === 'ai') {
-            // Convert line breaks to HTML breaks and preserve formatting for AI responses
-            const formattedMessage = message
-                .replace(/\n/g, '<br>')
-                .replace(/\r\n/g, '<br>')
-                .replace(/\r/g, '<br>');
-            messageBubble.innerHTML = formattedMessage;
+            // Process markdown first, then handle line breaks carefully to preserve lists
+            let processedMessage = this.renderMarkdown(message);
+
+            // Handle line breaks but preserve list structure
+            processedMessage = processedMessage
+                .replace(/\n(?!<li>)/g, '<br>')  // Don't add <br> before <li> elements
+                .replace(/\r\n(?!<li>)/g, '<br>')
+                .replace(/\r(?!<li>)/g, '<br>');
+
+            messageBubble.innerHTML = processedMessage;
         } else {
             // For customer messages, use as-is (user input should be escaped)
             messageBubble.textContent = message;
