@@ -442,6 +442,11 @@
     margin: 8px 0;
 }
 
+/* 🆕 Ensure tables flow inline with text */
+.message.ai .message-bubble .ai-table-container {
+    margin: 6px 0; /* Tighter integration with text content */
+}
+
 .message.ai .message-bubble ul,
 .message.ai .message-bubble ol {
     margin: 4px 0 4px 16px;
@@ -455,7 +460,7 @@
 
 /* 🆕 AI Response Table Styles */
 .ai-table-container {
-    margin: 16px 0;
+    margin: 8px 0; /* Reduced margin for inline appearance */
     overflow-x: auto;
     border-radius: 8px;
     border: 1px solid #e9ecef;
@@ -568,7 +573,7 @@
 /* Responsive table for mobile */
 @media (max-width: 768px) {
     .ai-table-container {
-        margin: 12px -24px; /* Extend to edges on mobile */
+        margin: 6px -24px; /* Reduced margin, extend to edges on mobile */
         border-radius: 0;
         border-left: none;
         border-right: none;
