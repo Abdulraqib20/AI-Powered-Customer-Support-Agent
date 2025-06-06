@@ -407,9 +407,98 @@ class SessionManager:
                         WHERE conversation_id = %s
                     """, (title, conversation_id))
                     conn.commit()
+                    print(f"✅ Conversation title updated: {title[:30]}...")
 
         except Exception as e:
             print(f"❌ Error updating conversation title: {e}")
+
+    def generate_conversation_title(self, first_user_message: str) -> str:
+        """Generate an intelligent conversation title from the first user message, similar to ChatGPT"""
+        if not first_user_message:
+            return "New Chat"
+
+        # Clean and prepare the message
+        message = first_user_message.strip()
+
+        # If message is too short, use it as-is
+        if len(message) <= 30:
+            return message.capitalize()
+
+        # For longer messages, try to extract the key intent
+        lower_message = message.lower()
+
+        # Common patterns for Nigerian e-commerce
+        if any(word in lower_message for word in ['order', 'track', 'delivery', 'shipping']):
+            if 'track' in lower_message or 'where' in lower_message:
+                return "Track Order"
+            elif 'history' in lower_message:
+                return "Order History"
+            else:
+                return "Order Inquiry"
+
+        elif any(word in lower_message for word in ['account', 'profile', 'update', 'change']):
+            return "Account Settings"
+
+        elif any(word in lower_message for word in ['payment', 'pay', 'card', 'bank']):
+            return "Payment Inquiry"
+
+        elif any(word in lower_message for word in ['product', 'search', 'find', 'show me']):
+            return "Product Search"
+
+        elif any(word in lower_message for word in ['help', 'support', 'problem', 'issue']):
+            return "Customer Support"
+
+        elif any(word in lower_message for word in ['price', 'cost', 'how much']):
+            return "Pricing Inquiry"
+
+        elif any(word in lower_message for word in ['cancel', 'refund', 'return']):
+            return "Cancel/Return"
+
+        # If no pattern matches, take first meaningful words (up to 4 words or 35 chars)
+        words = message.split()
+        if len(words) <= 4:
+            return message.capitalize()
+
+        # Take first 4 words or until we hit 35 characters
+        title_words = []
+        char_count = 0
+
+        for word in words[:4]:
+            if char_count + len(word) + 1 > 35:  # +1 for space
+                break
+            title_words.append(word)
+            char_count += len(word) + 1
+
+        title = " ".join(title_words)
+
+        # Add ellipsis if we truncated
+        if len(title_words) < len(words) and len(words) > 4:
+            title += "..."
+
+        return title.capitalize()
+
+    def update_conversation_title_if_new(self, conversation_id: str, user_message: str):
+        """Update conversation title only if it's still 'New Chat' (i.e., this is the first real message)"""
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    # Check current title
+                    cur.execute("""
+                        SELECT conversation_title,
+                               (SELECT COUNT(*) FROM chat_messages WHERE conversation_id = %s AND sender_type = 'user') as user_message_count
+                        FROM chat_conversations
+                        WHERE conversation_id = %s
+                    """, (conversation_id, conversation_id))
+
+                    result = cur.fetchone()
+                    if result and (result['conversation_title'] == 'New Chat' or result['user_message_count'] == 1):
+                        # This is the first user message, generate a title
+                        new_title = self.generate_conversation_title(user_message)
+                        self.update_conversation_title(conversation_id, new_title)
+                        print(f"🏷️ Auto-generated conversation title: '{new_title}' for conversation {conversation_id[:8]}...")
+
+        except Exception as e:
+            print(f"❌ Error updating conversation title if new: {e}")
 
     def get_session_context_for_ai(self, session_id: str) -> Dict[str, Any]:
         """Get session context for AI queries with customer validation"""

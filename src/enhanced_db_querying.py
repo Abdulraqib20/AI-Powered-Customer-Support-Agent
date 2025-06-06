@@ -2061,10 +2061,21 @@ RESPONSE STYLE:
                 confirm the cancellation, and offer assistance for future orders. Use appropriate emojis for the emotional tone.
                 """
             else:
+                # 🔧 DYNAMIC RESULT LIMITING: Show more results for order history queries
+                max_items_to_show = 3  # Default
+                query_lower = query_context.user_query.lower()
+
+                if any(keyword in query_lower for keyword in ['full order history', 'all orders', 'complete history', 'entire history']):
+                    max_items_to_show = 10  # Show up to 10 orders for full history requests
+                elif any(keyword in query_lower for keyword in ['order history', 'my orders', 'orders for customer']):
+                    max_items_to_show = 7   # Show up to 7 orders for general order history
+                elif query_context.query_type == QueryType.ORDER_ANALYTICS:
+                    max_items_to_show = 7   # Show more orders for analytics queries
+
                 response_content = f"""
                 Based on the customer query: "{query_context.user_query}"
 
-                Query results: {safe_json_dumps(query_context.execution_result, max_items=3)}
+                Query results: {safe_json_dumps(query_context.execution_result, max_items=max_items_to_show)}
 
                 Customer emotion detected: {sentiment_data['emotion']} (intensity: {sentiment_data['intensity']})
 

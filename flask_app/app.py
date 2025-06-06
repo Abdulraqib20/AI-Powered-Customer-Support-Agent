@@ -998,6 +998,9 @@ def api_enhanced_query():
                     metadata={}
                 )
 
+                # 🏷️ Update conversation title if this is the first user message (ChatGPT-style)
+                session_manager.update_conversation_title_if_new(conversation_id, user_query)
+
                 # Add AI response
                 ai_metadata = {
                     'query_type': result.get('query_type'),
@@ -1019,13 +1022,14 @@ def api_enhanced_query():
         # Update session with current conversation if needed
         if not conversation_id and session.get('user_authenticated'):
             try:
-                # Create new conversation for authenticated users
+                # 🏷️ Create new conversation with intelligent title generation
+                intelligent_title = session_manager.generate_conversation_title(user_query)
                 new_conversation_id = session_manager.create_conversation(
                     session_id=session['session_id'],
-                    title=user_query[:50] + "..." if len(user_query) > 50 else user_query
+                    title=intelligent_title
                 )
                 session['current_conversation_id'] = new_conversation_id
-                app_logger.info(f"✅ Created new conversation: {new_conversation_id}")
+                app_logger.info(f"✅ Created new conversation: {new_conversation_id} with title: '{intelligent_title}'")
 
                 # Add messages to new conversation
                 session_manager.add_message(

@@ -3625,6 +3625,23 @@ function sendQuickMessage(message) {
     }
 }
 
+// 🏷️ Global addUserMessage function for compatibility with other scripts
+function addUserMessage(message) {
+    console.log(`🖱️ Global addUserMessage called: ${message}`);
+    if (window.customerPortal) {
+        // Open modal if not already open
+        if (!window.customerPortal.modalOpen) {
+            window.customerPortal.openChatModal();
+        }
+        // Wait for modal to open before sending message
+        setTimeout(() => {
+            window.customerPortal.sendCustomerMessage(message);
+        }, 400);
+    } else {
+        console.error('❌ CustomerPortal not initialized');
+    }
+}
+
 function trackOrderViaChat() {
     const orderIdInput = document.getElementById('orderIdInput');
     const orderId = orderIdInput?.value.trim();
