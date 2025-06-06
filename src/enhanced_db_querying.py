@@ -195,7 +195,11 @@ try:
     from .recommendation_engine import ProductRecommendationEngine, CustomerSupportContext
     from .order_ai_assistant import OrderAIAssistant, SessionState
     from .conversation_memory_system import world_class_memory, WorldClassMemorySystem
-    logger.info("✅ Successfully imported enhanced components")
+    from .user_roles import (
+        UserRole, Permission, RoleBasedAccessControl,
+        determine_user_role, get_role_appropriate_response
+    )
+    logger.info("✅ Successfully imported enhanced components and RBAC system")
 except ImportError:
     try:
         from recommendation_engine import ProductRecommendationEngine, CustomerSupportContext
@@ -450,14 +454,8 @@ Classify this query and extract relevant entities. Return JSON format:
 
         # Classify query type based on keywords
         if any(keyword in query_lower for keyword in ['customer', 'customers', 'profile', 'account']):
-            # 🔧 CRITICAL FIX: Check for business analytics keywords to avoid customer-specific conversion
-            business_keywords = ['top', 'highest', 'most', 'best', 'all customers', 'customer ranking', 'customer analytics', 'platform', 'who is', 'which customer']
-            if any(biz_keyword in query_lower for biz_keyword in business_keywords):
-                logger.info(f"🏢 BUSINESS ANALYTICS DETECTED: Query requests platform-wide customer data")
-                entities['business_analytics'] = True
-                entities['customer_id'] = None  # Override customer-specific context for business queries
-                return QueryType.CUSTOMER_ANALYSIS, entities
-            elif any(keyword in query_lower for keyword in ['where', 'from', 'in', 'state', 'location']):
+            # Removed business analytics bypass - now handled by RBAC
+            if any(keyword in query_lower for keyword in ['where', 'from', 'in', 'state', 'location']):
                 return QueryType.GEOGRAPHIC_ANALYSIS, entities
             else:
                 return QueryType.CUSTOMER_ANALYSIS, entities
@@ -574,6 +572,19 @@ For these operations, return: SELECT 'APPLICATION_LAYER_OPERATION' as message;
 - user_authenticated: {entities.get('user_authenticated', False)}
 - customer_id: {entities.get('customer_id', 'None')}
 
+🔐 ROLE-BASED ACCESS CONTROL (RBAC) CONTEXT:
+- user_role: {entities.get('user_role', 'guest')}
+- can_access_analytics: {entities.get('can_access_analytics', False)}
+- rbac_customer_filter: {entities.get('rbac_customer_filter', 'None')}
+- rbac_restrict_to_own: {entities.get('rbac_restrict_to_own', True)}
+
+🛡️ RBAC SQL GENERATION RULES:
+1. For user_role='customer': ALWAYS add WHERE customer_id = {entities.get('rbac_customer_filter', 'NULL')} to queries accessing customer data
+2. For user_role='guest': NO access to customer-specific data, return generic queries only
+3. For user_role in ['support_agent', 'admin', 'super_admin']: Full access to all customer data
+4. If can_access_analytics=False: BLOCK queries for revenue, business analytics, customer rankings
+5. For business analytics queries when can_access_analytics=False: Return 'SELECT 'Access Denied: Insufficient privileges for business analytics' as message;'
+
 CRITICAL SQL GENERATION RULES:
 1. Always use proper PostgreSQL syntax
 2. For authenticated customers with customer_id in entities, use it directly in WHERE clauses
@@ -598,8 +609,8 @@ EXAMPLES:
 - "Double check my spending" with customer_id=1503: SELECT COALESCE(SUM(total_amount), 0) AS total_spent FROM orders WHERE customer_id = 1503;
 - "Give me the details" with customer_id=1503: SELECT COALESCE(product_category, 'Uncategorized') as product_category, SUM(total_amount) as category_spending FROM orders WHERE customer_id = 1503 GROUP BY COALESCE(product_category, 'Uncategorized') ORDER BY category_spending DESC;
 - "Categories I purchased from" with customer_id=1503: SELECT DISTINCT COALESCE(product_category, 'Uncategorized') as product_category FROM orders WHERE customer_id = 1503 ORDER BY product_category;
-- "Who is the top spending customer" with business_analytics=True: SELECT c.customer_id, c.name, SUM(o.total_amount) as total_spent FROM customers c JOIN orders o ON c.customer_id = o.customer_id GROUP BY c.customer_id, c.name ORDER BY total_spent DESC LIMIT 10;
-- "Which customers spend the most" with business_analytics=True: SELECT c.customer_id, c.name, c.account_tier, SUM(o.total_amount) as total_spent FROM customers c JOIN orders o ON c.customer_id = o.customer_id GROUP BY c.customer_id, c.name, c.account_tier ORDER BY total_spent DESC LIMIT 10;
+- "Who is the top spending customer" (ADMIN ONLY): SELECT c.customer_id, c.name, SUM(o.total_amount) as total_spent FROM customers c JOIN orders o ON c.customer_id = o.customer_id GROUP BY c.customer_id, c.name ORDER BY total_spent DESC LIMIT 10;
+- "Which customers spend the most" (ADMIN ONLY): SELECT c.customer_id, c.name, c.account_tier, SUM(o.total_amount) as total_spent FROM customers c JOIN orders o ON c.customer_id = o.customer_id GROUP BY c.customer_id, c.name, c.account_tier ORDER BY total_spent DESC LIMIT 10;
 - "Debug total calculation" with customer_id=1503: SELECT 'Individual orders' as source, COUNT(*) as order_count, SUM(total_amount) as total_spent FROM orders WHERE customer_id = 1503 UNION ALL SELECT 'Category breakdown' as source, COUNT(DISTINCT order_id) as order_count, SUM(total_amount) as total_spent FROM orders WHERE customer_id = 1503;
 
 ⚠️ CRITICAL AUTHENTICATION RULES:
@@ -2244,7 +2255,8 @@ Our team is ready to assist you with orders, delivery, payments, and any questio
         🔒 CURRENT USER AUTHORIZATION:
         - User authenticated: {user_authenticated}
         - Customer ID: {customer_id or 'None'}
-        - User type: {'Customer' if customer_id else 'Anonymous'}
+        - User role: {determine_user_role(session_context).value}
+        - Access level: {RoleBasedAccessControl.get_user_role_info(determine_user_role(session_context)).max_data_access_level}
 
         🚨 CRITICAL: The customer is {"AUTHENTICATED" if user_authenticated else "NOT AUTHENTICATED"}!
         {f"- This is customer {customer_id} - provide personalized responses for THEIR data" if user_authenticated and customer_id else "- This is an anonymous user - do NOT provide customer-specific data"}
@@ -2705,13 +2717,31 @@ How can I help you with your raqibtech.com experience today? 🌟"""
 
             logger.info(f"🔍 Shopping check: order_ai_assistant_instance_exists={bool(self.order_ai_assistant)}, session_context_provided={bool(session_context)}, user_is_authenticated={session_context.get('user_authenticated') if session_context else False}")
 
+            # 🔧 CRITICAL FIX: Check for analytics/cross-customer queries BEFORE shopping intent detection
+            analytics_keywords = [
+                'revenue', 'business analytics', 'top customers', 'top spending',
+                'customer rankings', 'sales data', 'platform statistics', 'total revenue',
+                'business performance', 'analytics', 'top customer', 'highest spending',
+                'revenue report', 'sales report', 'business insights', 'best customers',
+                'worst customers', 'customers from', 'which customers', 'customers in',
+                'customers who', 'customer spending', 'customer orders', 'customers with',
+                'most profitable', 'least profitable', 'customer behavior', 'customer segments',
+                'cross customer', 'other customers', 'all customers', 'compare customers',
+                'customer comparison', 'customer analytics', 'customer metrics'
+            ]
+
+            is_analytics_query = any(keyword in user_query.lower() for keyword in analytics_keywords)
+
             # 🔧 CRITICAL FIX: Check for spending/financial queries BEFORE shopping intent detection
             spending_keywords = ['spent', 'spending', 'spend', 'total spent', 'how much', 'breakdown', 'calculation', 'calculate', 'are you sure', 'verify', 'double check', 'give me the details', 'details', 'confirm', 'revenue', 'sales', 'money', 'naira', '₦']
             is_spending_query = any(keyword in user_query.lower() for keyword in spending_keywords)
 
-            if is_spending_query:
-                logger.info(f"💰 SPENDING QUERY DETECTED: Bypassing shopping intent detection entirely")
-                # Skip shopping assistant and go directly to revenue insights processing
+            if is_spending_query or is_analytics_query:
+                if is_spending_query:
+                    logger.info(f"💰 SPENDING QUERY DETECTED: Bypassing shopping intent detection entirely")
+                if is_analytics_query:
+                    logger.info(f"📊 ANALYTICS QUERY DETECTED: Bypassing shopping intent detection entirely")
+                # Skip shopping assistant and go directly to analytics/revenue processing
                 pass
             elif self.order_ai_assistant and session_context and session_context.get('user_authenticated'):
                 customer_id = session_context.get('customer_id')
@@ -2726,6 +2756,14 @@ How can I help you with your raqibtech.com experience today? 🌟"""
                         'affirmative_confirmation', 'negative_rejection'
                     ]
                     is_potentially_shopping_action = intent_from_parser in shopping_related_intents
+
+                    # 🔧 CRITICAL FIX: Exclude queries asking about multiple customers from shopping actions
+                    cross_customer_indicators = ['customers', 'which customers', 'customers from', 'customers in', 'customers who', 'customers with']
+                    is_cross_customer_query = any(indicator in user_query.lower() for indicator in cross_customer_indicators)
+
+                    if is_cross_customer_query:
+                        is_potentially_shopping_action = False
+                        logger.info(f"🚫 Cross-customer query detected, overriding shopping action: {user_query[:50]}...")
 
                     logger.info(f"🔍 Shopping intent check: query='{user_query[:50]}...', parsed_intent='{intent_from_parser}', is_shopping_action={is_potentially_shopping_action}")
 
@@ -2826,6 +2864,99 @@ How can I help you with your raqibtech.com experience today? 🌟"""
                 # Add other session context information
                 entities['session_id'] = session_context.get('session_id')
                 entities['user_authenticated'] = session_context.get('user_authenticated', False)
+
+            # 🔐 ROLE-BASED ACCESS CONTROL (RBAC) VALIDATION
+            from .rbac_core import rbac_manager, UserRole, Permission
+
+            # Extract user role from session context
+            user_role = UserRole.GUEST  # Default to guest
+            can_access_analytics = False
+            user_customer_id = None
+
+            if session_context and session_context.get('user_authenticated'):
+                user_role_str = session_context.get('user_role', 'customer')
+                user_customer_id = session_context.get('customer_id')
+
+                try:
+                    user_role = UserRole(user_role_str)
+                    # Check if user can access business analytics
+                    can_access_analytics = user_role in [UserRole.ADMIN, UserRole.SUPER_ADMIN]
+                    logger.info(f"🔐 RBAC: User role={user_role.value}, can_access_analytics={can_access_analytics}")
+                except ValueError:
+                    logger.warning(f"⚠️ Invalid user role: {user_role_str}, defaulting to GUEST")
+                    user_role = UserRole.GUEST
+
+            # 🛡️ RBAC: Block unauthorized access to business analytics (using keywords from earlier detection)
+            # Note: analytics_keywords already defined earlier for pre-shopping detection
+
+            if is_analytics_query and not can_access_analytics:
+                logger.warning(f"🚫 RBAC BLOCKED: {user_role.value} attempted to access business analytics")
+
+                # Generate empathetic, role-appropriate response
+                empathetic_response = get_role_appropriate_response(user_role, "business analytics and customer data")
+
+                return {
+                    'success': True,
+                    'response': empathetic_response,
+                    'query_type': 'access_denied',
+                    'execution_time': f"{time.time() - start_time:.3f}s",
+                    'sql_query': None,
+                    'results_count': 0,
+                    'rbac_blocked': True
+                }
+
+            # 🛡️ RBAC: Restrict customer data access
+            if user_role == UserRole.CUSTOMER and user_customer_id:
+                # Customers can only access their own data
+                entities['rbac_customer_filter'] = user_customer_id
+                entities['rbac_restrict_to_own'] = True
+                logger.info(f"🔐 RBAC: Customer {user_customer_id} restricted to own data")
+            elif user_role in [UserRole.SUPPORT_AGENT, UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+                # Staff can access all customer data
+                entities['rbac_customer_filter'] = None
+                entities['rbac_restrict_to_own'] = False
+                logger.info(f"🔐 RBAC: {user_role.value} granted access to all customer data")
+            else:
+                # Guests have no data access
+                entities['rbac_customer_filter'] = None
+                entities['rbac_restrict_to_own'] = True
+                entities['rbac_guest_mode'] = True
+                logger.info(f"🔐 RBAC: Guest user - limited access")
+
+            # Store RBAC context for SQL generation
+            entities['user_role'] = user_role.value
+            entities['can_access_analytics'] = can_access_analytics
+            user_role = determine_user_role(session_context or {})
+            customer_id = session_context.get('customer_id') if session_context else None
+
+            # Validate query authorization based on user role
+            auth_result = RoleBasedAccessControl.validate_query_authorization(
+                user_role=user_role,
+                query_type=query_type.value,
+                customer_id=customer_id
+            )
+
+            if not auth_result["authorized"]:
+                logger.warning(f"🔐 ACCESS DENIED: {auth_result['reason']}")
+
+                # Generate role-appropriate response
+                response_text = get_role_appropriate_response(user_role, "business analytics and customer data")
+
+                return {
+                    'success': True,
+                    'response': response_text,
+                    'query_type': 'access_denied',
+                    'execution_time': f"{time.time() - start_time:.3f}s",
+                    'sql_query': None,
+                    'results_count': 0,
+                    'access_control': {
+                        'user_role': user_role.value,
+                        'reason': auth_result['reason'],
+                        'alternative': auth_result['alternative']
+                    }
+                }
+
+            logger.info(f"🔐 ACCESS GRANTED: Role '{user_role.value}' authorized for '{query_type.value}' query")
 
             # Generate and execute SQL query
             sql_query = self.generate_sql_query(user_query, query_type, entities)
