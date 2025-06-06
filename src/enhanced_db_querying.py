@@ -610,10 +610,13 @@ For these operations, return: SELECT 'APPLICATION_LAYER_OPERATION' as message;
 CRITICAL SQL GENERATION RULES:
 1. Always use proper PostgreSQL syntax
 2. For authenticated customers with customer_id in entities, use it directly in WHERE clauses
-3. For support agents discussing a specific customer:
-   - If context_customer_id exists: Use WHERE customer_id = {entities.get('context_customer_id', 'NULL')}
+3. 🔧 CRITICAL: For support agents discussing a specific customer:
+   - ALWAYS prioritize context_customer_id over customer_id when both exist
+   - If context_customer_id exists in entities: Use WHERE customer_id = {entities.get('context_customer_id')}
    - If query mentions "this customer" or "the customer": Use context_customer_id from conversation
+   - If query asks about "when did customer join" or "customer details": Use context_customer_id
    - If query asks about payment methods for "this customer": Use context_customer_id, not logged-in customer_id
+   - Example: context_customer_id=1503, customer_id=1505 → Use WHERE customer_id = 1503
 4. For "track my order" or "order history" without specific order_id:
    - If customer_id is available: SELECT * FROM orders WHERE customer_id = {entities.get('customer_id', 'NULL')}
    - If no customer_id: Ask user to provide order ID
@@ -627,6 +630,10 @@ EXAMPLES:
 - "Track my order" with customer_id=1503: SELECT * FROM orders WHERE customer_id = 1503
 - "Order history" with customer_id=1503: SELECT o.*, c.name FROM orders o JOIN customers c ON o.customer_id = c.customer_id WHERE o.customer_id = 1503
 - "Track order 12345": SELECT * FROM orders WHERE order_id = 12345
+- "When did customer 1503 join us" with context_customer_id=1503: SELECT created_at FROM customers WHERE customer_id = 1503
+- "What is their account tier" with context_customer_id=1503: SELECT account_tier FROM customers WHERE customer_id = 1503
+- "When did this customer join" with context_customer_id=1503, customer_id=1505: SELECT created_at FROM customers WHERE customer_id = 1503
+- "Customer details" with context_customer_id=1503, customer_id=1505: SELECT name, email, account_tier FROM customers WHERE customer_id = 1503
 - "How much have I spent" with customer_id=1503: SELECT COALESCE(SUM(total_amount), 0) AS total_spent FROM orders WHERE customer_id = 1503;
 - "Total spending breakdown" with customer_id=1503: SELECT COALESCE(product_category, 'Uncategorized') as product_category, SUM(total_amount) as category_spending FROM orders WHERE customer_id = 1503 GROUP BY COALESCE(product_category, 'Uncategorized') ORDER BY category_spending DESC;
 - "Which products have I spent most on" with customer_id=1503: SELECT COALESCE(product_category, 'Uncategorized') as product_category, SUM(total_amount) as total_spent FROM orders WHERE customer_id = 1503 GROUP BY COALESCE(product_category, 'Uncategorized') ORDER BY total_spent DESC;
@@ -675,11 +682,24 @@ EXAMPLES:
 RESPONSE FORMAT: Return ONLY the SQL query, nothing else."""
 
         try:
+            # 🔧 CRITICAL FIX: Include entity context in user message for better context awareness
+            context_info = ""
+            if entities:
+                context_parts = []
+                if entities.get('context_customer_id'):
+                    context_parts.append(f"context_customer_id={entities.get('context_customer_id')}")
+                if entities.get('customer_id'):
+                    context_parts.append(f"customer_id={entities.get('customer_id')}")
+                if entities.get('user_authenticated'):
+                    context_parts.append(f"user_authenticated={entities.get('user_authenticated')}")
+                if context_parts:
+                    context_info = f" (Context: {', '.join(context_parts)})"
+
             response = self.groq_client.chat.completions.create(
                 model="meta-llama/llama-4-scout-17b-16e-instruct",
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Generate SQL query for: {user_query}"}
+                    {"role": "user", "content": f"Generate SQL query for: {user_query}{context_info}"}
                 ],
                 temperature=0.1,
                 max_tokens=512
