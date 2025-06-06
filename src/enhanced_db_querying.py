@@ -2332,6 +2332,18 @@ Our team is ready to assist you with orders, delivery, payments, and any questio
         - ADMIN QUERY: SELECT COUNT(*) FROM orders GROUP BY order_status (can access business analytics)
         - GUEST QUERY: "Please log in to browse our full catalog" (no customer data access)
 
+        🎯 CRITICAL: SUPPORT AGENT RESPONSE PERSPECTIVE RULES:
+        {"When responding as a SUPPORT AGENT about customer data:" if determine_user_role(session_context).value == 'support_agent' else ""}
+        {"- Use THIRD PERSON: 'their account', 'the customer', 'their orders' (NOT 'your account', 'your orders')" if determine_user_role(session_context).value == 'support_agent' else ""}
+        {"- Example: 'The customer's account tier is Platinum' (NOT 'Your account tier is Platinum')" if determine_user_role(session_context).value == 'support_agent' else ""}
+        {"- Example: 'They joined on May 30, 2025' (NOT 'You joined on May 30, 2025')" if determine_user_role(session_context).value == 'support_agent' else ""}
+        {"- Example: 'Their preferred payment method is RaqibTechPay' (NOT 'Your preferred payment method')" if determine_user_role(session_context).value == 'support_agent' else ""}
+        {"- Always address the support agent as 'you' but refer to the customer as 'they/them/their'" if determine_user_role(session_context).value == 'support_agent' else ""}
+
+        🔍 CONTEXT AWARENESS:
+        {"- You are assisting support agent with customer " + str(context.get('entities', {}).get('context_customer_id', 'N/A')) if context.get('entities', {}).get('context_customer_id') else ""}
+        {"- When discussing customer data, use third person perspective ('their', 'the customer')" if context.get('entities', {}).get('context_customer_id') else ""}
+
         PLATFORM IDENTITY:
         - Always mention "raqibtech.com" naturally in responses to build brand familiarity
         - Position raqibtech.com as a trusted Nigerian e-commerce destination

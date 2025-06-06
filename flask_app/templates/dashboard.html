@@ -453,6 +453,148 @@
     line-height: 1.4;
 }
 
+/* 🆕 AI Response Table Styles */
+.ai-table-container {
+    margin: 16px 0;
+    overflow-x: auto;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+    background: #ffffff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+}
+
+.ai-response-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    line-height: 1.4;
+    margin: 0;
+}
+
+.ai-response-table thead {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.ai-response-table th {
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border: none;
+    white-space: nowrap;
+}
+
+.ai-response-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid #f1f3f4;
+    vertical-align: top;
+    color: #2c3e50;
+}
+
+.ai-response-table tbody tr:hover {
+    background: #f8f9fa;
+    transition: background-color 0.2s ease;
+}
+
+.ai-response-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Nigerian Naira (₦) symbol styling in tables */
+.ai-response-table td:contains('₦') {
+    font-weight: 500;
+    color: var(--brand-primary);
+}
+
+/* Status indicators in tables */
+.ai-response-table td {
+    position: relative;
+}
+
+/* 🆕 Enhanced Table Cell Formatting */
+.status-badge {
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: inline-block;
+}
+
+.status-success {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.status-info {
+    background: #cce7ff;
+    color: #004085;
+    border: 1px solid #abd7ff;
+}
+
+.status-warning {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+}
+
+.status-danger {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.amount-highlight {
+    font-weight: 600;
+    color: var(--brand-primary);
+    background: rgba(46, 204, 113, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.payment-method {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 500;
+    color: #495057;
+}
+
+/* Responsive table for mobile */
+@media (max-width: 768px) {
+    .ai-table-container {
+        margin: 12px -24px; /* Extend to edges on mobile */
+        border-radius: 0;
+        border-left: none;
+        border-right: none;
+    }
+
+    .ai-response-table th,
+    .ai-response-table td {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+
+    .ai-response-table th {
+        font-size: 11px;
+    }
+
+    .status-badge {
+        padding: 2px 6px;
+        font-size: 10px;
+    }
+
+    .amount-highlight {
+        padding: 1px 4px;
+        font-size: 11px;
+    }
+}
+
 /* Customer message bubble adjustments */
 .message.customer .message-bubble {
     max-width: fit-content; /* Adjust to content width */
@@ -2826,6 +2968,9 @@ class CustomerSupportPortal {
         // Simple markdown renderer for basic formatting
         if (!text) return text;
 
+        // 🆕 ENHANCED: Convert markdown tables to HTML tables
+        text = this.renderMarkdownTables(text);
+
         // Convert **bold** to <strong>
         text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
 
@@ -2849,6 +2994,152 @@ class CustomerSupportPortal {
         text = text.replace(/<\/ul>\s*<ul>/g, ''); // merge consecutive lists
 
         return text;
+    }
+
+    renderMarkdownTables(text) {
+        // 🆕 Enhanced markdown table parser for AI responses
+        const lines = text.split('\n');
+        const result = [];
+        let i = 0;
+
+        while (i < lines.length) {
+            const line = lines[i].trim();
+
+            // Check if this line looks like a table header (contains |)
+            if (line.includes('|') && line.length > 3) {
+                // Look ahead to see if next line is a separator (contains | and -)
+                const nextLine = i + 1 < lines.length ? lines[i + 1].trim() : '';
+
+                if (nextLine.includes('|') && nextLine.includes('-')) {
+                    // Found a markdown table!
+                    const tableLines = [line]; // Header
+                    i++; // Skip separator line
+                    i++; // Move to first data row
+
+                    // Collect all subsequent table rows
+                    while (i < lines.length) {
+                        const tableLine = lines[i].trim();
+                        if (tableLine.includes('|') && tableLine.length > 3) {
+                            tableLines.push(tableLine);
+                            i++;
+                        } else {
+                            break; // End of table
+                        }
+                    }
+
+                    // Convert to HTML table
+                    result.push(this.convertToHtmlTable(tableLines));
+                    continue;
+                }
+            }
+
+            // Not a table line, add as-is
+            result.push(line);
+            i++;
+        }
+
+        return result.join('\n');
+    }
+
+        convertToHtmlTable(tableLines) {
+        if (tableLines.length === 0) return '';
+
+        let html = '<div class="ai-table-container"><table class="ai-response-table">';
+
+        // Process header (first line)
+        const headerCells = tableLines[0].split('|')
+            .map(cell => cell.trim())
+            .filter(cell => cell.length > 0);
+
+        html += '<thead><tr>';
+        headerCells.forEach(cell => {
+            html += `<th>${cell}</th>`;
+        });
+        html += '</tr></thead>';
+
+        // Process data rows (remaining lines)
+        if (tableLines.length > 1) {
+            html += '<tbody>';
+            for (let i = 1; i < tableLines.length; i++) {
+                const cells = tableLines[i].split('|')
+                    .map(cell => cell.trim())
+                    .filter(cell => cell.length > 0);
+
+                html += '<tr>';
+                cells.forEach(cell => {
+                    // Apply basic markdown formatting to table cells
+                    let formattedCell = cell.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                    formattedCell = formattedCell.replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+                    // 🆕 Enhanced formatting for specific data types
+                    formattedCell = this.enhanceTableCellFormatting(formattedCell);
+
+                    html += `<td>${formattedCell}</td>`;
+                });
+                html += '</tr>';
+            }
+            html += '</tbody>';
+        }
+
+        html += '</table></div>';
+        return html;
+    }
+
+    enhanceTableCellFormatting(cell) {
+        // Format order status with colored badges
+        if (/^(delivered|processing|pending|cancelled|returned|shipped)$/i.test(cell.trim())) {
+            const status = cell.trim().toLowerCase();
+            let badgeClass = 'status-badge';
+
+            switch (status) {
+                case 'delivered':
+                    badgeClass += ' status-success';
+                    break;
+                case 'processing':
+                case 'shipped':
+                    badgeClass += ' status-info';
+                    break;
+                case 'pending':
+                    badgeClass += ' status-warning';
+                    break;
+                case 'cancelled':
+                case 'returned':
+                    badgeClass += ' status-danger';
+                    break;
+            }
+
+            return `<span class="${badgeClass}">${cell}</span>`;
+        }
+
+        // Format Nigerian Naira amounts with highlighting
+        if (cell.includes('₦') || /\d+,\d+\.\d+/.test(cell)) {
+            return `<span class="amount-highlight">${cell}</span>`;
+        }
+
+        // Format payment methods with icons
+        if (/^(bank transfer|card|pay on delivery|raqibtechpay)$/i.test(cell.trim())) {
+            const method = cell.trim().toLowerCase();
+            let icon = '';
+
+            switch (method) {
+                case 'bank transfer':
+                    icon = '🏦';
+                    break;
+                case 'card':
+                    icon = '💳';
+                    break;
+                case 'pay on delivery':
+                    icon = '📦';
+                    break;
+                case 'raqibtechpay':
+                    icon = '💰';
+                    break;
+            }
+
+            return `<span class="payment-method">${icon} ${cell}</span>`;
+        }
+
+        return cell;
     }
 
     addMessageToChatDisplay(message, sender, isError = false, metadata = {}) {
