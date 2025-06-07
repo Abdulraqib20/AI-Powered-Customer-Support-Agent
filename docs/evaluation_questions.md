@@ -9,6 +9,7 @@ This document contains a comprehensive set of realistic, real-life potential que
 These questions simulate real queries from logged-in customers regarding their personal accounts, orders, and shopping experience.
 
 ### 1.1. Order Tracking & Status
+
 - Where is my order?
 - Can you track my recent order for me?
 - What's the current status of my order #ORD-2025-ABCDE?
@@ -21,6 +22,7 @@ These questions simulate real queries from logged-in customers regarding their p
 - Can you confirm if my order has left the warehouse?
 
 ### 1.2. Order History & Details
+
 - What did I order last time?
 - Show me my full order history.
 - How many orders have I placed this year?
@@ -33,6 +35,7 @@ These questions simulate real queries from logged-in customers regarding their p
 - Did I order a Tecno phone from you guys before?
 
 ### 1.3. Account Management & Tier Status
+
 - What's my current account tier?
 - How much more do I need to spend to reach Platinum tier?
 - What are the benefits of being a Gold tier member?
@@ -45,6 +48,7 @@ These questions simulate real queries from logged-in customers regarding their p
 - Show me my spending breakdown by month.
 
 ### 1.4. Product Information & Availability
+
 - Is the iPhone 15 Pro Max in stock?
 - Do you have any Tecno Camon 20 Pro 5G phones available?
 - What are the specifications for the Samsung Galaxy S24?
@@ -57,6 +61,7 @@ These questions simulate real queries from logged-in customers regarding their p
 - Does this product have good reviews?
 
 ### 1.5. Payment & Billing Issues
+
 - Why was my payment declined?
 - Can I change the payment method for my recent order?
 - I think I was double-charged for my last purchase.
@@ -69,6 +74,7 @@ These questions simulate real queries from logged-in customers regarding their p
 - I have not received my refund yet.
 
 ### 1.6. Delivery & Shipping
+
 - What are your shipping rates to Abuja?
 - How long does delivery to Port Harcourt usually take?
 - Can I change the delivery address for an order that has already shipped?
@@ -81,6 +87,7 @@ These questions simulate real queries from logged-in customers regarding their p
 - Can I pick up my order from your warehouse?
 
 ### 1.7. Returns & Refunds
+
 - What is your return policy?
 - I want to return an item from my last order.
 - How do I start the return process?
@@ -93,6 +100,7 @@ These questions simulate real queries from logged-in customers regarding their p
 - My refund amount is incorrect.
 
 ### 1.8. Technical Support
+
 - I'm having trouble logging into my account.
 - Your website is very slow for me.
 - I can't add items to my cart, please help.
@@ -111,6 +119,7 @@ These questions simulate real queries from logged-in customers regarding their p
 These questions are from the perspective of a support agent using the AI to help a customer. The queries are often about retrieving specific customer data or taking action on their behalf.
 
 ### 2.1. Customer Information Lookup
+
 - Pull up the account for customer ID 1503.
 - Find the customer with the email address "chidi.obi@example.com".
 - What is the order history for the customer I'm currently talking to?
@@ -123,6 +132,7 @@ These questions are from the perspective of a support agent using the AI to help
 - Has this customer contacted us before? Show me their conversation history.
 
 ### 2.2. Analyzing Customer History & Behavior
+
 - How much has this customer spent in the last 6 months?
 - What are the top 3 product categories this customer purchases from?
 - What is their average order value?
@@ -135,6 +145,7 @@ These questions are from the perspective of a support agent using the AI to help
 - Compare the spending habits of customer 1481 and 1406.
 
 ### 2.3. Investigating & Managing Orders
+
 - Check the status of order #ORD-2025-GHIJK for me.
 - The customer says their payment failed for order #ORD-2025-LMNOP. Can you verify?
 - Initiate a refund for order #ORD-2024-QRS-TU. The customer received a damaged item.
@@ -147,6 +158,7 @@ These questions are from the perspective of a support agent using the AI to help
 - Find all orders for this customer that are still pending fulfillment.
 
 ### 2.4. Cross-referencing & Contextual Follow-ups
+
 - (After listing customers on Platinum tier) What are their account tiers too?
 - (After getting order history) How much did they spend on the most recent one?
 - Now show me their delivery address.
@@ -165,6 +177,7 @@ These questions are from the perspective of a support agent using the AI to help
 These questions are focused on business intelligence, platform-wide analytics, and strategic insights. They are typically asked by executives and administrators.
 
 ### 3.1. Revenue & Sales Analytics
+
 - What was our total revenue last month?
 - Which month did we make the most revenue in sales?
 - Show me the monthly revenue trend for the last 12 months.
@@ -177,6 +190,7 @@ These questions are focused on business intelligence, platform-wide analytics, a
 - What is the total value of outstanding refunds?
 
 ### 3.2. Customer Analytics
+
 - Who are our top 10 highest-spending customers of all time?
 - How many new customers did we acquire last quarter?
 - What is the distribution of our customers across the different account tiers?
@@ -189,6 +203,7 @@ These questions are focused on business intelligence, platform-wide analytics, a
 - What's the customer retention rate month-over-month?
 
 ### 3.3. Product & Operational Performance
+
 - Which product category has the highest profit margin?
 - What are the most frequently returned products?
 - How many orders are currently in the "shipped" status?
@@ -201,6 +216,7 @@ These questions are focused on business intelligence, platform-wide analytics, a
 - Analyze the usage of discount codes across the platform.
 
 ### 3.4. Strategic & Forecasting Questions
+
 - Based on current trends, what is our projected revenue for the next quarter?
 - Which emerging product categories should we invest in?
 - Are there any states where we should focus our marketing efforts?

@@ -267,6 +267,23 @@ class OrderAIAssistant:
                 logger.info(f"🎯 Intent parsed: {intent} (confidence: 0.95, pattern: '{pattern}') - Entity: {entity}")
                 return {'intent': intent, 'entities': {'payment_method': entity}, 'confidence': 0.95}
 
+        # Check for shipping rate inquiries BEFORE delivery address patterns
+        shipping_rate_patterns = [
+            'shipping rates to', 'delivery cost to', 'delivery fee to', 'shipping cost to',
+            'how much to ship to', 'what does it cost to ship to', 'delivery charges to',
+            'what are your shipping rates', 'what are your delivery fees', 'shipping fees to'
+        ]
+
+        if any(pattern in message_lower for pattern in shipping_rate_patterns):
+            logger.info(f"🎯 Intent parsed: general_inquiry (confidence: 0.9, pattern: 'shipping_rate_inquiry')")
+            return {
+                'intent': 'general_inquiry',
+                'confidence': 0.9,
+                'matched_pattern': 'shipping_rate_inquiry',
+                'entities': {},
+                'raw_message': user_message
+            }
+
         # 2. HIGH PRIORITY: Delivery address (must come before general address mentions)
         delivery_patterns = [
             (r'(delivery|shipping)\s*address\s*(is|set to|for|:)\s*(.+)', 'set_delivery_address', 3),
@@ -275,8 +292,8 @@ class OrderAIAssistant:
             (r'send\s*to\s*(.+)', 'set_delivery_address', 1),
             (r'ship\s*to\s*(.+)', 'set_delivery_address', 1),
             (r'use\s*address\s*(.+)', 'set_delivery_address', 1), # For confirming saved address
-             # Common Nigerian locations as implicit address
-            (r'\b(lugbe|abuja|lagos|ikeja|lekki|victoria island|ilorin|kano|kaduna|port harcourt|ibadan|benin city|onitsha|aba|enugu|jos|maiduguri|zaria|warri|uyo|calabar|owerri|akure|abeokuta|osogbo|minna|sokoto|bauchi|gombe|yola|jalingo|damaturu|dutse|lafia|makurdi|awka|asaba|yenagoa|abakaliki|Ado Ekiti)\b', 'set_delivery_address', 0)
+             # Common Nigerian locations as implicit address - BUT ONLY if NOT asking about rates/costs
+            (r'(?<!shipping rates to )(?<!delivery cost to )(?<!shipping cost to )(?<!delivery fee to )\b(lugbe|abuja|lagos|ikeja|lekki|victoria island|ilorin|kano|kaduna|port harcourt|ibadan|benin city|onitsha|aba|enugu|jos|maiduguri|zaria|warri|uyo|calabar|owerri|akure|abeokuta|osogbo|minna|sokoto|bauchi|gombe|yola|jalingo|damaturu|dutse|lafia|makurdi|awka|asaba|yenagoa|abakaliki|Ado Ekiti)\b', 'set_delivery_address', 0)
         ]
         for pattern, intent, group_idx in delivery_patterns:
             match = re.search(pattern, message_lower)
@@ -369,8 +386,9 @@ class OrderAIAssistant:
                     }
 
         # 7. CONTEXT-AWARE FALLBACK DETECTION
-        # Check for delivery address mentions by location
-        if any(word in message_lower for word in ['lugbe', 'lagos', 'abuja', 'kano', 'port harcourt']):
+        # Check for delivery address mentions by location - BUT EXCLUDE shipping rate inquiries
+        if (any(word in message_lower for word in ['lugbe', 'lagos', 'abuja', 'kano', 'port harcourt']) and
+            not any(rate_word in message_lower for rate_word in ['rates', 'cost', 'fee', 'charge', 'price', 'how much'])):
             logger.info(f"🎯 Intent parsed: set_delivery_address (confidence: 0.8, pattern: 'location_mention')")
             return {
                 'intent': 'set_delivery_address',
