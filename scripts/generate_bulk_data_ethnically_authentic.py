@@ -327,14 +327,14 @@ TIER_CRITERIA = {
         'min_total_spent': 100000,
         'max_total_spent': 500000,
         'min_orders': 3,
-        'max_orders': 15,
+        'max_orders': float('inf'),  # No upper limit on orders
         'description': 'Regular customers with moderate spending'
     },
     'Gold': {
         'min_total_spent': 500000,
         'max_total_spent': 2000000,
         'min_orders': 10,
-        'max_orders': 30,
+        'max_orders': float('inf'),  # No upper limit on orders
         'description': 'High-value customers with frequent orders'
     },
     'Platinum': {

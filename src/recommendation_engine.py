@@ -522,9 +522,9 @@ class ProductRecommendationEngine:
         try:
             tier_targets = {
                 "Bronze": {"target_amount": 100000, "message": "Spend ₦100K+ to reach Silver tier"},
-                "Silver": {"target_amount": 300000, "message": "Spend ₦300K+ to reach Gold tier"},
-                "Gold": {"target_amount": 500000, "message": "Spend ₦500K+ to reach Platinum tier"},
-                "Platinum": {"target_amount": 1000000, "message": "Maintain Platinum status"}
+                "Silver": {"target_amount": 500000, "message": "Spend ₦500K+ to reach Gold tier"},
+                "Gold": {"target_amount": 2000000, "message": "Spend ₦2M+ to reach Platinum tier"},
+                "Platinum": {"target_amount": 2000000, "message": "Maintain Platinum status with continued premium purchases"}
             }
 
             current_tier = customer_profile.account_tier

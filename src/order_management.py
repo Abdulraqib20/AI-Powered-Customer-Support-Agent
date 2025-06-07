@@ -851,11 +851,11 @@ class OrderManagementSystem:
         total_spent = float(result['total_spent'] or 0)
         current_tier = result['account_tier']
 
-        # Tier progression thresholds (in Naira)
+        # Tier progression thresholds (in Naira) - FIXED LOGIC
         tier_thresholds = {
             100000: "Silver",    # ₦100K
-            300000: "Gold",      # ₦300K
-            500000: "Platinum"   # ₦500K
+            500000: "Gold",      # ₦500K
+            2000000: "Platinum"  # ₦2M - Premium tier for top customers
         }
 
         new_tier = "Bronze"  # Default
