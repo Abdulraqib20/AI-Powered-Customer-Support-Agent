@@ -292,13 +292,15 @@ class OrderAIAssistant:
 
         # 6. OTHER SPECIFIC INTENTS
         other_patterns = {
-            'check_cart': [
+            'view_cart': [
                 'view cart', 'show cart', 'cart contents', 'what\'s in my cart',
-                'shopping cart', 'cart status', 'show my cart'
+                'shopping cart', 'cart status', 'show my cart', 'list cart',
+                'list all the items in my cart', 'cart items', 'what did i add'
             ],
-            'remove_from_cart': [
+            'clear_cart': [
                 'remove from cart', 'delete from cart', 'take out', 'remove this',
-                'clear cart', 'empty cart'
+                'clear cart', 'empty cart', 'empty my cart', 'clear my cart',
+                'remove all', 'delete all', 'clear everything', 'empty everything'
             ],
             'calculate_total': [
                 'calculate total', 'show total', 'how much', 'total cost',
@@ -418,11 +420,12 @@ class OrderAIAssistant:
                                 'search_field': 'category'
                             })
 
-                    # Stage 4: Partial word matching for compound words
+                    # Stage 4: Partial word matching for compound words (🔧 CRITICAL FIX: Exclude problematic words)
                     words = target_product_name.split()
                     if len(words) > 1:
                         for word in words:
-                            if len(word) > 2:  # Avoid very short words
+                            # 🔧 CRITICAL FIX: Exclude problematic short words and cart-related words
+                            if len(word) > 3 and word not in ['cart', 'the', 'and', 'for', 'with', 'from', 'that', 'this', 'item', 'product']:
                                 search_attempts.append({
                                     'pattern': f"%{word}%",
                                     'description': f'Word component match: {word}'
@@ -865,7 +868,39 @@ class OrderAIAssistant:
             elif intent == 'affirmative_confirmation':
                 logger.info(f"Affirmative confirmation. Current stage: {active_session_state.conversation_stage}")
                 action_taken = False
-                if active_session_state.conversation_stage == 'awaiting_address_confirmation' and active_session_state.delivery_address:
+
+                # 🔧 CRITICAL FIX: Handle "yes, add to cart" context-aware responses
+                if active_session_state.last_product_mentioned and active_session_state.conversation_stage in ['browsing', 'product_discussed']:
+                    logger.info(f"🎯 CONTEXT-AWARE ADD TO CART: Using last mentioned product: {active_session_state.last_product_mentioned.get('product_name')}")
+                    product_info = active_session_state.last_product_mentioned
+
+                    if product_info and product_info.get('product_id'):
+                        if product_info.get('stock_quantity', 0) > 0:
+                            existing_item = next((item for item in active_session_state.cart_items if item['product_id'] == product_info['product_id']), None)
+                            if existing_item:
+                                existing_item['quantity'] += 1
+                                existing_item['subtotal'] = existing_item['price'] * existing_item['quantity']
+                            else:
+                                active_session_state.cart_items.append({
+                                    'product_id': product_info['product_id'],
+                                    'product_name': product_info['product_name'],
+                                    'price': float(product_info['price']),
+                                    'quantity': 1,
+                                    'subtotal': float(product_info['price'])
+                                })
+                            active_session_state.conversation_stage = 'cart_updated'
+                            response_data.update({
+                                'success': True,
+                                'message': f"✅ Added {product_info['product_name']} to your cart!",
+                                'action': 'add_to_cart_success',
+                                'product_added': product_info
+                            })
+                            action_taken = True
+                        else:
+                            response_data['message'] = f"😔 Sorry, {product_info['product_name']} is currently out of stock."
+                            action_taken = True
+
+                elif active_session_state.conversation_stage == 'awaiting_address_confirmation' and active_session_state.delivery_address:
                     active_session_state.conversation_stage = 'address_set'
                     self._save_session_state(session_id, active_session_state)
                     checkout_result = self.progressive_checkout(user_message, customer_id, active_session_state)
@@ -1256,7 +1291,7 @@ Thank you for shopping with raqibtech.com! 💙"""
         except Exception as e:
             logger.error(f"❌ Error formatting placed order summary: {e}")
             # Provide a safe fallback
-            order_id = getattr(order_summary, 'order_id', 'Unknown') if hasattr(order_summary, 'order_id') else order_summary.get('order_id', 'Unknown') if isinstance(order_summary, dict) else 'Unknown'
+            order_id = getattr(order_summary, 'order_id', 'Unknown') if hasattr(order_summary, 'order_id') else order_summary.get('order_id', 'Unknown')
             total_amount = getattr(order_summary, 'total_amount', 0) if hasattr(order_summary, 'total_amount') else order_summary.get('total_amount', 0) if isinstance(order_summary, dict) else 0
 
             return f"""🎉 **Order Confirmation**

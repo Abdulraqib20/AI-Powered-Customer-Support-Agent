@@ -2287,8 +2287,7 @@
         <!-- Input Area -->
         <div class="chat-modal-input">
             <div class="chat-input-container">
-                <input type="text" id="chatInput" placeholder="Ask me anything..."
-                       onkeypress="handleChatKeyPress(event)">
+                <input type="text" id="chatInput" placeholder="Ask me anything...">
                 <button class="chat-send-btn" onclick="sendChatMessage()" id="chatSendBtn">
                     <i class="bi bi-send-fill"></i>
                 </button>
@@ -2538,6 +2537,19 @@ class CustomerSupportPortal {
             });
         });
         observer.observe(this.chatModal, { attributes: true });
+
+        // 🔧 CRITICAL FIX: Add Enter key functionality for modal chat input
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey && this.modalOpen) {
+                const chatInput = document.getElementById('chatInput');
+                if (chatInput && document.activeElement === chatInput) {
+                    e.preventDefault();
+                    this.sendCustomerMessage();
+                    console.log('⌨️ Enter key pressed, sending message');
+                }
+            }
+        });
+
         console.log('✅ Modal event listeners configured');
     }
 

@@ -294,8 +294,8 @@ class ProductRecommendationEngine:
                     params = []
 
                     if category:
-                        base_query += " AND p.category = %s"
-                        params.append(category)
+                        base_query += " AND (p.category ILIKE %s OR p.product_name ILIKE %s)"
+                        params.extend([f"%{category}%", f"%{category}%"])
 
                     if state:
                         # Add regional filtering through customer location
@@ -712,10 +712,10 @@ class ProductRecommendationEngine:
                         search_term = f"%{query}%"
                         params.extend([search_term, search_term, search_term, search_term])
 
-                    # Category filter
+                    # Category filter with flexible matching
                     if category:
-                        search_conditions.append("p.category = %s")
-                        params.append(category)
+                        search_conditions.append("(p.category ILIKE %s OR p.product_name ILIKE %s)")
+                        params.extend([f"%{category}%", f"%{category}%"])
 
                     # Price filter
                     if max_price:
@@ -796,13 +796,13 @@ class ProductRecommendationEngine:
             return "In Stock"
 
     def _format_naira(self, amount: float) -> str:
-        """Format amount in Nigerian Naira"""
+        """Format amount in Nigerian Naira - only use K for amounts ≥ 100,000"""
         if amount >= 1_000_000:
             return f"₦{amount/1_000_000:.1f}M"
-        elif amount >= 1_000:
-            return f"₦{amount/1_000:.1f}K"
+        elif amount >= 100_000:  # 🔧 CRITICAL FIX: Only use K for amounts ≥ 100,000
+            return f"₦{amount/1_000:.0f}K"
         else:
-            return f"₦{amount:,.0f}"
+            return f"₦{amount:,.0f}"  # Show full amount for values less than 100,000
 
     def track_customer_browsing(self, customer_id: int, product_id: int, action: str = "view"):
         """🔍 Track customer browsing behavior for better recommendations"""
@@ -1275,14 +1275,14 @@ class ProductRecommendationEngine:
                                COUNT(o.order_id) as order_count
                         FROM products p
                         LEFT JOIN orders o ON p.product_id = o.product_id
-                        WHERE p.category = %s
+                        WHERE (p.category ILIKE %s OR p.product_name ILIKE %s)
                         AND p.in_stock = true AND p.stock_quantity > 0
                         GROUP BY p.product_id, p.product_name, p.category, p.brand,
                                  p.price, p.description, p.stock_quantity, p.in_stock
                         HAVING COUNT(o.order_id) >= 3  -- At least 3 orders (indicates reliability)
                         ORDER BY order_count DESC
                         LIMIT %s
-                    """, (category, limit))
+                    """, (f"%{category}%", f"%{category}%", limit))
 
                     products = cursor.fetchall()
 

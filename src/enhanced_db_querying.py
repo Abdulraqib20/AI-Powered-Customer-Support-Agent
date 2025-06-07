@@ -135,13 +135,13 @@ class NigerianBusinessIntelligence:
 
     @staticmethod
     def format_naira(amount: float) -> str:
-        """Format amount in Nigerian Naira"""
+        """Format amount in Nigerian Naira - only use K for amounts ≥ 100,000"""
         if amount >= 1_000_000:
             return f"₦{amount/1_000_000:.1f}M"
-        elif amount >= 1_000:
-            return f"₦{amount/1_000:.1f}K"
+        elif amount >= 100_000:  # 🔧 CRITICAL FIX: Only use K for amounts ≥ 100,000
+            return f"₦{amount/1_000:.0f}K"
         else:
-            return f"₦{amount:,.2f}"
+            return f"₦{amount:,.0f}"  # Show full amount for values less than 100,000
 
     @staticmethod
     def get_nigerian_timezone_context() -> str:
@@ -312,6 +312,26 @@ class EnhancedDatabaseQuerying:
         🎯 Enhanced query classification with cart operation detection
         """
         query_lower = user_query.lower()
+
+        # 🚨 ADMIN CONTEXT-AWARENESS FIX: Handle short, contextual follow-up queries from admins
+        if conversation_history and len(user_query.split()) < 5: # Short query
+            last_turn = conversation_history[0]
+            if last_turn.get('query_type') in ['REVENUE_INSIGHTS', 'CUSTOMER_ANALYSIS', 'GEOGRAPHIC_ANALYSIS']:
+                logger.info(f"🧠 ADMIN CONTEXT: Inheriting intent '{last_turn['query_type']}' for short follow-up query.")
+
+                # Inherit entities but look for a new tier/category/etc. in the current query
+                new_entities = last_turn.get('entities', {}).copy()
+
+                # Example: If last query was about 'Platinum', and new is 'what of bronze'
+                tier_keywords = ['platinum', 'gold', 'silver', 'bronze']
+                for tier in tier_keywords:
+                    if tier in query_lower:
+                        new_entities['account_tier'] = tier.capitalize()
+                        logger.info(f"🎯 Found new tier in follow-up: {tier.capitalize()}")
+                        return QueryType(last_turn['query_type']), new_entities
+
+                # If no specific new entity found, assume it's a continuation of the same query type
+                return QueryType(last_turn['query_type']), new_entities
 
         # Initialize entities dictionary with all required fields
         entities = {
@@ -609,6 +629,39 @@ NIGERIAN BUSINESS CONTEXT:
 - Payment Methods: Optimized for Nigerian market
 - Time Zone: West Africa Time (WAT, UTC+1)
 
+🔍 FLEXIBLE PRODUCT SEARCH GUIDELINES:
+- ALWAYS use ILIKE for product searches instead of exact matching (=)
+- For category searches: Use ILIKE '%keyword%' OR search product_name ILIKE '%keyword%'
+- For oil products: Search BOTH category ILIKE '%oil%' AND product_name ILIKE '%oil%'
+- For cooking oil: Search product_name ILIKE '%cooking%' OR product_name ILIKE '%oil%'
+- For automotive: Search category ILIKE '%automotive%' OR product_name ILIKE '%automotive%'
+- Combine multiple search strategies for better results
+- Examples:
+  * "oil" → WHERE (category ILIKE '%oil%' OR product_name ILIKE '%oil%')
+  * "cooking oil" → WHERE (product_name ILIKE '%cooking%' OR product_name ILIKE '%oil%')
+  * "electronics" → WHERE (category ILIKE '%electronics%' OR product_name ILIKE '%electronics%')
+
+🛒 ENHANCED PRODUCT QUERY PATTERNS:
+Instead of: WHERE category = 'Oil'
+Use: WHERE (category ILIKE '%oil%' OR product_name ILIKE '%oil%' OR description ILIKE '%oil%')
+
+Instead of: WHERE category = 'Computing'
+Use: WHERE (category ILIKE '%computing%' OR category ILIKE '%computer%' OR product_name ILIKE '%computer%' OR product_name ILIKE '%laptop%')
+- ALWAYS use ILIKE for product searches instead of exact matching (=)
+- For category searches: Use ILIKE '%keyword%' OR search product_name ILIKE '%keyword%'
+- For oil products: Search BOTH category ILIKE '%oil%' AND product_name ILIKE '%oil%'
+- For cooking oil: Search product_name ILIKE '%cooking%' OR product_name ILIKE '%oil%'
+- For automotive: Search category ILIKE '%automotive%' OR product_name ILIKE '%automotive%'
+- Combine multiple search strategies for better results
+- Examples:
+  * "oil" → WHERE (category ILIKE '%oil%' OR product_name ILIKE '%oil%')
+  * "cooking oil" → WHERE (product_name ILIKE '%cooking%' OR product_name ILIKE '%oil%')
+  * "electronics" → WHERE (category ILIKE '%electronics%' OR product_name ILIKE '%electronics%')
+
+🛒 ENHANCED PRODUCT QUERY PATTERNS:
+Instead of: WHERE category = 'Oil'
+Use: WHERE (category ILIKE '%oil%' OR product_name ILIKE '%oil%' OR description ILIKE '%oil%')
+
 🔒 CRITICAL PRIVACY PROTECTION RULES:
 1. NEVER query the customers table for support contact information
 2. If user asks for "customer support contact" or similar, return: SELECT 'PRIVACY_PROTECTED' as message;
@@ -694,6 +747,18 @@ EXAMPLES:
 - "total platform revenue" (ADMIN with user_role=super_admin, can_access_analytics=True): SELECT SUM(total_amount) as total_revenue FROM orders;
 - "business revenue insights" (ADMIN with user_role=super_admin, can_access_analytics=True): SELECT DATE_TRUNC('month', created_at) as month, SUM(total_amount) as revenue FROM orders GROUP BY month ORDER BY revenue DESC;
 
+🔍 FLEXIBLE PRODUCT SEARCH EXAMPLES:
+- "do you have oil?": SELECT product_id, product_name, category, brand, price, stock_quantity FROM products WHERE (category ILIKE '%oil%' OR product_name ILIKE '%oil%' OR description ILIKE '%oil%') AND in_stock = TRUE;
+- "what oil do you have?": SELECT product_id, product_name, category, brand, price, stock_quantity FROM products WHERE (category ILIKE '%oil%' OR product_name ILIKE '%oil%' OR description ILIKE '%oil%') AND in_stock = TRUE;
+- "cooking oil": SELECT product_id, product_name, category, brand, price, stock_quantity FROM products WHERE (product_name ILIKE '%cooking%oil%' OR product_name ILIKE '%cooking%' OR (category ILIKE '%oil%' AND description ILIKE '%cooking%')) AND in_stock = TRUE;
+- "automotive products": SELECT product_id, product_name, category, brand, price, stock_quantity FROM products WHERE (category ILIKE '%automotive%' OR product_name ILIKE '%automotive%' OR product_name ILIKE '%car%') AND in_stock = TRUE;
+
+🔍 FLEXIBLE PRODUCT SEARCH EXAMPLES:
+- "do you have oil?": SELECT product_id, product_name, category, brand, price, stock_quantity FROM products WHERE (category ILIKE '%oil%' OR product_name ILIKE '%oil%' OR description ILIKE '%oil%') AND in_stock = TRUE;
+- "what oil do you have?": SELECT product_id, product_name, category, brand, price, stock_quantity FROM products WHERE (category ILIKE '%oil%' OR product_name ILIKE '%oil%' OR description ILIKE '%oil%') AND in_stock = TRUE;
+- "cooking oil": SELECT product_id, product_name, category, brand, price, stock_quantity FROM products WHERE (product_name ILIKE '%cooking%oil%' OR product_name ILIKE '%cooking%' OR (category ILIKE '%oil%' AND description ILIKE '%cooking%')) AND in_stock = TRUE;
+- "automotive products": SELECT product_id, product_name, category, brand, price, stock_quantity FROM products WHERE (category ILIKE '%automotive%' OR product_name ILIKE '%automotive%' OR product_name ILIKE '%car%') AND in_stock = TRUE;
+
 🚨 CRITICAL ADMIN BUSINESS QUERY RULE:
 For user_role in ['admin', 'super_admin'] with can_access_analytics=True AND business-wide queries:
 - NEVER include WHERE customer_id = anything in revenue/business analytics queries
@@ -740,16 +805,30 @@ RESPONSE FORMAT: Return ONLY the SQL query, nothing else."""
             context_info = ""
             if entities:
                 context_parts = []
+                user_role = entities.get('user_role')
+                is_analytics_query = query_type in [
+                    QueryType.REVENUE_INSIGHTS, QueryType.CUSTOMER_ANALYSIS,
+                    QueryType.GEOGRAPHIC_ANALYSIS, QueryType.TEMPORAL_ANALYSIS,
+                    QueryType.PRODUCT_PERFORMANCE
+                ]
+
                 if entities.get('context_customer_id'):
                     context_parts.append(f"context_customer_id={entities.get('context_customer_id')}")
                 if entities.get('context_customer_ids'):
                     context_parts.append(f"context_customer_ids={entities.get('context_customer_ids')}")
                 if entities.get('contextual_reference'):
                     context_parts.append(f"contextual_reference={entities.get('contextual_reference')}")
+
+                # 🚨 THE ACTUAL FIX: Only add customer_id to context if NOT an admin doing analytics
                 if entities.get('customer_id'):
-                    context_parts.append(f"customer_id={entities.get('customer_id')}")
+                    if not (user_role in ['admin', 'super_admin'] and is_analytics_query):
+                        context_parts.append(f"customer_id={entities.get('customer_id')}")
+                    else:
+                        logger.info(f"🏢 ADMIN ANALYTICS: Scrubbing admin customer_id from AI prompt context.")
+
                 if entities.get('user_authenticated'):
                     context_parts.append(f"user_authenticated={entities.get('user_authenticated')}")
+
                 if context_parts:
                     context_info = f" (Context: {', '.join(context_parts)})"
 
@@ -1061,7 +1140,7 @@ RESPONSE FORMAT: Return ONLY the SQL query, nothing else."""
                        COUNT(o.order_id) as order_count
                 FROM products p
                 LEFT JOIN orders o ON p.product_id = o.product_id
-                WHERE p.category = '{category}' AND p.in_stock = true
+                WHERE (p.category ILIKE '%{category}%' OR p.product_name ILIKE '%{category}%') AND p.in_stock = true
                 GROUP BY p.product_id, p.product_name, p.brand, p.price, p.stock_quantity
                 ORDER BY order_count DESC, p.price ASC
                 LIMIT 20;
@@ -1207,7 +1286,7 @@ RESPONSE FORMAT: Return ONLY the SQL query, nothing else."""
                        END as stock_status,
                        p.in_stock
                 FROM products p
-                WHERE p.category = '{category}'
+                WHERE (p.category ILIKE '%{category}%' OR p.product_name ILIKE '%{category}%')
                 ORDER BY p.stock_quantity ASC, p.price ASC
                 LIMIT 20;
                 """
@@ -1252,7 +1331,7 @@ RESPONSE FORMAT: Return ONLY the SQL query, nothing else."""
                            ELSE 'Available for Order'
                        END as availability_status
                 FROM products p
-                WHERE p.category = '{category}' AND p.in_stock = true AND p.stock_quantity > 0
+                WHERE (p.category ILIKE '%{category}%' OR p.product_name ILIKE '%{category}%') AND p.in_stock = true AND p.stock_quantity > 0
                 ORDER BY p.price ASC
                 LIMIT 15;
                 """
@@ -2139,6 +2218,18 @@ RESPONSE STYLE:
             # Generate response with enhanced context
             system_prompt = self._build_enhanced_system_prompt(enhanced_context)
 
+            # 🚨 CRITICAL FIX: Enforce strict, non-verbose, factual persona for admins
+            user_role = determine_user_role(session_context).value
+            if user_role in ['admin', 'super_admin']:
+                system_prompt = f"""You are a Business Intelligence Assistant. Your only goal is to answer the user's question based *strictly* on the provided data.
+
+                **RULES:**
+                1.  **Direct Answer:** Look at the "Query results" and directly answer the "customer query".
+                2.  **Stick to the Data:** Do NOT mention any information, numbers, or details not explicitly present in the "Query results".
+                3.  **No Hallucination:** Do not make up customer names, IDs, or any other details.
+                4.  **Be Concise:** Do not use conversational filler. Provide a direct, data-driven response. Use tables if appropriate.
+                """
+
             # 🔧 SPECIAL HANDLING: Check if this is an order cancellation/update query
             is_order_cancellation = (
                 'cancel' in query_context.user_query.lower() or
@@ -2170,48 +2261,108 @@ RESPONSE STYLE:
                 confirm the cancellation, and offer assistance for future orders. Use appropriate emojis for the emotional tone.
                 """
             else:
-                # 🔧 DYNAMIC RESULT LIMITING: Show more results for specific query types
-                max_items_to_show = 3  # Default
-                query_lower = query_context.user_query.lower()
+                # 🚨 ADMIN RESPONSE GENERATION: Use a separate, brutally direct prompt
+                if user_role in ['admin', 'super_admin']:
+                    # Format currency values in the results
+                    formatted_results = self._format_currency_in_results(query_context.execution_result)
 
-                if any(keyword in query_lower for keyword in ['full order history', 'all orders', 'complete history', 'entire history']):
-                    max_items_to_show = 10  # Show up to 10 orders for full history requests
-                elif any(keyword in query_lower for keyword in ['order history', 'my orders', 'orders for customer']):
-                    max_items_to_show = 7   # Show up to 7 orders for general order history
-                elif query_context.query_type == QueryType.ORDER_ANALYTICS:
-                    max_items_to_show = 7   # Show more orders for analytics queries
-                elif any(keyword in query_lower for keyword in ['customers on', 'platinum tier', 'gold tier', 'silver tier', 'bronze tier', 'list customers', 'customers are on', 'tier customers', 'how many customers']):
-                    max_items_to_show = 15  # Show up to 15 customers for tier/customer listing queries
-                elif query_context.query_type == QueryType.CUSTOMER_ANALYSIS:
-                    max_items_to_show = 10  # Show up to 10 customers for customer analysis queries
+                    # Determine if we should use table format (5+ items)
+                    result_count = len(query_context.execution_result)
+                    format_instruction = ""
 
-                # Check if this is a customer listing query to provide specific instructions
-                customer_listing_instruction = ""
-                if any(keyword in query_lower for keyword in ['customers on', 'platinum tier', 'gold tier', 'silver tier', 'bronze tier', 'list customers', 'customers are on', 'tier customers', 'how many customers']):
-                    actual_count = len(query_context.execution_result)
-                    customer_listing_instruction = f"""
-                    IMPORTANT: This is a customer listing query. The database returned {actual_count} customers.
-                    - Show ALL {actual_count} customers in your response
-                    - Include a table format with Customer ID, Name, and Account Tier
-                    - State the correct total count: {actual_count} customers
-                    - Do NOT limit to just a few examples - show the complete list
+                    if result_count >= 5:
+                        format_instruction = "- Present the results in a simple markdown table (5+ items detected)."
+                    elif result_count == 1:
+                        format_instruction = "- Give a direct answer (single result detected). No table needed."
+                    else:
+                        format_instruction = "- List the results clearly without table format (2-4 items detected)."
+
+                    response_content = f"""
+                    User Query: "{query_context.user_query}"
+                    Database Results: {safe_json_dumps(formatted_results, max_items=50)}
+
+                    INSTRUCTIONS FOR ADMIN RESPONSE:
+                    - Answer using ONLY the provided Database Results.
+                    - Be DIRECT and CONCISE. No conversational filler.
+                    - Use Nigerian Naira format (₦) for monetary values.
+                    - Use business emojis sparingly: 📊, 📈, 💰
+                    {format_instruction}
+                    - Do not say "Not Available" or make up data.
+                    - Do not mention that you are an AI.
                     """
+                else:
+                    # Original response generation for customers and support agents
+                    # 🔧 DYNAMIC RESULT LIMITING: Show more results for specific query types
+                    max_items_to_show = 5  # Default
+                    query_lower = query_context.user_query.lower()
 
-                response_content = f"""
-                Based on the customer query: "{query_context.user_query}"
+                    if any(keyword in query_lower for keyword in ['full order history', 'all orders', 'complete history', 'entire history']):
+                        max_items_to_show = 10  # Show up to 10 orders for full history requests
+                    elif any(keyword in query_lower for keyword in ['order history', 'my orders', 'orders for customer']):
+                        max_items_to_show = 7   # Show up to 7 orders for general order history
+                    elif query_context.query_type == QueryType.ORDER_ANALYTICS:
+                        max_items_to_show = 7   # Show more orders for analytics queries
+                    elif any(keyword in query_lower for keyword in ['customers on', 'platinum tier', 'gold tier', 'silver tier', 'bronze tier', 'list customers', 'customers are on', 'tier customers', 'how many customers']):
+                        max_items_to_show = 15  # Show up to 15 customers for tier/customer listing queries
+                    elif query_context.query_type == QueryType.CUSTOMER_ANALYSIS:
+                        max_items_to_show = 10  # Show up to 10 customers for customer analysis queries
 
-                Query results: {safe_json_dumps(query_context.execution_result, max_items=max_items_to_show)}
+                    # Format currency values in the results
+                    formatted_results = self._format_currency_in_results(query_context.execution_result[:max_items_to_show])
 
-                Customer emotion detected: {sentiment_data['emotion']} (intensity: {sentiment_data['intensity']})
+                    # Determine formatting based on result count
+                    result_count = len(query_context.execution_result)
+                    format_instruction = ""
 
-                {customer_listing_instruction}
+                    if result_count >= 5:
+                        format_instruction = "Use a clear table format to organize the data (5+ items detected)."
+                    elif result_count == 1:
+                        format_instruction = "Provide a direct, conversational answer without tables (single result)."
+                    else:
+                        format_instruction = "List the results in a clear, conversational format without tables (2-4 items)."
 
-                {memory_guidance}
+                    # Check if this is a customer listing query to provide specific instructions
+                    customer_listing_instruction = ""
+                    if any(keyword in query_lower for keyword in ['customers on', 'platinum tier', 'gold tier', 'silver tier', 'bronze tier', 'list customers', 'customers are on', 'tier customers', 'how many customers']):
+                        actual_count = len(query_context.execution_result)
+                        customer_listing_instruction = f"""
+                        IMPORTANT: This is a customer listing query. The database returned {actual_count} customers.
+                        - Show ALL {actual_count} customers in your response
+                        - {format_instruction}
+                        - State the correct total count: {actual_count} customers
+                        - Do NOT limit to just a few examples - show the complete list
+                        """
 
-                {f"Intelligent recommendations available: {recommendations_data['total_recommendations']} products across {len(recommendations_data.get('recommendations', {}))} categories" if recommendations_data and recommendations_data.get('success') else ""}
+                    # 🚨 CRITICAL: Check if we have actual results to prevent hallucination
+                    has_results = len(query_context.execution_result) > 0
 
-                Provide a helpful, empathetic Nigerian customer support response following the emotional style guidelines. Use appropriate emojis based on the detected emotion.
-                """
+                    response_content = f"""
+                    Customer Query: "{query_context.user_query}"
+                    Database Results: {safe_json_dumps(formatted_results, max_items=max_items_to_show)}
+
+                    🚨 CRITICAL ANTI-HALLUCINATION RULES:
+                    {"- Database returned " + str(len(query_context.execution_result)) + " results"}
+                    {"- You HAVE data to work with - show what's available" if has_results else "- NO RESULTS FOUND - DO NOT make up products, prices, or recommendations"}
+                    {"- Only mention products that exist in the database results above" if has_results else "- Be honest: 'We don't currently have that item in stock'"}
+                    {"- Use actual prices from database results only" if has_results else "- DO NOT suggest alternative products unless they're in the database results"}
+                    {"- NEVER invent products, prices, or availability information" if not has_results else ""}
+
+                    RESPONSE REQUIREMENTS:
+                    - Customer emotion detected: {sentiment_data['emotion']} (intensity: {sentiment_data['intensity']})
+                    - Always use Nigerian Naira format (₦) for monetary values
+                    - {format_instruction}
+                    - Use appropriate emojis based on detected emotion
+                    - Be warm and conversational but TRUTHFUL
+                    {"- If no results: politely explain we don't have the item and suggest they contact support or check back later" if not has_results else ""}
+
+                    {customer_listing_instruction}
+
+                    {memory_guidance if has_results else ""}
+
+                    {f"Intelligent recommendations available: {recommendations_data['total_recommendations']} products across {len(recommendations_data.get('recommendations', {}))} categories" if recommendations_data and recommendations_data.get('success') and has_results else ""}
+
+                    Provide a helpful, honest Nigerian customer support response. NEVER make up products or prices.
+                    """
 
             # Generate AI response
             response = self.groq_client.chat.completions.create(
@@ -2232,8 +2383,10 @@ RESPONSE STYLE:
             # 🆕 LOG AI RESPONSE IN TERMINAL (matching user query format)
             logger.info(f"🤖 AI: {ai_response}")
 
-            # Enhance response with recommendation details if available
-            if recommendations_data and recommendations_data.get('success') and recommendations_data.get('recommendations'):
+            # 🚨 CRITICAL: Only enhance with recommendations if we have actual database results
+            # This prevents AI from suggesting fake products when no results found
+            if (recommendations_data and recommendations_data.get('success') and
+                recommendations_data.get('recommendations') and len(query_context.execution_result) > 0):
                 ai_response = self._enhance_response_with_recommendations(ai_response, recommendations_data)
                 # Strip markdown again after enhancement
                 ai_response = self._strip_markdown_formatting(ai_response)
@@ -2396,13 +2549,32 @@ Our team is ready to assist you with orders, delivery, payments, and any questio
                 last_user_input = buffer_memory.get('last_user_input', '')
                 last_ai_response = buffer_memory.get('last_ai_response', '')
 
-                memory_guidance += f"""
-                🧠 CONVERSATION MEMORY CONTEXT:
-                - Previous user input: "{last_user_input[:100]}..."
-                - Previous AI response: "{last_ai_response[:100]}..."
-                - Recent conversation turns: {len(recent_turns)}
-                - CRITICAL: Reference what was just discussed to maintain context!
-                """
+                # 🚨 CRITICAL: Only provide recent memory context if it's relevant to current query
+                # This prevents inappropriate context mixing from unrelated conversations
+                current_query_lower = context.get('user_query', '').lower()
+                last_input_lower = last_user_input.lower()
+
+                # Check if previous context is relevant (similar topic or continuation)
+                is_relevant_context = any([
+                    len(set(current_query_lower.split()) & set(last_input_lower.split())) >= 2,  # Common words
+                    any(keyword in current_query_lower for keyword in ['continue', 'also', 'what about', 'and', 'too']),  # Continuation signals
+                    len(last_user_input.strip()) < 10  # Very short previous input
+                ])
+
+                if is_relevant_context:
+                    memory_guidance += f"""
+                    🧠 RELEVANT CONVERSATION CONTEXT:
+                    - Previous user input: "{last_user_input[:100]}..."
+                    - Previous AI response: "{last_ai_response[:100]}..."
+                    - CRITICAL: Reference what was just discussed to maintain context!
+                    """
+                else:
+                    memory_guidance += f"""
+                    🧠 CONVERSATION CONTEXT:
+                    - New topic detected - treat as fresh conversation
+                    - Previous context not relevant to current query
+                    - Focus on current user query only
+                    """
 
             # Shopping session state awareness
             if session_state.get('session_exists'):
@@ -2439,36 +2611,55 @@ Our team is ready to assist you with orders, delivery, payments, and any questio
         user_role = determine_user_role(session_context).value
 
         if user_role in ['admin', 'super_admin']:
-            persona_intro = f"""You are a Business Intelligence Assistant for raqibtech.com executives.
+            persona_intro = f"""You are a Business Intelligence Assistant for raqibtech.com executives. Your goal is to provide direct, data-driven answers.
 
             🎯 RESPONSE STYLE FOR ADMINS:
             - Be CONCISE and DIRECT - no fluff or verbose explanations
-            - Focus on KEY METRICS and DATA ONLY
             - Use business emojis sparingly: 📊, 📈, 💰
             - Start with direct answer, then provide supporting data
             - No marketing language or customer service tone
-            - Maximum 3-4 lines for most queries
             - Format data in simple tables when relevant
 
             ❌ AVOID: Long explanations, customer service language, excessive emojis, promotional content
-            ✅ PROVIDE: Direct answers, key metrics, actionable data"""
+            ✅ PROVIDE: Direct answers, key metrics, actionable data
+
+            - Always refer to customers in third person (they/their/them) when talking to support agents.
+
+            **RULES:**
+            - **BE CONCISE:** Provide short, direct answers. No verbose explanations.
+            - **STICK TO THE FACTS:** Base your response *only* on the data provided in the `Query results`.
+            - **NO HALLUCINATION:** Do not add any information not present in the results. If asked for revenue, give only the revenue. Do not add customer lists or other details unless the query explicitly asks for them.
+            - **DO NOT BE CHATTY:** Avoid conversational filler. Get straight to the point.
+
+            """
 
         elif user_role == 'support_agent':
-            persona_intro = """You are a Customer Support Agent Interface for raqibtech.com support staff.
+            persona_intro = f"""You are a Customer Support Agent's AI Assistant for raqibtech.com.
+ THE FACTS:** Base your response *only* on the data provided in the `Query results`.
+            - **NO HALLUCINATION:** Do not add any information not present in the results. If asked for revenue, give only the revenue. Do not add customer lists or other details unless the query explicitly asks for them.
+            - **USE MARKDOWN:** Use tables and lists for clarity.
+            Your role is to assist the support agent by providing accurate information quickly and efficiently.
+            - Provide clear, factual answers based on the query results.
+            - Use a professional and helpful tone.
+            - You can provide additional relevant information if it helps the agent solve the customer's problem.
+            """
+        else: # Customer
+            persona_intro = f"""You are a friendly and empathetic Nigerian Customer Support Assistant for raqibtech.com.
 
-            Your role is to help support agents assist customers by providing third-person customer data and insights.
-            Use phrases like:
-            - "Customer data summary for your reference:"
-            - "This customer's information shows..."
-            - "Their account details indicate..."
-            - "Support notes for this customer:"
+            Your goal is to help customers with their orders and provide a great experience.
+            - Always be polite and use a warm, conversational tone.
+            - Use Nigerian colloquialisms and slang where appropriate to sound authentic and friendly.
+            - Use emojis to convey tone.
+            - Address the customer by name if available.
 
-            Always refer to customers in third person (they/their/them) when talking to support agents."""
-
-        else:
-            persona_intro = """You are a caring customer support agent for raqibtech.com, Nigeria's leading e-commerce platform.
-
-            Your role is to help customers directly with their personal shopping and account needs."""
+            🚨 CRITICAL ANTI-HALLUCINATION RULES FOR CUSTOMERS:
+            - **NEVER make up products, prices, or availability information**
+            - **Only mention products that exist in the database query results**
+            - **If no products found, be honest: "We don't currently have that item"**
+            - **Never suggest alternative products unless they're in the actual database results**
+            - **Do not invent prices, discounts, or product features**
+            - **Be truthful about stock status - only use database information**
+            """
 
         return f"""
         {persona_intro}
@@ -2567,6 +2758,17 @@ Our team is ready to assist you with orders, delivery, payments, and any questio
         - Emphasize key details with **bold text** but keep it minimal and natural
         - Keep emojis for warmth and markdown for clarity
         - Simple sentences with natural flow
+
+        📋 TABLE USAGE RULES (CRITICAL):
+        {"- Use tables ONLY for 5+ data items" if user_role in ['admin', 'super_admin'] else "- Use tables ONLY for 5+ data items"}
+        {"- For 1 item: Give direct answer (e.g., '9 customers promoted')" if user_role in ['admin', 'super_admin'] else "- For 1 item: Give conversational answer (e.g., 'Great news! 9 customers were promoted to Platinum tier! 🎉'"}
+        {"- For 2-4 items: Use bullet points or simple list format" if user_role in ['admin', 'super_admin'] else "- For 2-4 items: Use conversational list format"}
+        {"- For 5+ items: Use clean markdown table" if user_role in ['admin', 'super_admin'] else "- For 5+ items: Use organized table format"}
+
+        💰 CURRENCY FORMATTING (MANDATORY):
+        - ALWAYS use Nigerian Naira symbol ₦ for all monetary values
+        - Format large amounts: ₦3.67M for millions, ₦250K for thousands
+        - Never show raw numbers like 3668054.67 - always format as ₦3.67M
 
         BRAND INTEGRATION:
         - Naturally mention "raqibtech.com" in most responses
@@ -3217,6 +3419,72 @@ How can I help you with your raqibtech.com experience today? 🌟"""
                     timestamp=datetime.now(),
                     user_query=user_query
                 )
+
+                # 🔧 CRITICAL FIX: Extract and store product information for shopping context
+                extracted_products = []
+                if results:
+                    for result in results:
+                        if isinstance(result, dict) and 'product_name' in result:
+                            product_info = {
+                                'product_id': result.get('product_id'),
+                                'product_name': result.get('product_name'),
+                                'price': result.get('price'),
+                                'category': result.get('category'),
+                                'brand': result.get('brand'),
+                                'description': result.get('description'),
+                                'stock_quantity': result.get('stock_quantity'),
+                                'in_stock': result.get('in_stock', True)
+                            }
+                            extracted_products.append(product_info)
+                            logger.info(f"🎯 EXTRACTED PRODUCT FOR CONTEXT: {product_info['product_name']} (ID: {product_info['product_id']})")
+
+                # 🔧 UPDATE SESSION STATE: Store last mentioned product for shopping context
+                if extracted_products and self.memory_system and session_context:
+                    try:
+                        # Get the most relevant product (first one from results)
+                        last_product = extracted_products[0]
+
+                        # Update session state with product information
+                        session_state_updates = {
+                            'last_product_mentioned': last_product,
+                            'conversation_stage': 'product_discussed',
+                            'updated_at': datetime.now()
+                        }
+
+                        # If the user is authenticated, ensure we have the customer_id
+                        if session_context.get('user_authenticated') and session_context.get('customer_id'):
+                            session_state_updates['customer_id'] = session_context['customer_id']
+
+                        # Update the session state in memory
+                        current_session_state = self.memory_system.get_session_state(session_id)
+                        if current_session_state:
+                            for key, value in session_state_updates.items():
+                                if hasattr(current_session_state, key):
+                                    setattr(current_session_state, key, value)
+                            current_session_state.updated_at = datetime.now()
+                            self.memory_system.update_session_state(session_id, asdict(current_session_state))
+                        else:
+                            # Create new session state
+                            from .conversation_memory_system import SessionState
+                            new_session_state = SessionState(
+                                session_id=session_id,
+                                customer_id=session_context.get('customer_id'),
+                                cart_items=[],
+                                checkout_state={},
+                                current_intent='product_inquiry',
+                                last_product_mentioned=last_product,
+                                delivery_address=None,
+                                payment_method=None,
+                                conversation_stage='product_discussed',
+                                created_at=datetime.now(),
+                                updated_at=datetime.now()
+                            )
+                            self.memory_system.update_session_state(session_id, asdict(new_session_state))
+
+                        logger.info(f"🧠 STORED PRODUCT CONTEXT: {last_product['product_name']} ready for potential shopping action")
+
+                    except Exception as e_session_update:
+                        logger.warning(f"⚠️ Failed to update session state with product context: {e_session_update}")
 
                 # Generate enhanced response
                 response_text = self.generate_nigerian_response(query_context, conversation_history, session_context)
@@ -3873,6 +4141,41 @@ CURRENT TIME CONTEXT:
 """
 
         return f"{schema_context}\n{time_context}"
+
+    def _format_currency_in_results(self, results: List[Dict]) -> List[Dict]:
+        """Format currency values in database results using Nigerian Naira"""
+        if not results:
+            return results
+
+        # Currency field names that should be formatted
+        currency_fields = [
+            'total_amount', 'amount', 'price', 'cost', 'value', 'revenue',
+            'total_spent', 'lifetime_value', 'total_revenue', 'average_order_value',
+            'order_value', 'payment_amount', 'subtotal', 'discount_amount',
+            'current_quarter_revenue', 'monthly_revenue', 'daily_revenue'
+        ]
+
+        formatted_results = []
+
+        for result in results:
+            formatted_result = {}
+            for key, value in result.items():
+                # Check if this field should be formatted as currency
+                if key.lower() in currency_fields and value is not None:
+                    try:
+                        # Convert to float if it's not already
+                        if isinstance(value, (int, float, decimal.Decimal)):
+                            formatted_result[key] = NigerianBusinessIntelligence.format_naira(float(value))
+                        else:
+                            formatted_result[key] = value
+                    except (ValueError, TypeError):
+                        formatted_result[key] = value
+                else:
+                    formatted_result[key] = value
+
+            formatted_results.append(formatted_result)
+
+        return formatted_results
 
     def _apply_critical_sql_fixes(self, sql_query: str, entities: Dict[str, Any]) -> str:
         """
