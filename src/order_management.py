@@ -834,44 +834,75 @@ class OrderManagementSystem:
         return tier_discounts.get(account_tier, 0.0)
 
     def _update_customer_tier(self, cursor, customer_id: int, order_amount: float):
-        """Update customer tier based on total spending"""
-        # Get customer's total spending
+        """Update customer tier based on total spending with enhanced logic"""
+        # Get customer's total spending and current tier
         cursor.execute("""
-            SELECT SUM(total_amount) as total_spent, account_tier
-            FROM orders o
-            JOIN customers c ON o.customer_id = c.customer_id
-            WHERE o.customer_id = %s AND o.order_status != 'Returned'
+            SELECT c.account_tier, COALESCE(SUM(o.total_amount), 0) as total_spent, COUNT(o.order_id) as order_count
+            FROM customers c
+            LEFT JOIN orders o ON c.customer_id = o.customer_id
+            WHERE c.customer_id = %s AND (o.order_status != 'Returned' OR o.order_status IS NULL)
             GROUP BY c.account_tier
         """, (customer_id,))
 
         result = cursor.fetchone()
         if not result:
+            logger.warning(f"⚠️ No customer data found for customer_id {customer_id}")
             return
 
-        total_spent = float(result['total_spent'] or 0)
-        current_tier = result['account_tier']
+        current_tier, total_spent, order_count = result
+        total_spent = float(total_spent or 0)
 
-        # Tier progression thresholds (in Naira) - FIXED LOGIC
-        tier_thresholds = {
-            100000: "Silver",    # ₦100K
-            500000: "Gold",      # ₦500K
-            2000000: "Platinum"  # ₦2M - Premium tier for top customers
+        # Enhanced tier progression logic with order count requirements
+        tier_criteria = {
+            'Platinum': {'spending': 2000000, 'orders': 20},
+            'Gold': {'spending': 500000, 'orders': 10},
+            'Silver': {'spending': 100000, 'orders': 3},
+            'Bronze': {'spending': 0, 'orders': 0}
         }
 
+        # Determine new tier based on spending and order count
         new_tier = "Bronze"  # Default
-        for threshold, tier in sorted(tier_thresholds.items()):
-            if total_spent >= threshold:
+        for tier, criteria in tier_criteria.items():
+            if total_spent >= criteria['spending'] and order_count >= criteria['orders']:
                 new_tier = tier
+                break
 
         # Update tier if changed
         if new_tier != current_tier:
             cursor.execute("""
                 UPDATE customers
-                SET account_tier = %s, updated_at = CURRENT_TIMESTAMP
+                SET account_tier = %s::account_tier_enum, updated_at = CURRENT_TIMESTAMP
                 WHERE customer_id = %s
             """, (new_tier, customer_id))
 
-            logger.info(f"🏆 Customer {customer_id} upgraded to {new_tier} tier")
+            logger.info(f"🏆 Customer {customer_id} upgraded from {current_tier} to {new_tier} tier!")
+            logger.info(f"   💰 Total spent: ₦{total_spent:,}")
+            logger.info(f"   📦 Order count: {order_count}")
+
+            # Log tier upgrade for analytics
+            try:
+                import json
+                from datetime import datetime
+                cursor.execute("""
+                    INSERT INTO analytics (metric_type, metric_value, time_period, created_at)
+                    VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+                """, (
+                    'tier_upgrade',
+                    json.dumps({
+                        'customer_id': customer_id,
+                        'from_tier': current_tier,
+                        'to_tier': new_tier,
+                        'total_spent': total_spent,
+                        'order_count': order_count,
+                        'upgrade_date': datetime.now().isoformat()
+                    }),
+                    'event'
+                ))
+                logger.info(f"📊 Tier upgrade analytics logged")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to log tier upgrade analytics: {e}")
+        else:
+            logger.debug(f"👥 Customer {customer_id} remains on {current_tier} tier (₦{total_spent:,} spent, {order_count} orders)")
 
     def get_order_analytics(self, customer_id: int = None) -> Dict[str, Any]:
         """📊 Get order analytics and insights"""

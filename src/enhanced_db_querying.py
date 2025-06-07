@@ -4412,7 +4412,7 @@ CURRENT TIME CONTEXT:
     def get_system_prompt(self) -> str:
         """🎯 Enhanced system prompt with comprehensive Nigerian e-commerce knowledge"""
         return f"""
-You are a helpful AI assistant for RaqibTech.com, a leading Nigerian e-commerce platform.
+You are a helpful AI assistant for raqibtech.com, a leading Nigerian e-commerce platform.
 You help customers with orders, product information, account management, and business analytics.
 
 === ACCOUNT TIER SYSTEM (CRITICAL KNOWLEDGE) ===
@@ -4572,4 +4572,113 @@ Current timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 Database schema: Customers, Orders, Products, Order_Items, Customer_Conversations, Analytics tables available.
 Currency format: Nigerian Naira (₦) with proper thousand separators.
 """
+
+    def generate_tier_benefits_response(self, user_query: str, mentioned_tier: str = None) -> str:
+        """Generate tier benefits response using built-in tier information"""
+        try:
+            # Get customer's current tier if they're authenticated
+            current_tier = None
+            if hasattr(self, 'session_context') and self.session_context.get('customer_id'):
+                customer_id = self.session_context['customer_id']
+                with self.get_database_connection() as conn:
+                    with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                        cursor.execute("SELECT account_tier FROM customers WHERE customer_id = %s", (customer_id,))
+                        result = cursor.fetchone()
+                        if result:
+                            current_tier = result['account_tier']
+
+            # Tier benefits information
+            tier_benefits = {
+                'Bronze': {
+                    'emoji': '🥉',
+                    'name': 'BRONZE TIER',
+                    'threshold': '₦0 to ₦100K total spent',
+                    'benefits': [
+                        'Standard customer service',
+                        'No discounts on orders',
+                        'Standard delivery fees apply',
+                        'Access to basic product catalog',
+                        'Email notifications for promotions'
+                    ]
+                },
+                'Silver': {
+                    'emoji': '🥈',
+                    'name': 'SILVER TIER',
+                    'threshold': '₦100K+ total spent, 3+ orders',
+                    'benefits': [
+                        '2% discount on all orders',
+                        'Priority customer support',
+                        'Standard delivery fees',
+                        'Early access to sales events',
+                        'Enhanced return policy (14 days)'
+                    ]
+                },
+                'Gold': {
+                    'emoji': '🥇',
+                    'name': 'GOLD TIER',
+                    'threshold': '₦500K+ total spent, 10+ orders',
+                    'benefits': [
+                        '5% discount on all orders',
+                        'FREE DELIVERY on all orders (normally ₦2K-₦4K)',
+                        'Premium customer support',
+                        'Exclusive Gold member promotions',
+                        'Extended return policy (21 days)',
+                        'Birthday month special offers'
+                    ]
+                },
+                'Platinum': {
+                    'emoji': '💎',
+                    'name': 'PLATINUM TIER',
+                    'threshold': '₦2M+ total spent, 20+ orders',
+                    'benefits': [
+                        '10% discount on all orders',
+                        'FREE DELIVERY + FREE EXPRESS SHIPPING',
+                        'Dedicated account manager',
+                        'VIP customer support hotline',
+                        'Exclusive Platinum-only products',
+                        'Extended return policy (30 days)',
+                        'Quarterly bonus rewards',
+                        'First access to new product launches'
+                    ]
+                }
+            }
+
+            # Determine which tier to display
+            target_tier = mentioned_tier or current_tier or 'Gold'  # Default to Gold if not specified
+
+            if target_tier not in tier_benefits:
+                target_tier = 'Gold'
+
+            tier_info = tier_benefits[target_tier]
+
+            # Build response
+            response = f"Here are the amazing benefits of being a **{tier_info['name']}** member on raqibtech.com! 🎉\n\n"
+            response += f"{tier_info['emoji']} **{tier_info['name']}** ({tier_info['threshold']}):\n"
+
+            for benefit in tier_info['benefits']:
+                response += f"• {benefit}\n"
+
+            # Add progression info if not Platinum
+            if target_tier != 'Platinum':
+                next_tier_map = {'Bronze': 'Silver', 'Silver': 'Gold', 'Gold': 'Platinum'}
+                next_tier = next_tier_map.get(target_tier)
+                if next_tier:
+                    next_info = tier_benefits[next_tier]
+                    response += f"\n🚀 **Want to upgrade to {next_info['name']}?**\n"
+                    response += f"Reach {next_info['threshold']} to unlock even more exclusive benefits!\n"
+
+            # Add current status if authenticated
+            if current_tier:
+                if current_tier == target_tier:
+                    response += f"\n✨ You're currently enjoying all these {target_tier} tier benefits!"
+                else:
+                    response += f"\n📊 You're currently a {current_tier} tier member."
+
+            response += "\n\nHope this helps! If you have any questions about your account or benefits, feel free to ask! 💙"
+
+            return response
+
+        except Exception as e:
+            logger.error(f"❌ Error generating tier benefits response: {e}")
+            return "I'd be happy to help you learn about our tier benefits! Please let me check your account status first, or feel free to ask about any specific tier you're interested in."
 
