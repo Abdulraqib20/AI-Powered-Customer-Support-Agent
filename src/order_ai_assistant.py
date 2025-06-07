@@ -285,16 +285,30 @@ class OrderAIAssistant:
             }
 
         # 2. HIGH PRIORITY: Delivery address (must come before general address mentions)
-        delivery_patterns = [
-            (r'(delivery|shipping)\s*address\s*(is|set to|for|:)\s*(.+)', 'set_delivery_address', 3),
-            (r'my\s*address\s*(is|:)\s*(.+)', 'set_delivery_address', 2),
-            (r'deliver\s*to\s*(.+)', 'set_delivery_address', 1),
-            (r'send\s*to\s*(.+)', 'set_delivery_address', 1),
-            (r'ship\s*to\s*(.+)', 'set_delivery_address', 1),
-            (r'use\s*address\s*(.+)', 'set_delivery_address', 1), # For confirming saved address
-             # Common Nigerian locations as implicit address - BUT ONLY if NOT asking about rates/costs
-            (r'(?<!shipping rates to )(?<!delivery cost to )(?<!shipping cost to )(?<!delivery fee to )\b(lugbe|abuja|lagos|ikeja|lekki|victoria island|ilorin|kano|kaduna|port harcourt|ibadan|benin city|onitsha|aba|enugu|jos|maiduguri|zaria|warri|uyo|calabar|owerri|akure|abeokuta|osogbo|minna|sokoto|bauchi|gombe|yola|jalingo|damaturu|dutse|lafia|makurdi|awka|asaba|yenagoa|abakaliki|Ado Ekiti)\b', 'set_delivery_address', 0)
+        # BUT EXCLUDE delivery policy questions, shipped order questions, and other non-address-setting queries
+        delivery_exclusions = [
+            'already shipped', 'has shipped', 'shipped order', 'change delivery', 'alter delivery',
+            'modify delivery', 'update delivery', 'delivery options', 'delivery policy',
+            "won't be home", 'not be home', 'pick up', 'pickup', 'warehouse pickup',
+            'can i change', 'can you arrange', 'arrange for', 'package to be delivered',
+            'what should i do', 'delivery instructions', 'damaged package', 'package arrived'
         ]
+
+        # Only process delivery address patterns if it's NOT a delivery policy question
+        if not any(exclusion in message_lower for exclusion in delivery_exclusions):
+            delivery_patterns = [
+                (r'(delivery|shipping)\s*address\s*(is|set to|for|:)\s*(.+)', 'set_delivery_address', 3),
+                (r'my\s*address\s*(is|:)\s*(.+)', 'set_delivery_address', 2),
+                (r'deliver\s*to\s*(.+)', 'set_delivery_address', 1),
+                (r'send\s*to\s*(.+)', 'set_delivery_address', 1),
+                (r'ship\s*to\s*(.+)', 'set_delivery_address', 1),
+                (r'use\s*address\s*(.+)', 'set_delivery_address', 1), # For confirming saved address
+                 # Common Nigerian locations as implicit address - BUT ONLY if NOT asking about rates/costs
+                (r'(?<!shipping rates to )(?<!delivery cost to )(?<!shipping cost to )(?<!delivery fee to )\b(lugbe|abuja|lagos|ikeja|lekki|victoria island|ilorin|kano|kaduna|port harcourt|ibadan|benin city|onitsha|aba|enugu|jos|maiduguri|zaria|warri|uyo|calabar|owerri|akure|abeokuta|osogbo|minna|sokoto|bauchi|gombe|yola|jalingo|damaturu|dutse|lafia|makurdi|awka|asaba|yenagoa|abakaliki|Ado Ekiti)\b', 'set_delivery_address', 0)
+            ]
+        else:
+            # Skip delivery address patterns for policy questions
+            delivery_patterns = []
         for pattern, intent, group_idx in delivery_patterns:
             match = re.search(pattern, message_lower)
             if match:

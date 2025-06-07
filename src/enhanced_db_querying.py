@@ -829,23 +829,41 @@ For user_role in ['admin', 'super_admin'] with can_access_analytics=True AND bus
 - Never use WHERE customer_id = NULL (use IS NULL instead)
 - For missing customer_id: omit the WHERE clause entirely or use appropriate filters
 
+🚨 CRITICAL SHIPPING FEE RULES:
+- NEVER generate SQL queries that treat payment_method conditions as shipping fees
+- NEVER use SUM(total_amount) and call it "shipping fees" or "delivery fees"
+- The orders table does NOT have separate shipping_fee or delivery_fee columns
+- Shipping costs are included in the total amount field
+- For shipping fee questions: Use informational responses, NOT database queries
+- Example WRONG: SELECT SUM(CASE WHEN payment_method = 'Pay on Delivery' THEN 0 ELSE total_amount END) AS shipping_fees
+- Example CORRECT: SELECT 'Standard rates: Lagos ₦2,000, Abuja ₦2,500, Major Cities ₦3,000, Other States ₦4,000. Gold/Platinum get free delivery!' as shipping_info
+
 🛒 QUERY GUIDELINES:
 - For product information: Use SELECT from products table (no customer restrictions)
 - For payment methods: USE: SELECT DISTINCT payment_method FROM orders;
 - For general information: Use public data only
 - For customer-specific data: Require authentication
+- For shipping fee queries: Use informational responses, NOT SUM calculations
 
 📊 EXAMPLES OF CORRECT QUERIES:
 - Unauthenticated order request: SELECT 'Please log in to view your order information' as message;
 - Product search: SELECT * FROM products WHERE product_name ILIKE '%search_term%';
 - Payment methods: SELECT DISTINCT payment_method FROM orders;
 - Authenticated user orders: SELECT * FROM orders WHERE customer_id = [actual_customer_id];
+- Shipping fee inquiry: SELECT 'Standard shipping rates: Lagos ₦2,000, Abuja ₦2,500, Major Cities ₦3,000, Other States ₦4,000. Free delivery for Gold/Platinum members!' as shipping_rates;
 
 🚚 SHIPPING RATE INFORMATION QUERIES (NOT APPLICATION LAYER):
 - "What are your shipping rates to Abuja?": SELECT 'Lagos Metro: ₦2,000 (1 day), Abuja FCT: ₦2,500 (2 days), Major Cities: ₦3,000 (3 days), Other States: ₦4,000 (5 days). Free delivery for Gold/Platinum members!' as shipping_rates;
 - "shipping rates to Lagos": SELECT 'Lagos Metro: ₦2,000 (1-day delivery). Free for Gold/Platinum tier customers!' as shipping_rates;
 - "delivery cost to Kano": SELECT 'Major Cities (Kano): ₦3,000 (3-day delivery). Free for Gold/Platinum tier customers!' as shipping_rates;
 - "What does it cost to ship": SELECT 'Shipping rates: Lagos ₦2,000, Abuja ₦2,500, Major Cities ₦3,000, Other States ₦4,000. Free delivery for Gold/Platinum members!' as shipping_rates;
+
+🏪 DELIVERY POLICY INFORMATION QUERIES (NOT APPLICATION LAYER):
+- "Can I change delivery address for shipped order?": SELECT 'Unfortunately, once an order has shipped, we cannot change the delivery address. However, you can: 1) Ask someone to receive it at the original address, 2) Contact our delivery partner to arrange pickup from a nearby depot, 3) Contact customer support for special assistance. We apologize for any inconvenience!' as delivery_policy;
+- "I won't be home for delivery": SELECT 'No worries! Here are your options: 1) Ask a neighbor or family member to receive it, 2) Reschedule delivery through our delivery partner, 3) Pick up from nearest depot/office, 4) Leave specific delivery instructions. Contact our support team for assistance!' as delivery_options;
+- "Can you arrange delivery to my office": SELECT 'We can arrange office delivery! Please provide: 1) Complete office address, 2) Office phone number, 3) Contact person name, 4) Best delivery time (9am-5pm weekdays). There may be additional charges for commercial addresses.' as office_delivery;
+- "Can I pick up from warehouse": SELECT 'Yes! Warehouse pickup is available Monday-Friday 9am-4pm at our Lagos facility. You will need: 1) Valid ID, 2) Order confirmation number, 3) 24-hour advance notice. Contact support to arrange pickup appointment.' as warehouse_pickup;
+- "My package arrived damaged": SELECT 'We sincerely apologize! For damaged packages: 1) Take photos of damage immediately, 2) Do not throw away packaging, 3) Contact support within 48 hours, 4) We will arrange return pickup and replacement/refund. Your satisfaction is our priority!' as damage_policy;
 
 RESPONSE FORMAT: Return ONLY the SQL query, nothing else."""
 
@@ -4291,6 +4309,22 @@ CURRENT TIME CONTEXT:
             # 🔧 CRITICAL FIX: Prioritize context_customer_id for support agents
             effective_customer_id = context_customer_id or customer_id
             user_query = entities.get('user_query', '').lower()
+
+            # 🚨 CRITICAL SHIPPING FEE CALCULATION FIXES
+            # Fix 1: Block incorrect "shipping fee" queries that try to use payment methods
+            if ('shipping fee' in user_query or 'shipping cost' in user_query) and 'payment_method' in fixed_query:
+                print_log("🔧 BLOCKED INCORRECT SHIPPING FEE QUERY: Cannot calculate shipping fees from payment methods", 'warning')
+                return "SELECT 'Shipping fees are calculated based on delivery zones, not available in order history. Contact support for shipping rate information.' as shipping_info;"
+
+            # Fix 2: Block queries trying to sum total_amount as "shipping fees"
+            if ('total_shipping_fees' in fixed_query or 'shipping_fee' in fixed_query) and 'SUM(total_amount)' in fixed_query:
+                print_log("🔧 BLOCKED INCORRECT SHIPPING FEE QUERY: Cannot use total_amount as shipping fees", 'warning')
+                return "SELECT 'Shipping costs are included in order totals. Our database does not track shipping fees separately. Standard rates: Lagos ₦2,000, Abuja ₦2,500, Major Cities ₦3,000, Other States ₦4,000.' as shipping_info;"
+
+            # Fix 3: Fix specific wrong shipping fee calculation patterns
+            if 'CASE WHEN payment_method = \'Pay on Delivery\' THEN 0 ELSE total_amount END' in fixed_query:
+                print_log("🔧 BLOCKED PAYMENT METHOD SHIPPING LOGIC: This makes no sense for shipping calculations", 'warning')
+                return "SELECT 'Shipping fees are not calculated from payment methods. Our standard rates: Lagos ₦2,000, Abuja ₦2,500, Major Cities ₦3,000, Other States ₦4,000. Gold/Platinum members get free delivery!' as shipping_rates;"
 
             # 🚨 BUSINESS ANALYTICS PROTECTION: Prevent customers from accessing business-wide data
             # 🔧 CRITICAL FIX: Check for legitimate business analytics flag first
