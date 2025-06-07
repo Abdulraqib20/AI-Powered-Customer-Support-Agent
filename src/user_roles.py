@@ -204,6 +204,19 @@ class RoleBasedAccessControl:
                     "scope": query_scope,
                     "reason": "Customer support query authorized for staff"
                 }
+            elif user_role == UserRole.CUSTOMER:
+                if target_customer_id is None or target_customer_id == customer_id:
+                    return {
+                        "authorized": True,
+                        "scope": query_scope,
+                        "reason": "Customer accessing own account information"
+                    }
+                else:
+                    return {
+                        "authorized": False,
+                        "reason": f"Role '{user_role.value}' cannot access other customers' data",
+                        "alternative": "You can only access your own account information"
+                    }
             else:
                 return {
                     "authorized": False,

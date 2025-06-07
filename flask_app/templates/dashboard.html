@@ -2544,7 +2544,7 @@ class CustomerSupportPortal {
                 const chatInput = document.getElementById('chatInput');
                 if (chatInput && document.activeElement === chatInput) {
                     e.preventDefault();
-                    this.sendCustomerMessage();
+                    sendChatMessage(); // Use global function instead of this.sendCustomerMessage()
                     console.log('⌨️ Enter key pressed, sending message');
                 }
             }

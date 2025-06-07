@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 import uuid
 import psycopg2
+from psycopg2.extras import RealDictCursor
 
 # Flask imports
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
@@ -3027,129 +3028,175 @@ def confirm_order():
         }), 500
 
 
-# @app.route('/api/customer/profile', methods=['GET'])
-# def get_customer_profile():
-#     """Get comprehensive customer profile data for Account Hero section"""
-#     try:
-#         customer_id = session.get('customer_id') if session.get('user_authenticated') else None
+@app.route('/api/customer/profile', methods=['GET', 'PUT'])
+def customer_profile_api():
+    """🔐 Customer Profile API - Secure customer self-service for profile management"""
+    try:
+        # Check authentication
+        if not session.get('user_authenticated'):
+            return jsonify({
+                'success': False,
+                'error': 'Authentication required',
+                'message': 'Please log in to access your profile'
+            }), 401
 
-#         if not customer_id:
-#             return jsonify({
-#                 'success': False,
-#                 'error': 'Authentication required'
-#             }), 401
+        customer_id = session.get('customer_id')
+        if not customer_id:
+            return jsonify({
+                'success': False,
+                'error': 'Customer ID not found',
+                'message': 'Invalid session'
+            }), 401
 
-#         # Get customer basic info
-#         customer = customer_repo.get_customer_by_id(customer_id)
-#         if not customer:
-#             return jsonify({
-#                 'success': False,
-#                 'error': 'Customer not found'
-#             }), 404
+        # Database connection
+        db_config = {
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'port': os.getenv('DB_PORT', '5432'),
+            'database': os.getenv('DB_NAME', 'nigerian_ecommerce'),
+            'user': os.getenv('DB_USER', 'postgres'),
+            'password': os.getenv('DB_PASSWORD', 'oracle'),
+        }
 
-#         # Get recent orders for statistics
-#         recent_orders = order_repo.get_orders_by_customer(customer_id, limit=20)
+        conn = psycopg2.connect(**db_config)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-#         # Count active orders (Pending and Processing)
-#         active_orders_count = len([order for order in recent_orders
-#                                  if order['order_status'] in ['Pending', 'Processing']])
+        if request.method == 'GET':
+            # Get customer profile information
+            cursor.execute("""
+                SELECT customer_id, name, email, phone, state, lga, address,
+                       account_tier, created_at, user_role, account_status
+                FROM customers
+                WHERE customer_id = %s
+            """, (customer_id,))
 
-#         # Get total order count for tier progression
-#         total_orders_count = len(recent_orders)
+            profile = cursor.fetchone()
+            cursor.close()
+            conn.close()
 
-#         # Calculate member since date
-#         from datetime import datetime
-#         created_date = customer['created_at']
-#         if isinstance(created_date, str):
-#             try:
-#                 created_date = datetime.fromisoformat(created_date.replace('Z', '+00:00'))
-#             except:
-#                 created_date = datetime.now()
-#         member_since_formatted = created_date.strftime('%B %Y')
+            if not profile:
+                return jsonify({
+                    'success': False,
+                    'error': 'Profile not found'
+                }), 404
 
-#         # Simulate personalized recommendations count (in a real implementation,
-#         # this would come from the recommendation engine)
-#         recommendations_count = 12
+            # Convert to dict and format dates
+            profile_data = dict(profile)
+            if profile_data.get('created_at'):
+                profile_data['member_since'] = profile_data['created_at'].strftime('%B %Y')
+                profile_data['created_at'] = profile_data['created_at'].isoformat()
 
-#         # Simulate saved payment methods count (would come from payment methods table)
-#         payment_methods_count = 2
+            # Get spending summary
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute("""
+                SELECT
+                    COUNT(*) as total_orders,
+                    COALESCE(SUM(total_amount), 0) as total_spent,
+                    COUNT(CASE WHEN order_status IN ('Pending', 'Processing') THEN 1 END) as active_orders
+                FROM orders
+                WHERE customer_id = %s
+            """, (customer_id,))
 
-#         # Define tier benefits
-#         tier_benefits = {
-#             'Bronze': {
-#                 'discount': 0,
-#                 'description': 'Standard benefits',
-#                 'features': ['Basic support', 'Standard delivery']
-#             },
-#             'Silver': {
-#                 'discount': 5,
-#                 'description': '5% discount + priority support',
-#                 'features': ['5% discount on all orders', 'Priority customer support', 'Faster response times']
-#             },
-#             'Gold': {
-#                 'discount': 10,
-#                 'description': '10% discount + free delivery',
-#                 'features': ['10% discount on all orders', 'Free delivery nationwide', 'Priority support', 'Early access to sales']
-#             },
-#             'Platinum': {
-#                 'discount': 15,
-#                 'description': '15% discount + premium perks',
-#                 'features': ['15% discount on all orders', 'Free express delivery', 'Premium support', 'Exclusive products', 'VIP customer service']
-#             }
-#         }
+            spending_summary = cursor.fetchone()
+            cursor.close()
+            conn.close()
 
-#         # Calculate next tier and progress
-#         tier_order = ['Bronze', 'Silver', 'Gold', 'Platinum']
-#         current_tier = customer['account_tier']
-#         current_tier_index = tier_order.index(current_tier) if current_tier in tier_order else 0
-#         next_tier = tier_order[current_tier_index + 1] if current_tier_index < len(tier_order) - 1 else None
+            if spending_summary:
+                profile_data.update({
+                    'total_orders': spending_summary['total_orders'],
+                    'total_spent': float(spending_summary['total_spent']),
+                    'total_spent_formatted': format_currency(float(spending_summary['total_spent'])),
+                    'active_orders': spending_summary['active_orders']
+                })
 
-#         # Define tier requirements for progression
-#         tier_requirements = {'Silver': 5, 'Gold': 15, 'Platinum': 30}
+            return jsonify({
+                'success': True,
+                'profile': profile_data,
+                'message': 'Profile loaded successfully'
+            })
 
-#         # Simple tier progression based on order count (you can implement more complex logic)
-#         orders_needed_for_next_tier = None
-#         if next_tier:
-#             required_orders = tier_requirements.get(next_tier, 999)
-#             orders_needed_for_next_tier = max(0, required_orders - total_orders_count)
+        elif request.method == 'PUT':
+            # Update customer profile
+            data = request.json
 
-#         profile_data = {
-#             'customer_id': customer['customer_id'],
-#             'name': customer['name'],
-#             'email': customer['email'],
-#             'phone': customer['phone'],
-#             'state': customer['state'],
-#             'lga': customer['lga'],
-#             'address': customer['address'],
-#             'account_tier': current_tier,
-#             'member_since': member_since_formatted,
-#             'active_orders_count': active_orders_count,
-#             'total_orders_count': total_orders_count,
-#             'recommendations_count': recommendations_count,
-#             'payment_methods_count': payment_methods_count,
-#             'tier_benefits': tier_benefits.get(current_tier, tier_benefits['Bronze']),
-#             'next_tier': next_tier,
-#             'orders_needed_for_next_tier': orders_needed_for_next_tier,
-#             'tier_progression': {
-#                 'current': current_tier,
-#                 'next': next_tier,
-#                 'progress_percentage': min(100, (total_orders_count / tier_requirements.get(next_tier, total_orders_count + 1)) * 100) if next_tier else 100
-#             }
-#         }
+            # Define allowed fields that customers can update
+            allowed_fields = {
+                'name': str,
+                'phone': str,
+                'state': str,
+                'lga': str,
+                'address': str
+            }
 
-#         return jsonify({
-#             'success': True,
-#             'profile': profile_data,
-#             'message': 'Profile loaded successfully'
-#         })
+            # Validate and prepare updates
+            updates = {}
+            update_fields = []
+            update_values = []
 
-#     except Exception as e:
-#         app_logger.error(f"❌ Customer profile fetch error: {e}")
-#         return jsonify({
-#             'success': False,
-#             'error': 'Profile fetch failed',
-#             'message': str(e)
-#         }), 500
+            for field, field_type in allowed_fields.items():
+                if field in data:
+                    value = data[field]
+                    if isinstance(value, field_type) and value.strip():
+                        updates[field] = value.strip()
+                        update_fields.append(f"{field} = %s")
+                        update_values.append(value.strip())
+
+            if not updates:
+                return jsonify({
+                    'success': False,
+                    'error': 'No valid fields to update',
+                    'message': 'Please provide valid data to update'
+                }), 400
+
+            # Build update query
+            update_query = f"""
+                UPDATE customers
+                SET {', '.join(update_fields)}, updated_at = CURRENT_TIMESTAMP
+                WHERE customer_id = %s
+                RETURNING customer_id, name, email, phone, state, lga, address, account_tier
+            """
+            update_values.append(customer_id)
+
+            try:
+                cursor.execute(update_query, update_values)
+                updated_profile = cursor.fetchone()
+                conn.commit()
+                cursor.close()
+                conn.close()
+
+                if updated_profile:
+                    app_logger.info(f"✅ Customer {customer_id} updated profile: {', '.join(updates.keys())}")
+
+                    return jsonify({
+                        'success': True,
+                        'profile': dict(updated_profile),
+                        'message': f'Profile updated successfully! Updated: {", ".join(updates.keys())}',
+                        'updated_fields': list(updates.keys())
+                    })
+                else:
+                    return jsonify({
+                        'success': False,
+                        'error': 'Update failed',
+                        'message': 'Could not update profile'
+                    }), 400
+
+            except Exception as e:
+                conn.rollback()
+                cursor.close()
+                conn.close()
+                error_logger.error(f"❌ Profile update error for customer {customer_id}: {e}")
+                return jsonify({
+                    'success': False,
+                    'error': 'Update failed',
+                    'message': 'An error occurred while updating your profile'
+                }), 500
+
+    except Exception as e:
+        error_logger.error(f"❌ Customer profile API error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Server error',
+            'message': 'An error occurred while processing your request'
+        }), 500
 
 
 if __name__ == '__main__':

@@ -388,6 +388,31 @@ class EnhancedDatabaseQuerying:
             entities['shopping_intent'] = True
             return QueryType.ORDER_PLACEMENT, entities
 
+        # 🆕 TIER BENEFIT QUERIES - Handle these specially (no database query needed)
+        tier_benefit_patterns = [
+            'benefits of', 'what are the benefits', 'tier benefits', 'gold tier benefits',
+            'silver tier benefits', 'bronze tier benefits', 'platinum tier benefits',
+            'what benefits', 'membership benefits', 'tier perks', 'account tier benefits',
+            'gold member benefits', 'silver member benefits', 'platinum member benefits',
+            'bronze member benefits', 'what do i get', 'tier advantages', 'membership perks'
+        ]
+
+        if any(pattern in query_lower for pattern in tier_benefit_patterns):
+            # Extract mentioned tier if any
+            mentioned_tier = None
+            tier_keywords = ['bronze', 'silver', 'gold', 'platinum']
+            for tier in tier_keywords:
+                if tier in query_lower:
+                    mentioned_tier = tier.capitalize()
+                    break
+
+            return QueryType.GENERAL_CONVERSATION, {
+                'intent': 'tier_benefits_inquiry',
+                'mentioned_tier': mentioned_tier,
+                'privacy_safe': True,
+                'no_database_query': True
+            }
+
         # 🆕 CUSTOMER SUPPORT CONTACT QUERIES - Handle these specially
         if any(phrase in query_lower for phrase in [
             'contact customer support', 'customer support contact', 'support contact',
@@ -548,11 +573,7 @@ Classify this query and extract relevant entities. Return JSON format:
             return QueryType.ORDER_ANALYTICS, entities
 
         # 🆕 NEW: Customer support queries (support agents asking about customer details for support)
-        elif any(keyword in query_lower for keyword in ['name of', 'customer name', 'customer details', 'payment method', 'contact information', 'address', 'phone number', 'email', 'account information', 'customer info', 'profile details', 'who is', 'customer profile', 'this customer', 'what payment', 'which customer', 'customer use', 'account tier', 'tier', 'when did', 'joined', 'products has', 'purchase history', 'buying history']):
-            return QueryType.CUSTOMER_SUPPORT, entities
-
-        # 🆕 NEW: Simple customer ID references (e.g., "customer 1503")
-        elif any(keyword in query_lower for keyword in ['customer 1503', 'customer 1504', 'customer 1502']) or (len(query_lower.split()) <= 3 and 'customer' in query_lower and any(char.isdigit() for char in query_lower)):
+        elif any(keyword in query_lower for keyword in ['name of', 'customer name', 'customer details', 'payment method', 'contact information', 'address', 'phone number', 'email', 'account information', 'customer info', 'profile details', 'who is', 'customer profile', 'this customer', 'what payment', 'which customer', 'customer use', 'account tier', 'tier', 'when did', 'joined', 'products has', 'purchase history', 'buying history', 'my account', 'my tier', 'my spending', 'my profile', 'my details', 'my information', 'my orders', 'how much have i', 'total i spent', 'what i bought', 'my purchases', 'update my', 'change my', 'modify my']):
             return QueryType.CUSTOMER_SUPPORT, entities
 
         elif any(keyword in query_lower for keyword in ['customer', 'customers', 'profile', 'account']):
@@ -741,6 +762,13 @@ EXAMPLES:
 - "Debug total calculation" with customer_id=1503: SELECT 'Individual orders' as source, COUNT(*) as order_count, SUM(total_amount) as total_spent FROM orders WHERE customer_id = 1503 UNION ALL SELECT 'Category breakdown' as source, COUNT(DISTINCT order_id) as order_count, SUM(total_amount) as total_spent FROM orders WHERE customer_id = 1503;
 - "What are their account tiers too?" with context_customer_ids=[1481, 1406, 381]: SELECT customer_id, name, account_tier FROM customers WHERE customer_id IN (1481, 1406, 381) ORDER BY customer_id;
 - "How much did they spend?" with context_customer_ids=[1481, 1406, 381]: SELECT c.customer_id, c.name, SUM(o.total_amount) as total_spent FROM customers c JOIN orders o ON c.customer_id = o.customer_id WHERE c.customer_id IN (1481, 1406, 381) GROUP BY c.customer_id, c.name ORDER BY total_spent DESC;
+- "What's my current account tier?" with customer_id=1503: SELECT account_tier FROM customers WHERE customer_id = 1503;
+- "Show me my account information" with customer_id=1503: SELECT name, email, phone, account_tier, state, lga FROM customers WHERE customer_id = 1503;
+- "When did I join?" with customer_id=1503: SELECT created_at FROM customers WHERE customer_id = 1503;
+- "What is my account status?" with customer_id=1503: SELECT account_tier, account_status FROM customers WHERE customer_id = 1503;
+- "Show me my spending breakdown by month" with customer_id=1503: SELECT DATE_TRUNC('month', created_at) as month, SUM(total_amount) as monthly_spending FROM orders WHERE customer_id = 1503 GROUP BY month ORDER BY month DESC;
+- "I want to update my phone number" with customer_id=1503: SELECT 'UPDATE_OPERATION_REQUIRED' as message; -- Handle via application layer
+- "Update my address" with customer_id=1503: SELECT 'UPDATE_OPERATION_REQUIRED' as message; -- Handle via application layer
 - "give me monthly revenue report" (ADMIN with user_role=super_admin, can_access_analytics=True): SELECT DATE_TRUNC('month', created_at) as month, SUM(total_amount) as revenue FROM orders GROUP BY month ORDER BY month DESC;
 - "monthly revenue report" (ADMIN with user_role=super_admin, can_access_analytics=True): SELECT DATE_TRUNC('month', created_at) as month, SUM(total_amount) as revenue FROM orders GROUP BY month ORDER BY month DESC;
 - "which month did we make the most revenue" (ADMIN with user_role=super_admin, can_access_analytics=True): SELECT DATE_TRUNC('month', created_at) as month, SUM(total_amount) as revenue FROM orders GROUP BY month ORDER BY revenue DESC LIMIT 1;
@@ -3144,6 +3172,45 @@ How can I help you with your raqibtech.com experience today? 🌟"""
                     'sql_query': None, 'results_count': 0, 'privacy_protected': True
                 }
 
+            # 🆕 EARLY DETECTION: Tier Benefit Queries
+            tier_benefit_patterns = [
+                'benefits of', 'what are the benefits', 'tier benefits', 'gold tier benefits',
+                'silver tier benefits', 'bronze tier benefits', 'platinum tier benefits',
+                'what benefits', 'membership benefits', 'tier perks', 'account tier benefits',
+                'gold member benefits', 'silver member benefits', 'platinum member benefits',
+                'bronze member benefits', 'what do i get', 'tier advantages', 'membership perks'
+            ]
+
+            if any(pattern in user_query_lower for pattern in tier_benefit_patterns):
+                logger.info(f"🏆 TIER BENEFITS QUERY DETECTED: Providing built-in tier information")
+
+                # Extract mentioned tier if any
+                mentioned_tier = None
+                tier_keywords = ['bronze', 'silver', 'gold', 'platinum']
+                for tier in tier_keywords:
+                    if tier in user_query_lower:
+                        mentioned_tier = tier.capitalize()
+                        break
+
+                response_text = self.generate_tier_benefits_response(user_query, mentioned_tier)
+
+                # Store in memory if available
+                if self.memory_system:
+                    try:
+                        self.memory_system.store_conversation_turn(
+                            session_id=session_id, user_input=user_query, ai_response=response_text,
+                            intent="tier_benefits_inquiry", entities={'mentioned_tier': mentioned_tier},
+                            session_state=session_context or {}
+                        )
+                    except Exception as e_store:
+                        logger.warning(f"⚠️ Failed to store tier benefits turn: {e_store}")
+
+                return {
+                    'success': True, 'response': response_text,
+                    'query_type': 'tier_benefits_inquiry', 'execution_time': f"{time.time() - start_time:.3f}s",
+                    'sql_query': None, 'results_count': 0, 'tier_benefits_provided': True
+                }
+
             if not self.is_query_within_scope(user_query):
                 logger.info(f"🚫 Out-of-scope query detected: {user_query[:50]}...")
                 sentiment_data = self.detect_user_sentiment(user_query)
@@ -3178,8 +3245,15 @@ How can I help you with your raqibtech.com experience today? 🌟"""
             is_analytics_query = any(keyword in user_query.lower() for keyword in analytics_keywords)
 
             # 🔧 CRITICAL FIX: Check for spending/financial queries BEFORE shopping intent detection
-            spending_keywords = ['spent', 'spending', 'spend', 'total spent', 'how much', 'breakdown', 'calculation', 'calculate', 'are you sure', 'verify', 'double check', 'give me the details', 'details', 'confirm', 'revenue', 'sales', 'money', 'naira', '₦']
+            spending_keywords = ['spent', 'spending', 'spend', 'total spent', 'how much', 'breakdown', 'calculation', 'calculate', 'are you sure', 'verify', 'double check', 'give me the details', 'confirm', 'revenue', 'sales', 'money', 'naira', '₦']
             is_spending_query = any(keyword in user_query.lower() for keyword in spending_keywords)
+
+            # 🔧 CRITICAL FIX: Exclude cart-related queries from spending detection
+            cart_related_words = ['cart', 'shopping', 'checkout', 'order', 'delivery', 'product', 'item']
+            has_cart_context = any(cart_word in user_query.lower() for cart_word in cart_related_words)
+
+            # Only treat as spending query if spending keywords found AND no cart context
+            is_spending_query = any(keyword in user_query.lower() for keyword in spending_keywords) and not has_cart_context
 
             if is_spending_query or is_analytics_query:
                 if is_spending_query:
@@ -3237,7 +3311,7 @@ How can I help you with your raqibtech.com experience today? 🌟"""
                             )
                             logger.info(f"🎯 Shopping result from OrderAIAssistant: success={shopping_result.get('success', False)}, action={shopping_result.get('action', 'unknown')}")
 
-                            if shopping_result.get('success'):
+                            if shopping_result.get('success') and not shopping_result.get('should_redirect'):
                                 enhanced_response_text = self._generate_shopping_response(shopping_result)
 
                                 if self.memory_system:
@@ -4334,4 +4408,168 @@ CURRENT TIME CONTEXT:
             if user_authenticated and effective_customer_id:
                 return f"SELECT * FROM orders WHERE customer_id = {effective_customer_id};"
             return "SELECT 'Query processing error' as message;"
+
+    def get_system_prompt(self) -> str:
+        """🎯 Enhanced system prompt with comprehensive Nigerian e-commerce knowledge"""
+        return f"""
+You are a helpful AI assistant for RaqibTech.com, a leading Nigerian e-commerce platform.
+You help customers with orders, product information, account management, and business analytics.
+
+=== ACCOUNT TIER SYSTEM (CRITICAL KNOWLEDGE) ===
+
+**TIER PROGRESSION & BENEFITS:**
+
+🥉 **BRONZE TIER** (Entry Level - ₦0 to ₦100K total spent):
+- Standard customer service
+- No discounts on orders
+- Standard delivery fees apply
+- Access to basic product catalog
+
+🥈 **SILVER TIER** (₦100K+ total spent, 3+ orders):
+- 2% discount on all orders
+- Priority customer support
+- Standard delivery fees
+- Early access to sales events
+
+🥇 **GOLD TIER** (₦500K+ total spent, 10+ orders):
+- 5% discount on all orders
+- FREE DELIVERY on all orders (normally ₦2K-₦4K)
+- Premium customer support
+- Exclusive Gold member promotions
+
+💎 **PLATINUM TIER** (₦2M+ total spent, 20+ orders):
+- 10% discount on all orders
+- FREE DELIVERY + FREE EXPRESS SHIPPING
+- Dedicated account manager
+- VIP customer support hotline
+- Exclusive Platinum-only products
+
+**HOW TO UPGRADE TIERS:**
+- Tiers are automatically upgraded based on total spending
+- Bronze → Silver: Spend ₦100,000 total
+- Silver → Gold: Spend ₦500,000 total
+- Gold → Platinum: Spend ₦2,000,000 total
+- Tier status is permanent once achieved
+
+=== CUSTOMER ACCOUNT MANAGEMENT ===
+
+**CUSTOMERS CAN ASK ABOUT:**
+- Current account tier and benefits
+- How much they've spent total
+- Monthly/yearly spending breakdown
+- How to upgrade to next tier
+- Order history and tracking
+- Delivery addresses and phone updates
+
+**CUSTOMERS CAN UPDATE:**
+- Phone number, Email address, Delivery address
+- Password, Newsletter preferences, Notification settings
+
+=== ACCOUNT TIER SYSTEM (CRITICAL KNOWLEDGE) ===
+
+**TIER PROGRESSION & BENEFITS:**
+
+🥉 **BRONZE TIER** (Entry Level - ₦0 to ₦100K total spent):
+- Standard customer service
+- No discounts on orders
+- Standard delivery fees apply
+- Access to basic product catalog
+- Email notifications for promotions
+
+🥈 **SILVER TIER** (₦100K+ total spent, 3+ orders):
+- 2% discount on all orders
+- Priority customer support
+- Standard delivery fees
+- Early access to sales events
+- Enhanced return policy (14 days)
+
+🥇 **GOLD TIER** (₦500K+ total spent, 10+ orders):
+- 5% discount on all orders
+- FREE DELIVERY on all orders (normally ₦2K-₦4K)
+- Premium customer support
+- Exclusive Gold member promotions
+- Extended return policy (21 days)
+- Birthday month special offers
+
+💎 **PLATINUM TIER** (₦2M+ total spent, 20+ orders):
+- 10% discount on all orders
+- FREE DELIVERY + FREE EXPRESS SHIPPING
+- Dedicated account manager
+- VIP customer support hotline
+- Exclusive Platinum-only products
+- Extended return policy (30 days)
+- Quarterly bonus rewards
+- First access to new product launches
+
+**HOW TO UPGRADE TIERS:**
+- Tiers are automatically upgraded based on total spending
+- Bronze → Silver: Spend ₦100,000 total
+- Silver → Gold: Spend ₦500,000 total
+- Gold → Platinum: Spend ₦2,000,000 total
+- Tier status is permanent once achieved
+- Bonuses: Long-term customers (1+ years) get 10% bonus towards tier progression
+- Bonuses: Long-term customers (2+ years) get 20% bonus towards tier progression
+
+=== CUSTOMER ACCOUNT MANAGEMENT ===
+
+**CUSTOMERS CAN ASK ABOUT:**
+- Current account tier and benefits
+- How much they've spent total
+- Monthly/yearly spending breakdown
+- How to upgrade to next tier
+- Order history and tracking
+- Delivery addresses and phone updates
+- Payment method preferences
+- Account tier incentives and rewards
+
+**CUSTOMERS CAN UPDATE:**
+- Phone number
+- Email address
+- Delivery address
+- Password
+- Newsletter preferences
+- Notification settings
+- Preferred categories
+
+**SPENDING & ANALYTICS QUERIES CUSTOMERS CAN MAKE:**
+- "Show me my spending breakdown by month"
+- "How much have I spent this year?"
+- "What's my total spending since joining?"
+- "How much more to reach Platinum tier?"
+- "What are the benefits of Gold tier?"
+- "How do I upgrade my account tier?"
+
+=== SECURITY & PRIVACY ===
+- Customers can ONLY access their own data (customer_id must match session)
+- Never show other customers' information
+- Always confirm identity before account changes
+- Explain benefits clearly and encourage tier progression
+
+=== DELIVERY ZONES & FEES ===
+- Lagos Metro: ₦2,000 (1-day delivery)
+- Abuja FCT: ₦2,500 (2-day delivery)
+- Major Cities: ₦3,000 (3-day delivery)
+- Other States: ₦4,000 (5-day delivery)
+- FREE delivery for Gold & Platinum tiers
+- FREE express shipping for Platinum tier
+
+=== EXAMPLES FOR CUSTOMER QUERIES ===
+
+Customer Tier Query Examples (use customer_id from session):
+- "What's my current account tier?" → SELECT account_tier FROM customers WHERE customer_id = [session_customer_id];
+- "Show me my account information" → SELECT name, email, phone, account_tier, state, lga FROM customers WHERE customer_id = [session_customer_id];
+- "How much have I spent total?" → SELECT COALESCE(SUM(total_amount), 0) as total_spent FROM orders WHERE customer_id = [session_customer_id] AND order_status != 'Returned';
+- "Show me my spending breakdown by month" → SELECT DATE_TRUNC('month', created_at) as month, SUM(total_amount) as monthly_spending FROM orders WHERE customer_id = [session_customer_id] GROUP BY month ORDER BY month DESC;
+- "How much more do I need to spend to reach Platinum tier?" → SELECT (CASE WHEN account_tier = 'Platinum' THEN 0 ELSE (2000000 - COALESCE(SUM(total_amount), 0)) END) AS amount_needed FROM customers c LEFT JOIN orders o ON c.customer_id = o.customer_id WHERE c.customer_id = [session_customer_id] AND (o.order_status != 'Returned' OR o.order_status IS NULL);
+
+For all customer queries, always:
+1. Use the customer_id from the session context
+2. Explain tier benefits clearly
+3. Encourage tier progression when appropriate
+4. Be helpful and encouraging about account management
+
+Current timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Database schema: Customers, Orders, Products, Order_Items, Customer_Conversations, Analytics tables available.
+Currency format: Nigerian Naira (₦) with proper thousand separators.
+"""
 

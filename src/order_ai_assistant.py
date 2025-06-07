@@ -200,6 +200,51 @@ class OrderAIAssistant:
         # 🔧 CRITICAL FIX: PRIORITY-BASED INTENT DETECTION
         # Check HIGH PRIORITY patterns first to avoid misclassification
 
+        # 1. CUSTOMER QUERIES (view personal info, account details, order history) - HIGHEST PRIORITY
+        customer_info_patterns = [
+            "what's my tier", 'my account tier', 'account tier', 'what tier am i',
+            'my information', 'my details', 'my profile', 'my account info',
+            'show my', "what's my", 'view my', 'display my', 'tell me my',
+            'my spending', 'how much have i spent', 'my orders', 'my purchase history',
+            'confirm my', 'check my', 'verify my'  # Add confirmation patterns
+        ]
+
+        # 🔧 CRITICAL FIX: Account management vs product search disambiguation
+        account_management_keywords = [
+            'update my phone number', 'change my phone number', 'modify my phone',
+            'update my email', 'change my email', 'modify my email',
+            'update my address', 'change my address', 'modify my address',
+            'update my details', 'change my details', 'update my profile'
+        ]
+
+        # Check for account management first (higher priority than product search)
+        if any(pattern in message_lower for pattern in account_management_keywords):
+            logger.info(f"🎯 Intent parsed: account_management (confidence: 0.9, pattern: 'account_management_pattern')")
+            return {
+                'intent': 'account_management',
+                'confidence': 0.9,
+                'matched_pattern': 'account_management_pattern',
+                'entities': {},
+                'raw_message': user_message
+            }
+
+        # 🔧 CRITICAL FIX: Address confirmation vs address setting
+        address_viewing_patterns = [
+            'confirm my delivery address', 'check my delivery address', 'verify my address',
+            "what's my delivery address", 'show my delivery address', 'my delivery address',
+            'confirm the delivery address for customer', 'check delivery address'
+        ]
+
+        if any(pattern in message_lower for pattern in address_viewing_patterns):
+            logger.info(f"🎯 Intent parsed: view_address (confidence: 0.9, pattern: 'address_viewing_pattern')")
+            return {
+                'intent': 'view_address',
+                'confidence': 0.9,
+                'matched_pattern': 'address_viewing_pattern',
+                'entities': {},
+                'raw_message': user_message
+            }
+
         # 1. HIGHEST PRIORITY: Payment method selection (must come before general "want")
         payment_patterns = [
             (r'payment method.*(is|set to|choose|select)\s*(.+)', 'payment_method_selection', 2),
@@ -293,7 +338,7 @@ class OrderAIAssistant:
         # 6. OTHER SPECIFIC INTENTS
         other_patterns = {
             'view_cart': [
-                'view cart', 'show cart', 'cart contents', 'what\'s in my cart',
+                'view cart', 'show cart', 'cart contents', "what's in my cart",
                 'shopping cart', 'cart status', 'show my cart', 'list cart',
                 'list all the items in my cart', 'cart items', 'what did i add'
             ],
@@ -388,6 +433,38 @@ class OrderAIAssistant:
             'computing': ['laptop', 'computer', 'macbook', 'hp', 'dell'],
             'mobile': ['phone', 'smartphone', 'iphone', 'samsung', 'android']
         }
+
+        # 🔧 CRITICAL FIX: Context-aware word filtering to prevent false matches
+        context_exclusion_patterns = [
+            r'\bphone\s+number\b',  # 'phone number' should not match phone products
+            r'\bemail\s+address\b',  # 'email address' should not match email products
+            r'\bupdate\s+my\b',     # 'update my X' is account management, not shopping
+            r'\bchange\s+my\b',     # 'change my X' is account management
+            r'\bmodify\s+my\b',     # 'modify my X' is account management
+            r'\bconfirm\s+my\b',    # 'confirm my X' is viewing info, not shopping
+            r'\bcheck\s+my\b',      # 'check my X' is viewing info
+            r'\bverify\s+my\b',     # 'verify my X' is viewing info
+        ]
+
+        # Check if the user message contains account management context
+        is_account_management = any(re.search(pattern, target_product_name, re.IGNORECASE)
+                                  for pattern in context_exclusion_patterns)
+
+        def print_log(message, level='info'):
+            """Logs a message with a specified log level and colors."""
+            levels = {
+                'info': '\033[94m',   # Blue
+                'warning': '\033[93m', # Yellow
+                'error': '\033[91m',   # Red
+                'success': '\033[92m', # Green
+                'reset': '\033[0m'     # Reset color
+            }
+            color = levels.get(level, levels['info'])
+            print(f"{color}[DB_QUERY] {level.upper()}: {message}{levels['reset']}")
+
+        if is_account_management:
+            print_log(f"❌ Account management context detected - not a product search: {target_product_name}")
+            return None
 
         try:
             db_manager = initialize_database()
@@ -799,8 +876,25 @@ class OrderAIAssistant:
                 active_session_state.conversation_stage = 'cart_cleared'
                 response_data.update({
                     'success': True,
-                    'message': "🗑️ Your cart has been cleared.",
+                    'message': "🗑️ Your cart has been cleared! Start fresh with your shopping.",
                     'action': 'cart_cleared',
+                })
+
+            # 🆕 NEW: Account management intents (redirect to general query processing)
+            elif intent == 'account_management':
+                response_data.update({
+                    'success': True,
+                    'message': "I understand you want to update your account details. Let me help you with that.",
+                    'action': 'redirect_to_account_management',
+                    'should_redirect': True  # Signal to main app to handle via general query processing
+                })
+
+            elif intent == 'view_address':
+                response_data.update({
+                    'success': True,
+                    'message': "I'll help you view your delivery address information.",
+                    'action': 'redirect_to_address_viewing',
+                    'should_redirect': True  # Signal to main app to handle via general query processing
                 })
 
             elif intent == 'set_delivery_address':
