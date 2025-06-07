@@ -332,6 +332,17 @@ class EnhancedDatabaseQuerying:
             'needs_customer_lookup': False
         }
 
+        # 💰 REVENUE INSIGHTS KEYWORD-BASED DETECTION
+        revenue_keywords = [
+            'revenue', 'sales', 'profit', 'financial', 'performance',
+            'worst performing month', 'best performing month', 'top selling',
+            'highest sales', 'lowest sales', 'monthly sales'
+        ]
+        if any(keyword in query_lower for keyword in revenue_keywords):
+            logger.info("💰 Revenue-related keyword detected. Classifying as REVENUE_INSIGHTS.")
+            entities['financial_query'] = True
+            return QueryType.REVENUE_INSIGHTS, entities
+
         # 🛒 ENHANCED CART OPERATION DETECTION
         cart_keywords = [
             'add to cart', 'add to my cart', 'add item to cart',
@@ -679,6 +690,15 @@ EXAMPLES:
 - "How much did they spend?" with context_customer_ids=[1481, 1406, 381]: SELECT c.customer_id, c.name, SUM(o.total_amount) as total_spent FROM customers c JOIN orders o ON c.customer_id = o.customer_id WHERE c.customer_id IN (1481, 1406, 381) GROUP BY c.customer_id, c.name ORDER BY total_spent DESC;
 - "give me monthly revenue report" (ADMIN with user_role=super_admin, can_access_analytics=True): SELECT DATE_TRUNC('month', created_at) as month, SUM(total_amount) as revenue FROM orders GROUP BY month ORDER BY month DESC;
 - "monthly revenue report" (ADMIN with user_role=super_admin, can_access_analytics=True): SELECT DATE_TRUNC('month', created_at) as month, SUM(total_amount) as revenue FROM orders GROUP BY month ORDER BY month DESC;
+- "which month did we make the most revenue" (ADMIN with user_role=super_admin, can_access_analytics=True): SELECT DATE_TRUNC('month', created_at) as month, SUM(total_amount) as revenue FROM orders GROUP BY month ORDER BY revenue DESC LIMIT 1;
+- "total platform revenue" (ADMIN with user_role=super_admin, can_access_analytics=True): SELECT SUM(total_amount) as total_revenue FROM orders;
+- "business revenue insights" (ADMIN with user_role=super_admin, can_access_analytics=True): SELECT DATE_TRUNC('month', created_at) as month, SUM(total_amount) as revenue FROM orders GROUP BY month ORDER BY revenue DESC;
+
+🚨 CRITICAL ADMIN BUSINESS QUERY RULE:
+For user_role in ['admin', 'super_admin'] with can_access_analytics=True AND business-wide queries:
+- NEVER include WHERE customer_id = anything in revenue/business analytics queries
+- These are PLATFORM-WIDE queries, not customer-specific
+- Keywords triggering this: "platform revenue", "total revenue", "business revenue", "monthly revenue", "most revenue", "which month", "revenue in sales"
 
 ⚠️ CRITICAL AUTHENTICATION RULES:
 1. If customer_verified=False OR user_authenticated=False:
@@ -814,8 +834,28 @@ RESPONSE FORMAT: Return ONLY the SQL query, nothing else."""
                 if is_analytics_query and user_role in ['admin', 'super_admin'] and can_access_analytics:
                     # For admin analytics queries, DON'T substitute customer_id - keep platform-wide
                     logger.info(f"🏢 ADMIN ANALYTICS: Preserving platform-wide scope for {user_role}")
-                    # Only substitute if query explicitly mentions customer_id placeholders for specific customers
-                    if context_customer_id:
+                    # 🚨 CRITICAL FIX: Check if this is truly a business-wide query
+                    query_lower = entities.get('user_query', '').lower()
+                    business_keywords = ['platform revenue', 'total revenue', 'all revenue', 'business revenue',
+                                       'monthly revenue', 'revenue by month', 'most revenue', 'highest revenue',
+                                       'platform sales', 'total sales', 'business analytics', 'company revenue',
+                                       'which month', 'revenue in sales', 'make the most revenue']
+
+                    is_business_wide_query = any(keyword in query_lower for keyword in business_keywords)
+
+                    if is_business_wide_query:
+                        # Remove customer_id filters entirely for true business queries
+                        sql_query = sql_query.replace('WHERE customer_id = [customer_id]', '')
+                        sql_query = sql_query.replace('WHERE customer_id = {customer_id}', '')
+                        sql_query = sql_query.replace('customer_id = [customer_id] AND', '')
+                        sql_query = sql_query.replace('customer_id = {customer_id} AND', '')
+                        sql_query = sql_query.replace('AND customer_id = [customer_id]', '')
+                        sql_query = sql_query.replace('AND customer_id = {customer_id}', '')
+                        sql_query = sql_query.replace('[customer_id]', 'NULL')
+                        sql_query = sql_query.replace('{customer_id}', 'NULL')
+                        logger.info(f"🏢 BUSINESS QUERY: Removed all customer_id filters for platform-wide analytics")
+                    elif context_customer_id:
+                        # Only substitute if this is customer-specific admin query
                         sql_query = sql_query.replace('[customer_id]', str(context_customer_id))
                         sql_query = sql_query.replace('{customer_id}', str(context_customer_id))
                         logger.info(f"🔧 Substituted context_customer_id: {context_customer_id} in SQL query")
@@ -1980,6 +2020,21 @@ RESPONSE STYLE:
 
     def generate_nigerian_response(self, query_context: QueryContext, conversation_history: List[Dict] = None, session_context: Dict[str, Any] = None) -> str:
         """🇳🇬 Generate Nigerian-style empathetic response with intelligent recommendations"""
+
+        # 🚨 CRITICAL ERROR HANDLING: Check for processing errors first
+        if query_context.error_message:
+            logger.error(f"❌ Error detected in query context, generating safe fallback response: {query_context.error_message}")
+
+            # Determine user role for tailored error response
+            user_role = determine_user_role(session_context).value
+
+            if user_role in ['admin', 'super_admin']:
+                # For admins, provide a concise, professional error message
+                return "📊 **Data Unavailable**: I was unable to retrieve the requested analytics due to an internal system error. Please try again later or contact technical support if the issue persists."
+            else:
+                # For customers and support agents, provide a user-friendly, empathetic error message
+                return "I'm sorry, but I encountered a technical issue and couldn't get the information you requested. 😔 Our team has been notified. Please try again in a little while! 🙏"
+
         try:
             # 🆕 ENHANCED: Get enhanced conversation memory
             user_id = session_context.get('user_id', 'anonymous') if session_context else 'anonymous'
@@ -2115,7 +2170,7 @@ RESPONSE STYLE:
                 confirm the cancellation, and offer assistance for future orders. Use appropriate emojis for the emotional tone.
                 """
             else:
-                # 🔧 DYNAMIC RESULT LIMITING: Show more results for order history queries
+                # 🔧 DYNAMIC RESULT LIMITING: Show more results for specific query types
                 max_items_to_show = 3  # Default
                 query_lower = query_context.user_query.lower()
 
@@ -2125,6 +2180,22 @@ RESPONSE STYLE:
                     max_items_to_show = 7   # Show up to 7 orders for general order history
                 elif query_context.query_type == QueryType.ORDER_ANALYTICS:
                     max_items_to_show = 7   # Show more orders for analytics queries
+                elif any(keyword in query_lower for keyword in ['customers on', 'platinum tier', 'gold tier', 'silver tier', 'bronze tier', 'list customers', 'customers are on', 'tier customers', 'how many customers']):
+                    max_items_to_show = 15  # Show up to 15 customers for tier/customer listing queries
+                elif query_context.query_type == QueryType.CUSTOMER_ANALYSIS:
+                    max_items_to_show = 10  # Show up to 10 customers for customer analysis queries
+
+                # Check if this is a customer listing query to provide specific instructions
+                customer_listing_instruction = ""
+                if any(keyword in query_lower for keyword in ['customers on', 'platinum tier', 'gold tier', 'silver tier', 'bronze tier', 'list customers', 'customers are on', 'tier customers', 'how many customers']):
+                    actual_count = len(query_context.execution_result)
+                    customer_listing_instruction = f"""
+                    IMPORTANT: This is a customer listing query. The database returned {actual_count} customers.
+                    - Show ALL {actual_count} customers in your response
+                    - Include a table format with Customer ID, Name, and Account Tier
+                    - State the correct total count: {actual_count} customers
+                    - Do NOT limit to just a few examples - show the complete list
+                    """
 
                 response_content = f"""
                 Based on the customer query: "{query_context.user_query}"
@@ -2132,6 +2203,8 @@ RESPONSE STYLE:
                 Query results: {safe_json_dumps(query_context.execution_result, max_items=max_items_to_show)}
 
                 Customer emotion detected: {sentiment_data['emotion']} (intensity: {sentiment_data['intensity']})
+
+                {customer_listing_instruction}
 
                 {memory_guidance}
 
@@ -2366,17 +2439,19 @@ Our team is ready to assist you with orders, delivery, payments, and any questio
         user_role = determine_user_role(session_context).value
 
         if user_role in ['admin', 'super_admin']:
-            persona_intro = f"""You are a Business Intelligence and Analytics Assistant for raqibtech.com executives and administrators.
+            persona_intro = f"""You are a Business Intelligence Assistant for raqibtech.com executives.
 
-            Your role is to provide executive-level business insights, reports, and data analysis in a professional, analytical tone.
-            Use phrases like:
-            - "Here's your business analytics report..."
-            - "Platform performance summary:"
-            - "Revenue insights for executive review:"
-            - "Customer analytics dashboard:"
-            - "Business intelligence summary:"
+            🎯 RESPONSE STYLE FOR ADMINS:
+            - Be CONCISE and DIRECT - no fluff or verbose explanations
+            - Focus on KEY METRICS and DATA ONLY
+            - Use business emojis sparingly: 📊, 📈, 💰
+            - Start with direct answer, then provide supporting data
+            - No marketing language or customer service tone
+            - Maximum 3-4 lines for most queries
+            - Format data in simple tables when relevant
 
-            Always provide data in a structured, executive-friendly format with clear insights and actionable intelligence."""
+            ❌ AVOID: Long explanations, customer service language, excessive emojis, promotional content
+            ✅ PROVIDE: Direct answers, key metrics, actionable data"""
 
         elif user_role == 'support_agent':
             persona_intro = """You are a Customer Support Agent Interface for raqibtech.com support staff.
