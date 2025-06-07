@@ -432,6 +432,36 @@ Classify this query and extract relevant entities. Return JSON format:
 
         # 🔧 CRITICAL FIX: Conversation context extraction for customer support
         if conversation_history:
+            # 🆕 ENHANCED CONTEXT EXTRACTION: Check for contextual references first
+            contextual_references = ['their', 'them', 'they', 'those customers', 'these customers', 'the customers', 'those', 'these', 'too', 'also']
+            is_contextual_query = any(ref in query_lower for ref in contextual_references)
+
+            if is_contextual_query:
+                logger.info(f"🔍 CONTEXTUAL REFERENCE DETECTED in query: {user_query}")
+
+                # Look for previous business analytics query with customer results
+                for conversation in conversation_history[:2]:  # Check last 2 conversations
+                    if 'execution_result' in conversation and conversation['execution_result']:
+                        results = conversation['execution_result']
+
+                        # Check if previous results contain customer data
+                        if results and isinstance(results, list) and len(results) > 0:
+                            first_result = results[0]
+
+                            # If previous query returned customer data (has customer_id/name)
+                            if isinstance(first_result, dict) and ('customer_id' in first_result or 'name' in first_result):
+                                # Extract all customer IDs from previous results
+                                customer_ids = []
+                                for result in results:
+                                    if isinstance(result, dict) and 'customer_id' in result:
+                                        customer_ids.append(result['customer_id'])
+
+                                if customer_ids:
+                                    entities['context_customer_ids'] = customer_ids  # Multiple customers
+                                    entities['contextual_reference'] = True
+                                    logger.info(f"🎯 CONTEXT EXTRACTED: Previous query returned {len(customer_ids)} customers: {customer_ids}")
+                                    break
+
             # Look for customer references in recent conversation
             for conversation in conversation_history[:3]:  # Check last 3 conversations
                 if 'entities' in conversation:
@@ -448,14 +478,32 @@ Classify this query and extract relevant entities. Return JSON format:
                     if prev_query:
                         # Look for customer ID patterns in previous conversation
                         import re
-                        customer_match = re.search(r'customer\s+(\d+)', prev_query.lower())
+                        customer_match = re.search(r'customer\s+(?:id\s+)?(\d+)', prev_query.lower())
                         if customer_match and not entities.get('context_customer_id'):
                             entities['context_customer_id'] = int(customer_match.group(1))
                             logger.info(f"🔄 Extracted customer context from conversation: {entities['context_customer_id']}")
 
-                    # 🔧 CRITICAL FIX: NEVER inherit logged-in customer_id from conversation history
-                    # This was causing cross-user contamination
-                    # Let the calling function handle customer_id from session instead
+                        # 🔧 CRITICAL FIX: NEVER inherit logged-in customer_id from conversation history
+                        # This was causing cross-user contamination
+                        # Let the calling function handle customer_id from session instead
+
+        # 🆕 DIRECT CUSTOMER ID EXTRACTION from current query
+        import re
+        # Enhanced pattern to catch various customer ID formats
+        current_query_customer_patterns = [
+            r'customer\s+id\s+(\d+)',          # "customer id 2"
+            r'customer\s+(\d+)',               # "customer 2"
+            r'customer\s*#\s*(\d+)',          # "customer #2"
+            r'customer\s+number\s+(\d+)',      # "customer number 2"
+            r'cust\s+(\d+)',                   # "cust 2"
+        ]
+
+        for pattern in current_query_customer_patterns:
+            customer_match = re.search(pattern, query_lower)
+            if customer_match and not entities.get('context_customer_id'):
+                entities['context_customer_id'] = int(customer_match.group(1))
+                logger.info(f"🔍 Extracted customer ID from current query: {entities['context_customer_id']}")
+                break
 
         # 🆕 ADDITIONAL CONTEXT: If we have order_id from history but need customer_id for order history
         if entities.get('order_id') and not entities.get('customer_id') and 'history' in query_lower:
@@ -522,29 +570,6 @@ Classify this query and extract relevant entities. Return JSON format:
         else:
             return QueryType.GENERAL_CONVERSATION, entities
 
-        # 🆕 ENHANCED QUERY CLASSIFICATION WITH SHOPPING CAPABILITIES
-        # Check for shopping intent first (highest priority for e-commerce)
-        if entities.get('shopping_intent') or any(keyword in query_lower for keyword in ['buy', 'purchase', 'place order', 'checkout', 'add to cart']):
-            return QueryType.ORDER_PLACEMENT, entities
-
-        # Check for recommendation requests
-        elif entities.get('recommendation_intent') or any(keyword in query_lower for keyword in ['recommend', 'suggest', 'what should i buy', 'best product', 'popular', 'trending', 'help me choose']):
-            return QueryType.PRODUCT_RECOMMENDATIONS, entities
-
-        # Check for price inquiries
-        elif entities.get('price_query') or entities.get('max_budget') or any(keyword in query_lower for keyword in ['how much', 'price of', 'cost of', 'budget']):
-            return QueryType.PRICE_INQUIRY, entities
-
-        # Check for stock/availability queries
-        elif entities.get('inventory_query') or any(keyword in query_lower for keyword in ['in stock', 'available', 'out of stock', 'availability']):
-            return QueryType.STOCK_CHECK, entities
-
-        # Check for general shopping assistance
-        elif any(keyword in query_lower for keyword in ['shopping', 'browse', 'catalog', 'categories', 'brands', 'what do you have', 'show me']):
-            return QueryType.SHOPPING_ASSISTANCE, entities
-
-        # Existing classification logic continues below...
-
     def generate_sql_query(self, user_query: str, query_type: QueryType, entities: Dict[str, Any]) -> str:
         """
         🔍 Generate Nigerian context-aware SQL queries using AI
@@ -598,6 +623,8 @@ For these operations, return: SELECT 'APPLICATION_LAYER_OPERATION' as message;
 - rbac_customer_filter: {entities.get('rbac_customer_filter', 'None')}
 - rbac_restrict_to_own: {entities.get('rbac_restrict_to_own', True)}
 - context_customer_id: {entities.get('context_customer_id', 'None')} (customer being discussed in support conversation)
+- context_customer_ids: {entities.get('context_customer_ids', 'None')} (multiple customers from previous business analytics query)
+- contextual_reference: {entities.get('contextual_reference', False)} (user referring to previous query results)
 
 🛡️ RBAC SQL GENERATION RULES:
 1. For user_role='customer': ALWAYS add WHERE customer_id = {entities.get('rbac_customer_filter', 'NULL')} to queries accessing customer data
@@ -610,13 +637,16 @@ For these operations, return: SELECT 'APPLICATION_LAYER_OPERATION' as message;
 CRITICAL SQL GENERATION RULES:
 1. Always use proper PostgreSQL syntax
 2. For authenticated customers with customer_id in entities, use it directly in WHERE clauses
-3. 🔧 CRITICAL: For support agents discussing a specific customer:
+3. 🔧 CRITICAL: For support agents discussing specific customer(s):
    - ALWAYS prioritize context_customer_id over customer_id when both exist
    - If context_customer_id exists in entities: Use WHERE customer_id = {entities.get('context_customer_id')}
+   - If context_customer_ids exists (multiple customers): Use WHERE customer_id IN ({', '.join(map(str, entities.get('context_customer_ids', [])))})
    - If query mentions "this customer" or "the customer": Use context_customer_id from conversation
+   - If query mentions "their", "them", "those customers", "these customers": Use context_customer_ids from previous query results
    - If query asks about "when did customer join" or "customer details": Use context_customer_id
    - If query asks about payment methods for "this customer": Use context_customer_id, not logged-in customer_id
    - Example: context_customer_id=1503, customer_id=1505 → Use WHERE customer_id = 1503
+   - Example: context_customer_ids=[1481, 1406, 381], contextual_reference=True → Use WHERE customer_id IN (1481, 1406, 381)
 4. For "track my order" or "order history" without specific order_id:
    - If customer_id is available: SELECT * FROM orders WHERE customer_id = {entities.get('customer_id', 'NULL')}
    - If no customer_id: Ask user to provide order ID
@@ -645,6 +675,10 @@ EXAMPLES:
 - "Who is the top spending customer" (ADMIN ONLY): SELECT c.customer_id, c.name, SUM(o.total_amount) as total_spent FROM customers c JOIN orders o ON c.customer_id = o.customer_id GROUP BY c.customer_id, c.name ORDER BY total_spent DESC LIMIT 10;
 - "Which customers spend the most" (ADMIN ONLY): SELECT c.customer_id, c.name, c.account_tier, SUM(o.total_amount) as total_spent FROM customers c JOIN orders o ON c.customer_id = o.customer_id GROUP BY c.customer_id, c.name, c.account_tier ORDER BY total_spent DESC LIMIT 10;
 - "Debug total calculation" with customer_id=1503: SELECT 'Individual orders' as source, COUNT(*) as order_count, SUM(total_amount) as total_spent FROM orders WHERE customer_id = 1503 UNION ALL SELECT 'Category breakdown' as source, COUNT(DISTINCT order_id) as order_count, SUM(total_amount) as total_spent FROM orders WHERE customer_id = 1503;
+- "What are their account tiers too?" with context_customer_ids=[1481, 1406, 381]: SELECT customer_id, name, account_tier FROM customers WHERE customer_id IN (1481, 1406, 381) ORDER BY customer_id;
+- "How much did they spend?" with context_customer_ids=[1481, 1406, 381]: SELECT c.customer_id, c.name, SUM(o.total_amount) as total_spent FROM customers c JOIN orders o ON c.customer_id = o.customer_id WHERE c.customer_id IN (1481, 1406, 381) GROUP BY c.customer_id, c.name ORDER BY total_spent DESC;
+- "give me monthly revenue report" (ADMIN with user_role=super_admin, can_access_analytics=True): SELECT DATE_TRUNC('month', created_at) as month, SUM(total_amount) as revenue FROM orders GROUP BY month ORDER BY month DESC;
+- "monthly revenue report" (ADMIN with user_role=super_admin, can_access_analytics=True): SELECT DATE_TRUNC('month', created_at) as month, SUM(total_amount) as revenue FROM orders GROUP BY month ORDER BY month DESC;
 
 ⚠️ CRITICAL AUTHENTICATION RULES:
 1. If customer_verified=False OR user_authenticated=False:
@@ -688,6 +722,10 @@ RESPONSE FORMAT: Return ONLY the SQL query, nothing else."""
                 context_parts = []
                 if entities.get('context_customer_id'):
                     context_parts.append(f"context_customer_id={entities.get('context_customer_id')}")
+                if entities.get('context_customer_ids'):
+                    context_parts.append(f"context_customer_ids={entities.get('context_customer_ids')}")
+                if entities.get('contextual_reference'):
+                    context_parts.append(f"contextual_reference={entities.get('contextual_reference')}")
                 if entities.get('customer_id'):
                     context_parts.append(f"customer_id={entities.get('customer_id')}")
                 if entities.get('user_authenticated'):
@@ -765,17 +803,33 @@ RESPONSE FORMAT: Return ONLY the SQL query, nothing else."""
                 # 🔧 CRITICAL FIX: Handle context_customer_id for support agents first
                 context_customer_id = entities.get('context_customer_id')
                 customer_id = entities.get('customer_id')
+                user_role = entities.get('user_role', 'guest')
+                can_access_analytics = entities.get('can_access_analytics', False)
 
-                # Priority order: context_customer_id (from conversation) > logged-in customer_id
-                effective_customer_id = context_customer_id or customer_id
+                # 🚨 CRITICAL FIX: For admin revenue/analytics queries, DON'T substitute customer_id
+                # This was causing platform-wide queries to become customer-specific
+                is_analytics_query = query_type in [QueryType.REVENUE_INSIGHTS, QueryType.CUSTOMER_ANALYSIS,
+                                                  QueryType.GEOGRAPHIC_ANALYSIS, QueryType.TEMPORAL_ANALYSIS]
 
-                if effective_customer_id is not None:
-                    sql_query = sql_query.replace('[customer_id]', str(effective_customer_id))
-                    sql_query = sql_query.replace('{customer_id}', str(effective_customer_id))
+                if is_analytics_query and user_role in ['admin', 'super_admin'] and can_access_analytics:
+                    # For admin analytics queries, DON'T substitute customer_id - keep platform-wide
+                    logger.info(f"🏢 ADMIN ANALYTICS: Preserving platform-wide scope for {user_role}")
+                    # Only substitute if query explicitly mentions customer_id placeholders for specific customers
                     if context_customer_id:
+                        sql_query = sql_query.replace('[customer_id]', str(context_customer_id))
+                        sql_query = sql_query.replace('{customer_id}', str(context_customer_id))
                         logger.info(f"🔧 Substituted context_customer_id: {context_customer_id} in SQL query")
-                    else:
-                        logger.info(f"🔧 Substituted customer_id: {customer_id} in SQL query")
+                else:
+                    # Priority order: context_customer_id (from conversation) > logged-in customer_id
+                    effective_customer_id = context_customer_id or customer_id
+
+                    if effective_customer_id is not None:
+                        sql_query = sql_query.replace('[customer_id]', str(effective_customer_id))
+                        sql_query = sql_query.replace('{customer_id}', str(effective_customer_id))
+                        if context_customer_id:
+                            logger.info(f"🔧 Substituted context_customer_id: {context_customer_id} in SQL query")
+                        else:
+                            logger.info(f"🔧 Substituted customer_id: {customer_id} in SQL query")
 
                 # Handle order_id substitution
                 order_id = entities.get('order_id')  # Define in proper scope
@@ -2308,12 +2362,45 @@ Our team is ready to assist you with orders, delivery, payments, and any questio
                 - CRITICAL: Use this context to provide relevant responses!
             """
 
+        # 🎯 DYNAMIC PERSONA BASED ON USER ROLE
+        user_role = determine_user_role(session_context).value
+
+        if user_role in ['admin', 'super_admin']:
+            persona_intro = f"""You are a Business Intelligence and Analytics Assistant for raqibtech.com executives and administrators.
+
+            Your role is to provide executive-level business insights, reports, and data analysis in a professional, analytical tone.
+            Use phrases like:
+            - "Here's your business analytics report..."
+            - "Platform performance summary:"
+            - "Revenue insights for executive review:"
+            - "Customer analytics dashboard:"
+            - "Business intelligence summary:"
+
+            Always provide data in a structured, executive-friendly format with clear insights and actionable intelligence."""
+
+        elif user_role == 'support_agent':
+            persona_intro = """You are a Customer Support Agent Interface for raqibtech.com support staff.
+
+            Your role is to help support agents assist customers by providing third-person customer data and insights.
+            Use phrases like:
+            - "Customer data summary for your reference:"
+            - "This customer's information shows..."
+            - "Their account details indicate..."
+            - "Support notes for this customer:"
+
+            Always refer to customers in third person (they/their/them) when talking to support agents."""
+
+        else:
+            persona_intro = """You are a caring customer support agent for raqibtech.com, Nigeria's leading e-commerce platform.
+
+            Your role is to help customers directly with their personal shopping and account needs."""
+
         return f"""
-        You are a caring customer support agent for raqibtech.com, Nigeria's leading e-commerce platform.
+        {persona_intro}
 
         🚨 CRITICAL AUTHORIZATION & SECURITY RULES - MUST FOLLOW:
         🔐 ROLE-BASED ACCESS CONTROL (RBAC):
-        - User Role: {determine_user_role(session_context).value}
+        - User Role: {user_role}
         - Access Level: {RoleBasedAccessControl.get_user_role_info(determine_user_role(session_context)).max_data_access_level}
 
         📋 PERMISSION RULES BY ROLE:
@@ -2362,36 +2449,36 @@ Our team is ready to assist you with orders, delivery, payments, and any questio
         - Mention our multiple payment options including RaqibTechPay
 
         PERSONALITY:
-        - Warm, understanding, and emotionally intelligent
-        - Concise but caring - keep responses under 3 sentences when possible
-        - Focus on the customer's feelings and immediate needs first
-        - Nigerian cultural awareness with authentic warmth
+        {"- Professional, analytical, and data-focused" if user_role in ['admin', 'super_admin'] else "- Warm, understanding, and emotionally intelligent"}
+        {"- Provide structured business insights and executive summaries" if user_role in ['admin', 'super_admin'] else "- Concise but caring - keep responses under 3 sentences when possible"}
+        {"- Focus on business intelligence and actionable insights" if user_role in ['admin', 'super_admin'] else "- Focus on the customer's feelings and immediate needs first"}
+        {"- Use executive-level communication style" if user_role in ['admin', 'super_admin'] else "- Nigerian cultural awareness with authentic warmth"}
         - Use simple markdown formatting for emphasis: **bold text** for important points
-        - ALWAYS include appropriate emojis based on customer emotion
+        {"- Use minimal emojis, focus on data presentation" if user_role in ['admin', 'super_admin'] else "- ALWAYS include appropriate emojis based on customer emotion"}
 
-        {emotion_guidance}
+        {emotion_guidance if user_role not in ['admin', 'super_admin'] else ""}
 
-        {mood_guidance}
+        {mood_guidance if user_role not in ['admin', 'super_admin'] else ""}
 
         {recommendations_guidance}
 
         {memory_guidance}
 
         RESPONSE STYLE:
-        1. 💙 Lead with genuine empathy - acknowledge their feelings with appropriate emojis
-        2. 🎯 Address their specific need directly and concisely
-        3. 🛍️ If relevant, mention 1-2 helpful products naturally
-        4. 💰 Use ₦ format for prices
-        5. 🤝 End with supportive next step mentioning raqibtech.com
+        {"1. 📊 Start with executive summary or key insight" if user_role in ['admin', 'super_admin'] else "1. 💙 Lead with genuine empathy - acknowledge their feelings with appropriate emojis"}
+        {"2. 📈 Present data in structured format with clear metrics" if user_role in ['admin', 'super_admin'] else "2. 🎯 Address their specific need directly and concisely"}
+        {"3. 🎯 Highlight actionable business insights" if user_role in ['admin', 'super_admin'] else "3. 🛍️ If relevant, mention 1-2 helpful products naturally"}
+        {"4. 💰 Use ₦ format for monetary values" if user_role in ['admin', 'super_admin'] else "4. 💰 Use ₦ format for prices"}
+        {"5. 📋 End with strategic recommendations or next steps" if user_role in ['admin', 'super_admin'] else "5. 🤝 End with supportive next step mentioning raqibtech.com"}
 
         EMOJI USAGE RULES:
-        - Use emojis that match the customer's detected emotion
-        - For frustrated customers: 😔, 💙, 🤗, ✨
-        - For worried customers: 🤗, 💙, ✨, 🌟
-        - For confused customers: 😊, 💡, 🎯, ✨
-        - For happy customers: 😊, 🎉, ✨, 🌟, 💚
-        - For impatient customers: ⚡, 🚀, 💨, ⏰
-        - Maximum 3-4 emojis per response
+        {"- Professional business emojis only: 📊, 📈, 💰, 🎯, 📋, 🏢" if user_role in ['admin', 'super_admin'] else "- Use emojis that match the customer's detected emotion"}
+        {"- Avoid customer service emojis (😊, 🤗, ✨)" if user_role in ['admin', 'super_admin'] else "- For frustrated customers: 😔, 💙, 🤗, ✨"}
+        {"- Maximum 2-3 business emojis per response" if user_role in ['admin', 'super_admin'] else "- For worried customers: 🤗, 💙, ✨, 🌟"}
+        {"" if user_role in ['admin', 'super_admin'] else "- For confused customers: 😊, 💡, 🎯, ✨"}
+        {"" if user_role in ['admin', 'super_admin'] else "- For happy customers: 😊, 🎉, ✨, 🌟, 💚"}
+        {"" if user_role in ['admin', 'super_admin'] else "- For impatient customers: ⚡, 🚀, 💨, ⏰"}
+        {"" if user_role in ['admin', 'super_admin'] else "- Maximum 3-4 emojis per response"}
 
         CONVERSATION FLOW RULES:
         - ALWAYS reference what was just discussed in previous turns
@@ -3730,24 +3817,31 @@ CURRENT TIME CONTEXT:
             # 🚨 BUSINESS ANALYTICS PROTECTION: Prevent customers from accessing business-wide data
             # 🔧 CRITICAL FIX: Check for legitimate business analytics flag first
             is_business_analytics = entities.get('business_analytics', False)
+            user_role = entities.get('user_role', 'customer')
+            can_access_analytics = entities.get('can_access_analytics', False)
 
             if ('GROUP BY' in fixed_query.upper() and 'orders' in fixed_query.lower() and
                 'WHERE customer_id' not in fixed_query and not is_business_analytics):
                 if not user_authenticated:
                     print_log("🔒 SECURITY ALERT: Preventing business analytics access for unauthenticated user!", 'error')
                     return "SELECT 'Access denied: Business analytics require authentication.' as message;"
-                elif user_authenticated and effective_customer_id:
-                    print_log(f"🔒 SECURITY: Converting business analytics to customer-specific for customer {effective_customer_id}", 'warning')
-                    # Convert business-wide analytics to customer-specific analytics
-                    if 'SELECT order_status, COUNT(*)' in fixed_query:
-                        return f"SELECT order_status, COUNT(*) as order_count, SUM(total_amount) as total_amount FROM orders WHERE customer_id = {effective_customer_id} GROUP BY order_status;"
-                    elif 'SELECT COUNT(*), SUM(total_amount)' in fixed_query:
-                        return f"SELECT COUNT(*) as order_count, SUM(total_amount) as total_amount FROM orders WHERE customer_id = {effective_customer_id};"
+                elif user_authenticated and effective_customer_id and not can_access_analytics:
+                    # 🔧 CRITICAL FIX: Only restrict for customers, NOT for super_admin/admin
+                    if user_role in ['super_admin', 'admin']:
+                        print_log(f"🏢 BUSINESS ANALYTICS APPROVED: Allowing platform-wide query for {user_role}", 'info')
+                        # Let the query pass through without modification for admins
                     else:
-                        # Default to customer's orders only
-                        return f"SELECT * FROM orders WHERE customer_id = {effective_customer_id} ORDER BY created_at DESC;"
-            elif is_business_analytics:
-                print_log(f"🏢 BUSINESS ANALYTICS APPROVED: Allowing platform-wide query for legitimate business request", 'info')
+                        print_log(f"🔒 SECURITY: Converting business analytics to customer-specific for customer {effective_customer_id} (role: {user_role})", 'warning')
+                        # Convert business-wide analytics to customer-specific analytics (only for customers)
+                        if 'SELECT order_status, COUNT(*)' in fixed_query:
+                            return f"SELECT order_status, COUNT(*) as order_count, SUM(total_amount) as total_amount FROM orders WHERE customer_id = {effective_customer_id} GROUP BY order_status;"
+                        elif 'SELECT COUNT(*), SUM(total_amount)' in fixed_query:
+                            return f"SELECT COUNT(*) as order_count, SUM(total_amount) as total_amount FROM orders WHERE customer_id = {effective_customer_id};"
+                        else:
+                            # Default to customer's orders only
+                            return f"SELECT * FROM orders WHERE customer_id = {effective_customer_id} ORDER BY created_at DESC;"
+            elif is_business_analytics or can_access_analytics:
+                print_log(f"🏢 BUSINESS ANALYTICS APPROVED: Allowing platform-wide query for legitimate business request (user_role: {user_role})", 'info')
 
             # 🚨 UNAUTHENTICATED USER RESTRICTIONS
             if not user_authenticated:
