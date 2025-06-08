@@ -2379,6 +2379,41 @@ def calculate_order_totals():
         }), 500
 
 
+@app.route('/api/delivery-fee', methods=['POST'])
+def calculate_delivery_fee():
+    """🚚 Standardized delivery fee calculation endpoint"""
+    try:
+        data = request.get_json()
+        state = data.get('state', 'Lagos')
+        weight_kg = data.get('weight_kg', 1.0)
+        order_value = data.get('order_value', 0)
+
+        # Use the order management system's delivery calculator
+        from src.order_management import NigerianDeliveryCalculator
+
+        delivery_fee, delivery_days, delivery_zone = NigerianDeliveryCalculator.calculate_delivery_fee(
+            state, weight_kg, order_value
+        )
+
+        return jsonify({
+            'success': True,
+            'delivery_fee': delivery_fee,
+            'delivery_days': delivery_days,
+            'delivery_zone': delivery_zone,
+            'state': state,
+            'weight_kg': weight_kg,
+            'message': f'Delivery to {state}: ₦{delivery_fee:,.2f} ({delivery_days} days)'
+        })
+
+    except Exception as e:
+        app_logger.error(f"❌ Delivery fee calculation error: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to calculate delivery fee',
+            'message': str(e)
+        }), 500
+
+
 @app.route('/api/orders/place', methods=['POST'])
 def place_order():
     """🛒 Place a new order"""

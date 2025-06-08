@@ -688,7 +688,7 @@ function populateCheckoutModal(orderSummary) {
 function updateOrderSummary(orderSummary) {
     const subtotal = orderSummary.subtotal || 0;
     const discount = orderSummary.discount || 0;
-    const deliveryFee = orderSummary.delivery_fee || 2500;
+    const deliveryFee = orderSummary.delivery_fee || 4800;  // 🔧 FIXED: Updated default to match backend
     const total = orderSummary.total || (subtotal - discount + deliveryFee);
 
     // Update display elements

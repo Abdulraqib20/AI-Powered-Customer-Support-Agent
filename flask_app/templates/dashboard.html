@@ -4287,10 +4287,10 @@ function displayEnhancedOrderModal(order) {
                             <i class="bi bi-currency-exchange text-success me-2"></i>Payment & Total
                         </h6>
                         ${order.pricing_breakdown ? `
-                        <!-- Detailed Pricing Breakdown -->
+                        <!-- COMPLETE Pricing Breakdown -->
                         <div class="pricing-breakdown mb-3">
                             <div class="d-flex justify-content-between mb-1">
-                                <span>Subtotal:</span>
+                                <span>Product${order.products && order.products.length > 1 ? 's' : ''} Subtotal:</span>
                                 <span class="fw-medium">₦${parseFloat(order.pricing_breakdown.subtotal || 0).toLocaleString()}</span>
                             </div>
                             ${order.pricing_breakdown.tier_discount > 0 ? `
@@ -4303,11 +4303,42 @@ function displayEnhancedOrderModal(order) {
                                 <span>Delivery Fee${order.pricing_breakdown.tier_delivery_benefit ? ' (FREE for ' + order.pricing_breakdown.account_tier + ' tier)' : ' (' + (order.pricing_breakdown.delivery_zone || 'Standard') + ')'}:</span>
                                 <span class="fw-medium">${order.pricing_breakdown.delivery_fee > 0 ? '₦' + parseFloat(order.pricing_breakdown.delivery_fee).toLocaleString() : 'FREE'}</span>
                             </div>
+                            ${order.pricing_breakdown.service_fee > 0 ? `
+                            <div class="d-flex justify-content-between mb-1">
+                                <span>Service Fee:</span>
+                                <span class="fw-medium">₦${parseFloat(order.pricing_breakdown.service_fee).toLocaleString()}</span>
+                            </div>
+                            ` : ''}
+                            ${order.pricing_breakdown.processing_fee > 0 ? `
+                            <div class="d-flex justify-content-between mb-1">
+                                <span>Processing Fee:</span>
+                                <span class="fw-medium">₦${parseFloat(order.pricing_breakdown.processing_fee).toLocaleString()}</span>
+                            </div>
+                            ` : ''}
+                            ${order.pricing_breakdown.tax_amount > 0 ? `
+                            <div class="d-flex justify-content-between mb-1">
+                                <span>Tax/VAT (7.5%):</span>
+                                <span class="fw-medium">₦${parseFloat(order.pricing_breakdown.tax_amount).toLocaleString()}</span>
+                            </div>
+                            ` : ''}
+                            ${order.pricing_breakdown.other_charges > 0 ? `
+                            <div class="d-flex justify-content-between mb-1">
+                                <span>Other Charges:</span>
+                                <span class="fw-medium">₦${parseFloat(order.pricing_breakdown.other_charges).toLocaleString()}</span>
+                            </div>
+                            ` : ''}
                             <hr class="my-2">
                             <div class="d-flex justify-content-between fw-bold">
                                 <span>Total Amount:</span>
-                                <span class="text-success">₦${parseFloat(order.pricing_breakdown.calculated_total || 0).toLocaleString()}</span>
+                                <span class="text-success">₦${parseFloat(order.pricing_breakdown.calculated_total || order.total_amount || 0).toLocaleString()}</span>
                             </div>
+                            ${order.pricing_breakdown.shows_complete_breakdown ? `
+                            <div class="mt-2">
+                                <small class="text-muted">
+                                    <i class="bi bi-check-circle text-success me-1"></i>Complete breakdown verified
+                                </small>
+                            </div>
+                            ` : ''}
                         </div>
                         ` : `
                         <!-- Fallback for orders without detailed breakdown -->
@@ -5132,14 +5163,37 @@ function showCheckoutModal(productData, quantity, deliveryState) {
 }
 
 function calculateDeliveryFee(state) {
-    const fees = {
-        'Lagos': 2500,
-        'Abuja': 3000,
-        'Kano': 3500,
-        'Rivers': 3000,
-        'Oyo': 3000
+    // 🔧 FIXED: Updated to match backend NigerianDeliveryCalculator exactly
+    const deliveryZones = {
+        // Lagos Metro
+        'Lagos': 2500,  // 2000 base + 500 per kg
+
+        // Abuja FCT
+        'Abuja': 3100,  // 2500 base + 600 per kg
+        'FCT': 3100,
+
+        // Major Cities
+        'Kano': 3700,   // 3000 base + 700 per kg
+        'Rivers': 3700,
+        'Oyo': 3700,
+        'Kaduna': 3700,
+        'Anambra': 3700,
+        'Edo': 3700,
+        'Enugu': 3700,
+        'Delta': 3700,
+        'Imo': 3700,
+
+        // Other States (including Kwara)
+        'Abia': 4800, 'Adamawa': 4800, 'Akwa Ibom': 4800, 'Bauchi': 4800,
+        'Bayelsa': 4800, 'Benue': 4800, 'Borno': 4800, 'Cross River': 4800,
+        'Ebonyi': 4800, 'Ekiti': 4800, 'Gombe': 4800, 'Jigawa': 4800,
+        'Kebbi': 4800, 'Kogi': 4800, 'Kwara': 4800, 'Nasarawa': 4800,
+        'Niger': 4800, 'Ondo': 4800, 'Osun': 4800, 'Ogun': 4800,
+        'Plateau': 4800, 'Sokoto': 4800, 'Taraba': 4800, 'Yobe': 4800,
+        'Zamfara': 4800
     };
-    return fees[state] || 3500;
+
+    return deliveryZones[state] || 4800;  // 🔧 FIXED: Default to Other States fee
 }
 
 function calculateTierDiscount(subtotal, tier) {

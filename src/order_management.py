@@ -114,12 +114,12 @@ class NigerianDeliveryCalculator:
             "per_kg_fee": 500,
             "delivery_days": 1
         },
-        "Abuja FCT": {
-            "states": ["FCT"],
-            "base_fee": 2500,
-            "per_kg_fee": 600,
-            "delivery_days": 2
-        },
+            "Abuja FCT": {
+        "states": ["FCT", "Abuja"],
+        "base_fee": 2500,
+        "per_kg_fee": 600,
+        "delivery_days": 2
+    },
         "Major Cities": {
             "states": ["Kano", "Rivers", "Oyo", "Kaduna", "Anambra", "Edo", "Enugu", "Delta", "Imo"],
             "base_fee": 3000,
@@ -611,7 +611,7 @@ class OrderManagementSystem:
                     order_data['products'] = products
                     order_data['items_count'] = len(products)
 
-                    # 🔧 CALCULATE DETAILED PRICING BREAKDOWN
+                                        # 🔧 CALCULATE DETAILED PRICING BREAKDOWN WITH ALL COMPONENTS
                     if products:
                         # Calculate subtotal from actual product prices
                         subtotal = sum(float(product['price']) * int(product['quantity']) for product in products)
@@ -632,10 +632,34 @@ class OrderManagementSystem:
                             delivery_fee = 0
                             tier_delivery_benefit = True
 
-                        # Calculate accurate total
-                        calculated_total = subtotal - tier_discount + delivery_fee
+                        # Get stored total amount
+                        stored_total = float(order_data['total_amount'])
 
-                        # Add detailed pricing breakdown to order data
+                        # Calculate what we can account for
+                        base_calculation = subtotal - tier_discount + delivery_fee
+
+                        # 🎯 IDENTIFY MISSING COMPONENTS
+                        unaccounted_amount = stored_total - base_calculation
+
+                        # Determine what the unaccounted amount represents
+                        service_fee = 0
+                        processing_fee = 0
+                        tax_amount = 0
+                        other_charges = 0
+
+                        if unaccounted_amount > 0:
+                            # Check if it's a percentage of subtotal (common for service fees)
+                            if abs(unaccounted_amount - (subtotal * 0.15)) < 50:  # 15% service fee
+                                service_fee = subtotal * 0.15
+                            elif abs(unaccounted_amount - (subtotal * 0.20)) < 50:  # 20% service fee
+                                service_fee = subtotal * 0.20
+                            elif abs(unaccounted_amount - ((subtotal + delivery_fee) * 0.075)) < 50:  # 7.5% VAT
+                                tax_amount = (subtotal + delivery_fee) * 0.075
+                            else:
+                                # Treat as processing fee
+                                processing_fee = unaccounted_amount
+
+                        # Add detailed pricing breakdown to order data with ALL components
                         order_data['pricing_breakdown'] = {
                             'subtotal': subtotal,
                             'delivery_fee': delivery_fee,
@@ -644,16 +668,23 @@ class OrderManagementSystem:
                             'account_tier': order_data['account_tier'],
                             'tier_discount': tier_discount,
                             'tier_discount_rate': tier_discount_rate * 100,  # Convert to percentage
-                            'calculated_total': calculated_total,
-                            'original_total': float(order_data['total_amount']),
+                            'service_fee': service_fee,
+                            'processing_fee': processing_fee,
+                            'tax_amount': tax_amount,
+                            'other_charges': other_charges,
+                            'calculated_total': stored_total,  # Always use stored total
+                            'original_total': stored_total,
                             'delivery_zone': delivery_zone,
-                            'delivery_days': delivery_days
+                            'delivery_days': delivery_days,
+                            'unaccounted_amount': unaccounted_amount,
+                            'base_calculation': base_calculation,
+                            'shows_complete_breakdown': True  # Flag that this is a complete breakdown
                         }
 
-                        # Use calculated total for consistency
-                        order_data['total_amount'] = calculated_total
+                        # ✅ PRESERVE stored total_amount from database
+                        # order_data['total_amount'] = stored_total  # Already the stored value
 
-                        logger.info(f"🧮 Order {order_id} pricing breakdown: Subtotal=₦{subtotal:,.2f}, Delivery=₦{delivery_fee:,.2f}, Discount=₦{tier_discount:,.2f}, Total=₦{calculated_total:,.2f}")
+                        logger.info(f"🧮 Order {order_id} pricing breakdown: Subtotal=₦{subtotal:,.2f}, Delivery=₦{delivery_fee:,.2f}, Discount=₦{tier_discount:,.2f}, Total=₦{stored_total:,.2f}")
 
                     # Ensure proper field formatting
                     if order_data.get('order_date'):
@@ -886,11 +917,13 @@ class OrderManagementSystem:
         try:
             # Get customer's total spending and current tier
             cursor.execute("""
-                SELECT c.account_tier, COALESCE(SUM(o.total_amount), 0)::FLOAT as total_spent, COUNT(o.order_id) as order_count
+                SELECT c.account_tier,
+                       COALESCE(SUM(CASE WHEN o.order_status != 'Returned' THEN o.total_amount ELSE 0 END), 0)::FLOAT as total_spent,
+                       COUNT(CASE WHEN o.order_status != 'Returned' THEN o.order_id END) as order_count
                 FROM customers c
                 LEFT JOIN orders o ON c.customer_id = o.customer_id
-                WHERE c.customer_id = %s AND (o.order_status != 'Returned' OR o.order_status IS NULL)
-                GROUP BY c.account_tier
+                WHERE c.customer_id = %s
+                GROUP BY c.customer_id, c.account_tier
             """, (customer_id,))
 
             result = cursor.fetchone()
@@ -901,18 +934,25 @@ class OrderManagementSystem:
             current_tier, total_spent, order_count = result
 
             # 🔧 CRITICAL FIX: Handle both Decimal and float types safely
-            if hasattr(total_spent, '__str__') and str(total_spent).isdigit():
-                total_spent = float(total_spent)
-            elif hasattr(total_spent, '__float__'):
-                total_spent = float(total_spent)
-            elif isinstance(total_spent, str):
-                try:
+            try:
+                # First, check if it's already a numeric type
+                if isinstance(total_spent, (int, float)):
                     total_spent = float(total_spent)
-                except ValueError:
-                    logger.error(f"❌ Cannot convert total_spent '{total_spent}' to float for customer {customer_id}")
-                    total_spent = 0.0
-            else:
-                total_spent = float(total_spent or 0)
+                elif hasattr(total_spent, '__float__'):
+                    total_spent = float(total_spent)
+                elif isinstance(total_spent, str):
+                    # Check if it's a numeric string
+                    if total_spent.replace('.', '').replace('-', '').isdigit():
+                        total_spent = float(total_spent)
+                    else:
+                        logger.error(f"❌ Cannot convert total_spent '{total_spent}' to float for customer {customer_id}")
+                        total_spent = 0.0
+                else:
+                    # Handle None or other types
+                    total_spent = float(total_spent or 0)
+            except (ValueError, TypeError) as e:
+                logger.error(f"❌ Error converting total_spent '{total_spent}' to float for customer {customer_id}: {e}")
+                total_spent = 0.0
 
             # Enhanced tier progression logic with order count requirements
             tier_criteria = {

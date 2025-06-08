@@ -853,10 +853,10 @@ For user_role in ['admin', 'super_admin'] with can_access_analytics=True AND bus
 - Shipping fee inquiry: SELECT 'Standard shipping rates: Lagos ₦2,000, Abuja ₦2,500, Major Cities ₦3,000, Other States ₦4,000. Free delivery for Gold/Platinum members!' as shipping_rates;
 
 🚚 SHIPPING RATE INFORMATION QUERIES (NOT APPLICATION LAYER):
-- "What are your shipping rates to Abuja?": SELECT 'Lagos Metro: ₦2,000 (1 day), Abuja FCT: ₦2,500 (2 days), Major Cities: ₦3,000 (3 days), Other States: ₦4,000 (5 days). Free delivery for Gold/Platinum members!' as shipping_rates;
-- "shipping rates to Lagos": SELECT 'Lagos Metro: ₦2,000 (1-day delivery). Free for Gold/Platinum tier customers!' as shipping_rates;
-- "delivery cost to Kano": SELECT 'Major Cities (Kano): ₦3,000 (3-day delivery). Free for Gold/Platinum tier customers!' as shipping_rates;
-- "What does it cost to ship": SELECT 'Shipping rates: Lagos ₦2,000, Abuja ₦2,500, Major Cities ₦3,000, Other States ₦4,000. Free delivery for Gold/Platinum members!' as shipping_rates;
+- "What are your shipping rates to Abuja?": SELECT 'Lagos Metro: ₦2,500 (1 day), Abuja FCT: ₦3,100 (2 days), Major Cities: ₦3,700 (3 days), Other States: ₦4,800 (5 days). Free delivery for Gold/Platinum members!' as shipping_rates;
+- "shipping rates to Lagos": SELECT 'Lagos Metro: ₦2,500 (1-day delivery). Free for Gold/Platinum tier customers!' as shipping_rates;
+- "delivery cost to Kano": SELECT 'Major Cities (Kano): ₦3,700 (3-day delivery). Free for Gold/Platinum tier customers!' as shipping_rates;
+- "What does it cost to ship": SELECT 'Shipping rates: Lagos ₦2,500, Abuja ₦3,100, Major Cities ₦3,700, Other States ₦4,800. Free delivery for Gold/Platinum members!' as shipping_rates;
 
 🏪 DELIVERY POLICY INFORMATION QUERIES (NOT APPLICATION LAYER):
 - "Can I change delivery address for shipped order?": SELECT 'Unfortunately, once an order has shipped, we cannot change the delivery address. However, you can: 1) Ask someone to receive it at the original address, 2) Contact our delivery partner to arrange pickup from a nearby depot, 3) Contact customer support for special assistance. We apologize for any inconvenience!' as delivery_policy;
