@@ -611,7 +611,7 @@ class OrderManagementSystem:
                     order_data['products'] = products
                     order_data['items_count'] = len(products)
 
-                                        # 🔧 CALCULATE DETAILED PRICING BREAKDOWN WITH ALL COMPONENTS
+                    # 🔧 CALCULATE DETAILED PRICING BREAKDOWN WITH ALL COMPONENTS
                     if products:
                         # Calculate subtotal from actual product prices
                         subtotal = sum(float(product['price']) * int(product['quantity']) for product in products)
@@ -632,32 +632,20 @@ class OrderManagementSystem:
                             delivery_fee = 0
                             tier_delivery_benefit = True
 
-                        # Get stored total amount
+                        # ✅ CALCULATE CORRECT TOTAL
+                        calculated_total = subtotal - tier_discount + delivery_fee
+
+                        # Get stored total amount for comparison
                         stored_total = float(order_data['total_amount'])
 
-                        # Calculate what we can account for
-                        base_calculation = subtotal - tier_discount + delivery_fee
+                        # 🎯 ALWAYS USE CALCULATED TOTAL (CORRECT CALCULATION)
+                        # Override stored total with correct calculation
+                        correct_total = calculated_total
 
-                        # 🎯 IDENTIFY MISSING COMPONENTS
-                        unaccounted_amount = stored_total - base_calculation
-
-                        # Determine what the unaccounted amount represents
-                        service_fee = 0
-                        processing_fee = 0
-                        tax_amount = 0
-                        other_charges = 0
-
-                        if unaccounted_amount > 0:
-                            # Check if it's a percentage of subtotal (common for service fees)
-                            if abs(unaccounted_amount - (subtotal * 0.15)) < 50:  # 15% service fee
-                                service_fee = subtotal * 0.15
-                            elif abs(unaccounted_amount - (subtotal * 0.20)) < 50:  # 20% service fee
-                                service_fee = subtotal * 0.20
-                            elif abs(unaccounted_amount - ((subtotal + delivery_fee) * 0.075)) < 50:  # 7.5% VAT
-                                tax_amount = (subtotal + delivery_fee) * 0.075
-                            else:
-                                # Treat as processing fee
-                                processing_fee = unaccounted_amount
+                        # Identify any discrepancy for logging
+                        discrepancy = stored_total - calculated_total
+                        if abs(discrepancy) > 0.01:  # More than 1 kobo difference
+                            logger.warning(f"⚠️ Order {order_id} calculation discrepancy: Stored=₦{stored_total:,.2f}, Calculated=₦{calculated_total:,.2f}, Difference=₦{discrepancy:,.2f}")
 
                         # Add detailed pricing breakdown to order data with ALL components
                         order_data['pricing_breakdown'] = {
@@ -668,23 +656,18 @@ class OrderManagementSystem:
                             'account_tier': order_data['account_tier'],
                             'tier_discount': tier_discount,
                             'tier_discount_rate': tier_discount_rate * 100,  # Convert to percentage
-                            'service_fee': service_fee,
-                            'processing_fee': processing_fee,
-                            'tax_amount': tax_amount,
-                            'other_charges': other_charges,
-                            'calculated_total': stored_total,  # Always use stored total
-                            'original_total': stored_total,
+                            'calculated_total': correct_total,  # Use calculated total
+                            'stored_total': stored_total,  # Keep for reference
+                            'discrepancy': discrepancy,
                             'delivery_zone': delivery_zone,
                             'delivery_days': delivery_days,
-                            'unaccounted_amount': unaccounted_amount,
-                            'base_calculation': base_calculation,
                             'shows_complete_breakdown': True  # Flag that this is a complete breakdown
                         }
 
-                        # ✅ PRESERVE stored total_amount from database
-                        # order_data['total_amount'] = stored_total  # Already the stored value
+                        # ✅ UPDATE ORDER DATA WITH CORRECT TOTAL
+                        order_data['total_amount'] = correct_total
 
-                        logger.info(f"🧮 Order {order_id} pricing breakdown: Subtotal=₦{subtotal:,.2f}, Delivery=₦{delivery_fee:,.2f}, Discount=₦{tier_discount:,.2f}, Total=₦{stored_total:,.2f}")
+                        logger.info(f"🧮 Order {order_id} pricing breakdown: Subtotal=₦{subtotal:,.2f}, Delivery=₦{delivery_fee:,.2f}, Discount=₦{tier_discount:,.2f}, Calculated Total=₦{correct_total:,.2f}")
 
                     # Ensure proper field formatting
                     if order_data.get('order_date'):
