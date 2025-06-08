@@ -92,11 +92,13 @@ class EmailService:
             margin: 0 auto 15px;
             background: rgba(255,255,255,0.15);
             border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            display: table-cell;
+            vertical-align: middle;
+            text-align: center;
             font-size: 24px;
             border: 2px solid rgba(255,255,255,0.2);
+            color: white;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
         }
 
         .brand-name {
@@ -524,9 +526,9 @@ class EmailService:
 <body>
     <div class="container">
         <!-- Header -->
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background: linear-gradient(135deg, #2ECC71 0%, #27AE60 100%);">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background: linear-gradient(135deg, #2ECC71 0%, #27AE60 100%); position: relative;">
             <tr>
-                <td align="center" style="padding: 30px 20px;">
+                <td align="center" style="padding: 30px 20px; position: relative; background-image: radial-gradient(circle at top right, rgba(255,255,255,0.1) 0%, transparent 50%), radial-gradient(circle at bottom left, rgba(255,255,255,0.05) 0%, transparent 50%);">
                     <div class="logo">🎧</div>
                     <div class="brand-name">raqibtech</div>
                     <div class="tagline">Nigeria's Premier E-commerce Platform</div>
@@ -820,7 +822,7 @@ class EmailService:
                 delivery_days=delivery_days
             )
 
-            subject = f"🎉 Welcome to RaqibTech, {customer_data.get('name', 'Customer')}!"
+            subject = f"🎉 Welcome to raqibtech, {customer_data.get('name', 'Customer')}!"
 
             return self.send_email(
                 to_email=customer_data.get('email'),
