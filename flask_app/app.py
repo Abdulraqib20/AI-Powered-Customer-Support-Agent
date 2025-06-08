@@ -64,6 +64,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 # 🆕 Import new systems
 from src.recommendation_engine import ProductRecommendationEngine
 from src.order_management import OrderManagementSystem
+from src.email_service import EmailService
 
 # Initialize loggers FIRST before any conditional imports
 app_logger, api_logger, error_logger = setup_logging()
@@ -164,6 +165,14 @@ try:
 except Exception as e:
     error_logger.error(f"❌ Failed to initialize database: {e}")
     raise
+
+# Initialize Email Service
+try:
+    email_service = EmailService()
+    app_logger.info("✅ Email service initialized successfully")
+except Exception as e:
+    error_logger.warning(f"⚠️ Email service initialization failed: {e}")
+    email_service = None
 
 # Initialize Redis for caching
 try:
@@ -1398,10 +1407,35 @@ def create_new_conversation():
 
 @app.route('/api/conversations/<conversation_id>/switch', methods=['POST'])
 def switch_conversation(conversation_id):
-    """Switch to a specific conversation"""
+    """Switch to a specific conversation - WITH AUTHORIZATION CHECK"""
     try:
+        # 🔧 CRITICAL SECURITY FIX: Only authenticated users can switch conversations
+        if not session.get('user_authenticated', False):
+            return jsonify({
+                'success': False,
+                'message': 'Please log in to access conversations'
+            }), 401
+
+        user_email = session.get('customer_email')
+        if not user_email:
+            return jsonify({
+                'success': False,
+                'message': 'User email not found in session'
+            }), 401
+
+        # 🔧 CRITICAL SECURITY FIX: Verify the conversation belongs to the current user
+        user_conversations = session_manager.get_user_conversations_by_email(user_email)
+        conversation_belongs_to_user = any(conv.conversation_id == conversation_id for conv in user_conversations)
+
+        if not conversation_belongs_to_user:
+            app_logger.warning(f"🚨 Unauthorized conversation switch attempt: User {user_email} tried to switch to conversation {conversation_id}")
+            return jsonify({
+                'success': False,
+                'message': 'Conversation not found or access denied'
+            }), 403
+
         # Log the conversation switch
-        app_logger.info(f"🔄 User switching to conversation: {conversation_id}")
+        app_logger.info(f"🔄 User {user_email} switching to conversation: {conversation_id}")
 
         # Update session
         session['current_conversation_id'] = conversation_id
@@ -1743,11 +1777,36 @@ def internal_error(error):
     return render_template('500.html', stats=default_stats), 500
 
 
-# 🆕 ADD: Delete conversation endpoint
+# 🆕 ADD: Delete conversation endpoint with proper authorization
 @app.route('/api/conversations/<conversation_id>', methods=['DELETE'])
 def delete_conversation(conversation_id):
-    """Delete a specific conversation and all its messages"""
+    """Delete a specific conversation and all its messages - WITH AUTHORIZATION CHECK"""
     try:
+        # 🔧 CRITICAL SECURITY FIX: Only authenticated users can delete conversations
+        if not session.get('user_authenticated', False):
+            return jsonify({
+                'success': False,
+                'message': 'Please log in to delete conversations'
+            }), 401
+
+        user_email = session.get('customer_email')
+        if not user_email:
+            return jsonify({
+                'success': False,
+                'message': 'User email not found in session'
+            }), 401
+
+        # 🔧 CRITICAL SECURITY FIX: Verify the conversation belongs to the current user
+        user_conversations = session_manager.get_user_conversations_by_email(user_email)
+        conversation_belongs_to_user = any(conv.conversation_id == conversation_id for conv in user_conversations)
+
+        if not conversation_belongs_to_user:
+            app_logger.warning(f"🚨 Unauthorized conversation deletion attempt: User {user_email} tried to delete conversation {conversation_id}")
+            return jsonify({
+                'success': False,
+                'message': 'Conversation not found or access denied'
+            }), 403
+
         db_config = {
             'host': os.getenv('DB_HOST', 'localhost'),
             'port': os.getenv('DB_PORT', '5432'),
@@ -1775,7 +1834,7 @@ def delete_conversation(conversation_id):
         if session.get('current_conversation_id') == conversation_id:
             session.pop('current_conversation_id', None)
 
-        app_logger.info(f"✅ Deleted conversation {conversation_id}: {messages_deleted} messages, {conversation_deleted} conversation")
+        app_logger.info(f"✅ User {user_email} deleted conversation {conversation_id}: {messages_deleted} messages, {conversation_deleted} conversation")
 
         return jsonify({
             'success': True,
@@ -1970,6 +2029,26 @@ def signup_api():
                 cursor.close()
                 conn.close()
 
+                # 📧 Send welcome email to new customer
+                if email_service:
+                    try:
+                        customer_data = {
+                            'name': full_name,
+                            'customer_id': new_customer_id,
+                            'email': email,
+                            'account_tier': 'Bronze',
+                            'state': state,
+                            'lga': lga
+                        }
+
+                        email_sent = email_service.send_welcome_email(customer_data)
+                        if email_sent:
+                            app_logger.info(f"✅ Welcome email sent to {email}")
+                        else:
+                            app_logger.warning(f"⚠️ Failed to send welcome email to {email}")
+                    except Exception as email_error:
+                        app_logger.error(f"❌ Welcome email error for {email}: {email_error}")
+
                 return jsonify({
                     'success': True,
                     'message': f'Welcome to raqibtech.com, {full_name}! Your account has been created successfully.',
@@ -1980,6 +2059,17 @@ def signup_api():
 
             except Exception as session_error:
                 app_logger.error(f"❌ Session creation error for new user {email}: {session_error}")
+
+                # 🔧 CRITICAL FIX: Clean up any orphaned sessions for this email on error
+                try:
+                    cursor.execute("DELETE FROM user_sessions WHERE user_identifier = %s", (email,))
+                    orphaned_count = cursor.rowcount
+                    if orphaned_count > 0:
+                        app_logger.info(f"🧹 Cleaned up {orphaned_count} orphaned sessions for {email}")
+                    conn.commit()
+                except Exception as cleanup_error:
+                    app_logger.warning(f"⚠️ Failed to cleanup orphaned sessions: {cleanup_error}")
+
                 # Even if session fails, customer is created, so we can still return success
                 cursor.close()
                 conn.close()
@@ -1993,16 +2083,45 @@ def signup_api():
 
         except Exception as db_error:
             conn.rollback()
+
+            # 🔧 CRITICAL FIX: Clean up any potential session contamination on database error
+            email = data.get('email', '').strip().lower() if data else None
+            if email:
+                try:
+                    cursor.execute("DELETE FROM user_sessions WHERE user_identifier = %s", (email,))
+                    orphaned_count = cursor.rowcount
+                    if orphaned_count > 0:
+                        app_logger.info(f"🧹 Cleaned up {orphaned_count} contaminated sessions for failed DB registration: {email}")
+                    conn.commit()
+                except Exception as cleanup_error:
+                    app_logger.warning(f"⚠️ Failed to cleanup sessions after DB error: {cleanup_error}")
+
             cursor.close()
             conn.close()
-            app_logger.error(f"❌ Database error during registration: {db_error}")
+            app_logger.error(f"❌ Database error during registration for {email}: {db_error}")
             return jsonify({
                 'success': False,
                 'message': 'Registration failed due to a system error. Please try again later.'
             }), 500
 
     except Exception as e:
-        app_logger.error(f"❌ Registration API error: {e}")
+        # 🔧 CRITICAL FIX: Prevent session contamination on any signup error
+        email = data.get('email', '').strip().lower() if data else None
+        app_logger.error(f"❌ Registration API error for {email}: {e}")
+
+        if email:
+            try:
+                # Clear Flask session for failed registration
+                session.pop('user_authenticated', None)
+                session.pop('customer_id', None)
+                session.pop('customer_email', None)
+                session.pop('customer_name', None)
+                session.pop('current_conversation_id', None)
+
+                app_logger.info(f"🧹 Cleared Flask session for failed registration: {email}")
+            except Exception as clear_error:
+                app_logger.warning(f"⚠️ Failed to clear Flask session: {clear_error}")
+
         return jsonify({
             'success': False,
             'message': 'Registration failed. Please check your information and try again.'
@@ -3006,6 +3125,41 @@ def confirm_order():
                 SET total_amount = %s, updated_at = CURRENT_TIMESTAMP
                 WHERE order_id = %s
             """, (final_total, order_id))
+
+        # 📧 Send order confirmation email
+        if email_service:
+            try:
+                # Prepare order data for email
+                order_email_data = {
+                    'customer_name': customer['name'],
+                    'customer_email': customer['email'],
+                    'order_id': order_result['order_id'],
+                    'items': [{
+                        'name': order_data['product']['name'],
+                        'quantity': order_data['quantity'],
+                        'unit_price': order_data['product']['price'],
+                        'subtotal': order_data['subtotal']
+                    }],
+                    'subtotal': order_data['subtotal'],
+                    'discount_amount': order_data.get('discount_amount', 0),
+                    'discount_percentage': order_data.get('discount_rate', 0),
+                    'delivery_fee': order_data.get('delivery_fee', 0),
+                    'total_amount': final_total,
+                    'account_tier': customer['account_tier'],
+                    'delivery_state': delivery_address.get('state', customer['state']),
+                    'delivery_lga': delivery_address.get('lga', customer.get('lga', '')),
+                    'delivery_address': delivery_address.get('full_address', customer.get('address', '')),
+                    'payment_method': order_data['payment_method'],
+                    'order_status': 'Pending'
+                }
+
+                email_sent = email_service.send_order_confirmation_email(order_email_data)
+                if email_sent:
+                    app_logger.info(f"✅ Order confirmation email sent to {customer['email']} for order {order_result['order_id']}")
+                else:
+                    app_logger.warning(f"⚠️ Failed to send order confirmation email to {customer['email']}")
+            except Exception as email_error:
+                app_logger.error(f"❌ Order confirmation email error for {customer['email']}: {email_error}")
 
         return jsonify({
             'success': True,

@@ -480,6 +480,54 @@ class OrderManagementSystem:
                             json.dumps(asdict(order_summary), default=str)
                         )
 
+                    # 📧 Send order confirmation email (if email service is available)
+                    try:
+                        from email_service import EmailService
+                        email_service = EmailService()
+
+                        # Prepare order data for email
+                        order_email_data = {
+                            'customer_name': customer_info.get('name', 'Customer'),
+                            'customer_email': customer_info.get('email', ''),
+                            'order_id': formatted_order_id,
+                            'items': [],
+                            'subtotal': order_calc['subtotal'],
+                            'discount_amount': order_calc.get('tier_discount', 0),
+                            'discount_percentage': 0,  # Will be calculated based on tier
+                            'delivery_fee': order_calc['delivery_fee'],
+                            'total_amount': order_calc['total_amount'],
+                            'account_tier': customer_info.get('account_tier', 'Bronze'),
+                            'delivery_state': delivery_address.get('state', ''),
+                            'delivery_lga': delivery_address.get('lga', ''),
+                            'delivery_address': delivery_address.get('full_address', ''),
+                            'payment_method': payment_method,
+                            'order_status': 'Pending'
+                        }
+
+                        # Add items to email data
+                        for item in order_calc['order_items']:
+                            order_email_data['items'].append({
+                                'name': item.product_name,
+                                'quantity': item.quantity,
+                                'unit_price': item.price,
+                                'subtotal': item.subtotal
+                            })
+
+                        # Calculate discount percentage for display
+                        tier_discounts = {'Bronze': 0, 'Silver': 5, 'Gold': 10, 'Platinum': 15}
+                        order_email_data['discount_percentage'] = tier_discounts.get(customer_info.get('account_tier', 'Bronze'), 0)
+
+                        if customer_info.get('email'):
+                            email_sent = email_service.send_order_confirmation_email(order_email_data)
+                            if email_sent:
+                                logger.info(f"✅ Order confirmation email sent to {customer_info.get('email')} for order {formatted_order_id}")
+                            else:
+                                logger.warning(f"⚠️ Failed to send order confirmation email to {customer_info.get('email')}")
+                    except ImportError:
+                        logger.debug("📧 Email service not available - skipping order confirmation email")
+                    except Exception as email_error:
+                        logger.error(f"❌ Order confirmation email error: {email_error}")
+
                     return {
                         "success": True,
                         "order_id": formatted_order_id,  # Return formatted ID
