@@ -526,10 +526,13 @@ class EmailService:
 <body>
     <div class="container">
         <!-- Header -->
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background: linear-gradient(135deg, #2ECC71 0%, #27AE60 100%); position: relative;">
+        <!-- MODIFIED: Reduced header width from 100% to 90% and added border-radius for rounded corners -->
+        <table role="presentation" width="90%" cellspacing="0" cellpadding="0" style="background: linear-gradient(135deg, #2ECC71 0%, #27AE60 100%); position: relative; margin: 20px auto; border-radius: 15px;">
             <tr>
-                <td align="center" style="padding: 30px 20px; position: relative; background-image: radial-gradient(circle at top right, rgba(255,255,255,0.1) 0%, transparent 50%), radial-gradient(circle at bottom left, rgba(255,255,255,0.05) 0%, transparent 50%);">
-                    <div class="logo">🎧</div>
+                <!-- MODIFIED: Added border-radius to the cell for consistent rounded corners -->
+                <td align="center" style="padding: 30px 20px; position: relative; background-image: radial-gradient(circle at top right, rgba(255,255,255,0.1) 0%, transparent 50%), radial-gradient(circle at bottom left, rgba(255,255,255,0.05) 0%, transparent 50%); border-radius: 15px;">
+                    <!-- MODIFIED: Replaced headphone icon 🎧 with cart icon 🛒 -->
+                    <div class="logo">🛒</div>
                     <div class="brand-name">raqibtech</div>
                     <div class="tagline">Nigeria's Premier E-commerce Platform</div>
                 </td>
