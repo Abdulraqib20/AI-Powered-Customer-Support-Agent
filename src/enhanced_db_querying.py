@@ -1703,69 +1703,149 @@ RESPONSE FORMAT: Return ONLY the SQL query, nothing else."""
 
     def store_shopping_conversation_context(self, user_query: str, response: str, user_id: str, session_id: str,
                                           shopping_data: Dict[str, Any] = None):
-        """
-        🛒 Store shopping conversation context in database for persistent memory
-        This ensures all shopping conversations are tracked in conversation_context table
-        """
+        """Store shopping conversation context in Redis with enhanced product context tracking"""
         try:
-            conn = self.get_database_connection()
-            if not conn:
-                logger.error("❌ No database connection for storing shopping context")
-                return
+            key = f"shopping_conversation_{user_id}_{session_id}"
 
-            cursor = conn.cursor()
+            # Get existing context
+            if hasattr(self, 'redis_client') and self.redis_client:
+                existing_data = self.redis_client.get(key)
+                conversation_history = json.loads(existing_data) if existing_data else {'turns': [], 'session_state': {}}
+            else:
+                conversation_history = {'turns': [], 'session_state': {}}
 
-            # Create entities from shopping data
-            entities = {
-                'shopping_action': True,
-                'session_id': session_id,
-                'user_id': user_id
+            # 🔧 CRITICAL FIX: Extract product context from multiple sources
+            extracted_product_context = None
+
+            # Method 1: Check shopping_data for product information
+            if shopping_data and 'execution_result' in shopping_data:
+                for result in shopping_data['execution_result']:
+                    if isinstance(result, dict) and result.get('product_id'):
+                        extracted_product_context = {
+                            'product_id': result.get('product_id'),
+                            'product_name': result.get('product_name'),
+                            'price': result.get('price'),
+                            'category': result.get('category'),
+                            'brand': result.get('brand'),
+                            'in_stock': result.get('in_stock', True),
+                            'stock_quantity': result.get('stock_quantity', 0),
+                            'mentioned_at': datetime.now().isoformat()
+                        }
+                        logger.info(f"🧠 EXTRACTED PRODUCT FROM SHOPPING DATA: {extracted_product_context['product_name']}")
+                        break
+
+            # Method 2: Check if shopping_data has product_added information (from successful cart operations)
+            if not extracted_product_context and shopping_data and shopping_data.get('product_added'):
+                product_data = shopping_data['product_added']
+                extracted_product_context = {
+                    'product_id': product_data.get('product_id'),
+                    'product_name': product_data.get('product_name'),
+                    'price': product_data.get('price'),
+                    'category': product_data.get('category'),
+                    'brand': product_data.get('brand'),
+                    'in_stock': product_data.get('in_stock', True),
+                    'stock_quantity': product_data.get('stock_quantity', 0),
+                    'mentioned_at': datetime.now().isoformat()
+                }
+                logger.info(f"🧠 EXTRACTED PRODUCT FROM CART OPERATION: {extracted_product_context['product_name']}")
+
+            # Method 3: If no product in current results, check if user is asking about products
+            product_keywords = ['product', 'phone', 'laptop', 'dress', 'shoe', 'rice', 'book', 'oil', 'cream', 'samsung', 'iphone', 'tecno']
+            if not extracted_product_context and any(keyword in user_query.lower() for keyword in product_keywords):
+                # This was likely a product inquiry, store the query for AI to understand context
+                logger.info(f"🤔 Product inquiry detected but no specific product found: {user_query}")
+
+            # Store current turn
+            current_turn = {
+                'user_input': user_query,
+                'ai_response': response,
+                'timestamp': datetime.now().isoformat(),
+                'shopping_data': shopping_data,
+                'extracted_product': extracted_product_context
             }
 
-            if shopping_data:
-                entities.update({
-                    'action': shopping_data.get('action'),
-                    'success': shopping_data.get('success', False),
-                    'cart_summary': shopping_data.get('cart_summary', {}),
-                    'order_info': shopping_data.get('order_summary', {}),
-                    'product_added': shopping_data.get('product_added', {})
-                })
+            # Add to conversation history
+            conversation_history['turns'].append(current_turn)
 
-            # Prepare execution result to store product information if available
-            execution_result = []
-            if shopping_data and shopping_data.get('product_added'):
-                product = shopping_data['product_added']
-                execution_result = [{
-                    'product_id': product.get('product_id'),
-                    'product_name': product.get('product_name'),
-                    'price': product.get('price'),
-                    'category': product.get('category'),
-                    'brand': product.get('brand')
-                }]
+            # 🔧 CRITICAL FIX: Update last mentioned product in session state
+            if extracted_product_context:
+                conversation_history['session_state']['last_mentioned_product'] = extracted_product_context
+                conversation_history['session_state']['last_product_query'] = user_query
+                logger.info(f"🧠 STORED PRODUCT CONTEXT: {extracted_product_context['product_name']} (ID: {extracted_product_context['product_id']})")
 
-            cursor.execute("""
-                INSERT INTO conversation_context
-                (user_id, session_id, query_type, entities, sql_query, execution_result, response_text, user_query, timestamp)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (
-                user_id,
-                session_id,
-                'shopping_action',
-                safe_json_dumps(entities),
-                None,  # No SQL query for shopping actions
-                safe_json_dumps(execution_result),
-                response,
-                user_query,
-                datetime.now()
-            ))
+            # Keep only last 10 turns to avoid memory bloat
+            conversation_history['turns'] = conversation_history['turns'][-10:]
 
-            conn.commit()
-            cursor.close()
-            conn.close()
-            logger.info(f"✅ Shopping context stored in database for user {user_id}, session {session_id}")
+            # Store in Redis with TTL
+            if hasattr(self, 'redis_client') and self.redis_client:
+                self.redis_client.setex(key, 3600, json.dumps(conversation_history, cls=DateTimeJSONEncoder))  # 1 hour TTL
+
+            logger.info(f"✅ Shopping conversation context stored for session {session_id}")
 
         except Exception as e:
-            logger.error(f"❌ Failed to store shopping context in database: {e}")
+            logger.error(f"❌ Error storing shopping conversation context: {e}")
+            print_log(f"❌ Failed to store shopping context: {e}", 'error')
+
+    def get_last_mentioned_product(self, user_id: str, session_id: str = None) -> Optional[Dict[str, Any]]:
+        """🎯 Get the last mentioned product from conversation context for pronoun resolution"""
+        try:
+            # First try Redis
+            if hasattr(self, 'redis_client') and self.redis_client:
+                key = f"shopping_conversation_{user_id}_{session_id}"
+                existing_data = self.redis_client.get(key)
+                if existing_data:
+                    conversation_history = json.loads(existing_data)
+                    last_mentioned = conversation_history.get('session_state', {}).get('last_mentioned_product')
+                    if last_mentioned:
+                        logger.info(f"🧠 RETRIEVED LAST PRODUCT FROM REDIS: {last_mentioned.get('product_name')}")
+                        return last_mentioned
+
+            # Fallback to database
+            conn = self.get_database_connection()
+            if conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT execution_result, user_query, timestamp
+                    FROM conversation_context
+                    WHERE (user_id = %s OR session_id = %s)
+                    AND execution_result IS NOT NULL
+                    AND timestamp >= NOW() - INTERVAL '1 hour'
+                    ORDER BY timestamp DESC
+                    LIMIT 5
+                """, (user_id, session_id or user_id))
+
+                for row in cursor.fetchall():
+                    execution_result_data = row[0]
+                    if isinstance(execution_result_data, str):
+                        try:
+                            execution_result_data = json.loads(execution_result_data)
+                        except (json.JSONDecodeError, TypeError):
+                            continue
+                    elif not isinstance(execution_result_data, list):
+                        continue
+
+                    # Look for product information in the execution results
+                    for result in execution_result_data:
+                        if isinstance(result, dict) and result.get('product_id'):
+                            product_context = {
+                                'product_id': result.get('product_id'),
+                                'product_name': result.get('product_name'),
+                                'price': result.get('price'),
+                                'category': result.get('category'),
+                                'brand': result.get('brand'),
+                                'in_stock': result.get('in_stock', True),
+                                'stock_quantity': result.get('stock_quantity', 0),
+                            }
+                            logger.info(f"🧠 RETRIEVED LAST PRODUCT FROM DB: {product_context['product_name']}")
+                            return product_context
+
+                cursor.close()
+                conn.close()
+
+        except Exception as e:
+            logger.error(f"❌ Error retrieving last mentioned product: {e}")
+
+        return None
 
     def get_conversation_history(self, user_id: str = "anonymous", limit: int = 5) -> List[Dict]:
         """Get recent conversation history with enhanced database fallback"""
@@ -3357,6 +3437,10 @@ How can I help you with your raqibtech.com experience today? 🌟"""
 
                             if shopping_result.get('success') and not shopping_result.get('should_redirect'):
                                 enhanced_response_text = self._generate_shopping_response(shopping_result)
+                            elif shopping_result.get('require_specific_product'):
+                                # 🔧 CRITICAL FIX: Prevent AI hallucination when no product found
+                                enhanced_response_text = shopping_result.get('message', "I couldn't find that specific product. Please mention the specific product name you'd like to add to your cart.")
+                                logger.info("🚫 PREVENTING AI HALLUCINATION: No product found for cart addition")
 
                                 if self.memory_system:
                                     try:

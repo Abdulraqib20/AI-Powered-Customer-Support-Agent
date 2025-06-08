@@ -262,7 +262,7 @@ class OrderAIAssistant:
                 # Normalize payment method names
                 if "raqib" in entity: entity = "RaqibTechPay"
                 elif "delivery" in entity: entity = "Pay on Delivery"
-                elif any(card_type in entity for card_type in ["card", "verve", "mastercard", "visa", "atm"]): entity = "Card Payment"
+                elif any(card_type in entity for card_type in ["card", "verve", "mastercard", "visa", "atm"]): entity = "Card"
                 elif "bank" in entity: entity = "Bank Transfer"
                 logger.info(f"🎯 Intent parsed: {intent} (confidence: 0.95, pattern: '{pattern}') - Entity: {entity}")
                 return {'intent': intent, 'entities': {'payment_method': entity}, 'confidence': 0.95}
@@ -434,37 +434,50 @@ class OrderAIAssistant:
         }
 
     def extract_product_info(self, user_message: str, product_name_hint: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """
-        🔍 Enhanced product extraction with flexible matching and synonym support
-        """
-        from psycopg2.extras import RealDictCursor
+        """🔍 Extract product information from user message with enhanced context awareness"""
 
-        # Use hint if provided, otherwise extract from message
-        target_product_name = product_name_hint or user_message.strip()
+        # 🔧 CRITICAL FIX: Handle pronoun resolution for "it", "this", "that"
+        pronouns = ['it', 'this', 'that', 'them']
+        user_message_lower = user_message.lower().strip()
 
-        # 🆕 ENHANCED: Product name preprocessing and synonym mapping
-        target_product_name = target_product_name.lower().strip()
+        # Check if user is using a pronoun to refer to a previously mentioned product
+        if any(pronoun == user_message_lower.split()[0] for pronoun in pronouns if user_message_lower.split()):
+            logger.info(f"🎯 PRONOUN DETECTED: '{user_message}' - checking for last mentioned product context")
 
-        # Define product synonyms and variations
-        product_synonyms = {
-            'phone': ['iphone', 'samsung', 'smartphone', 'mobile', 'cell phone'],
-            'phones': ['iphone', 'samsung', 'smartphone', 'mobile', 'cell phone'],
-            'ios': ['iphone', 'ipad', 'apple'],
-            'apple': ['iphone', 'ipad', 'macbook', 'apple'],
-            'ipads': ['ipad'],
-            'tablet': ['ipad', 'samsung tab'],
-            'laptop': ['macbook', 'hp', 'dell', 'lenovo'],
-            'computer': ['macbook', 'hp', 'dell', 'laptop'],
-            'samsung phone': ['samsung galaxy', 'samsung'],
-            'android': ['samsung', 'tecno', 'infinix', 'xiaomi']
-        }
+            # Try to get last mentioned product from session context
+            if hasattr(self, '_last_mentioned_product') and self._last_mentioned_product:
+                logger.info(f"✅ USING CONTEXT: Found last mentioned product: {self._last_mentioned_product.get('product_name')}")
+                return self._last_mentioned_product
 
-        # 🆕 ENHANCED: Category-based search mapping
-        category_keywords = {
-            'electronics': ['phone', 'smartphone', 'tablet', 'laptop', 'computer', 'iphone', 'ipad', 'samsung'],
-            'computing': ['laptop', 'computer', 'macbook', 'hp', 'dell'],
-            'mobile': ['phone', 'smartphone', 'iphone', 'samsung', 'android']
-        }
+            # 🔧 CRITICAL FIX: Try to get product context from enhanced database system
+            try:
+                from .enhanced_db_querying import EnhancedDatabaseQuerying
+                enhanced_db = EnhancedDatabaseQuerying()
+
+                # Use session ID if available (could be passed as parameter in future enhancement)
+                session_id = getattr(self, '_current_session_id', 'unknown_session')
+                customer_id = getattr(self, '_current_customer_id', None)
+                user_id = f"customer_{customer_id}" if customer_id else "anonymous"
+
+                if hasattr(enhanced_db, 'get_last_mentioned_product'):
+                    last_product = enhanced_db.get_last_mentioned_product(user_id, session_id)
+                    if last_product:
+                        logger.info(f"✅ USING DATABASE CONTEXT: Found last mentioned product: {last_product.get('product_name')}")
+                        # Store it locally for faster access next time
+                        self._last_mentioned_product = last_product
+                        return last_product
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to retrieve product context from database: {e}")
+
+            # If no context, return None to prevent wrong product matching
+            logger.warning(f"⚠️ PRONOUN WITHOUT CONTEXT: '{user_message}' but no previous product context found")
+            return None
+
+        if product_name_hint:
+            target_product_name = product_name_hint.strip()
+        else:
+            # Extract potential product name from the message
+            target_product_name = user_message.strip()
 
         # 🔧 CRITICAL FIX: Context-aware word filtering to prevent false matches
         context_exclusion_patterns = [
@@ -498,99 +511,87 @@ class OrderAIAssistant:
             print_log(f"❌ Account management context detected - not a product search: {target_product_name}")
             return None
 
+        # Clean up common stop words from product name
+        words_to_filter = ['add', 'to', 'cart', 'buy', 'purchase', 'get', 'me', 'want', 'to', 'order',
+                          'please', 'can', 'you', 'i', 'my', 'the', 'a', 'an']
+
+        # 🔧 ENHANCED FILTERING: Split and filter words, but preserve meaningful product terms
+        # Don't filter if the word is longer than 3 characters or is a known product term
+        important_product_terms = ['phone', 'rice', 'dress', 'shoe', 'bag', 'book', 'oil', 'cream']
+
+        cleaned_words = []
+        for word in target_product_name.lower().split():
+            # Keep the word if:
+            # 1. It's longer than 3 characters, OR
+            # 2. It's an important product term, OR
+            # 3. It's not in the common filter list
+            if (len(word) >= 3 and word not in words_to_filter) or word in important_product_terms:
+                cleaned_words.append(word)
+
+        if not cleaned_words:
+            print_log(f"❌ No meaningful product terms found in: {target_product_name}")
+            return None
+
+        cleaned_product_name = ' '.join(cleaned_words)
+
         try:
-            db_manager = initialize_database()
-            with db_manager.get_connection() as conn:
+            print_log(f"🔍 Searching for product: '{cleaned_product_name}' (from: '{target_product_name}')")
+
+            # Search product with multiple strategies
+            with self.get_database_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
 
-                    # 🆕 ENHANCED: Multi-stage search strategy
-                    search_attempts = []
+                    # Strategy 1: Direct name match (most reliable)
+                    cursor.execute("""
+                        SELECT product_id, product_name, category, brand, description, price, currency, in_stock, stock_quantity
+                        FROM products WHERE LOWER(product_name) LIKE LOWER(%s) AND in_stock = TRUE
+                        ORDER BY
+                            CASE WHEN LOWER(product_name) = LOWER(%s) THEN 1 ELSE 2 END,
+                            product_name
+                        LIMIT 1
+                    """, (f"%{cleaned_product_name}%", cleaned_product_name))
 
-                    # Stage 1: Direct name match
-                    search_attempts.append({
-                        'pattern': f"%{target_product_name}%",
-                        'description': 'Direct name match'
-                    })
+                    product = cursor.fetchone()
+                    if product:
+                        print_log(f"✅ Product found via Direct name match: {product['product_name']}", 'success')
+                        product_dict = dict(product)
 
-                    # Stage 2: Synonym expansion
-                    if target_product_name in product_synonyms:
-                        for synonym in product_synonyms[target_product_name]:
-                            search_attempts.append({
-                                'pattern': f"%{synonym}%",
-                                'description': f'Synonym match for {target_product_name} -> {synonym}'
-                            })
+                        # 🔧 CRITICAL FIX: Store this as last mentioned product for context
+                        self._last_mentioned_product = product_dict
+                        logger.info(f"🎯 EXTRACTED PRODUCT FOR CONTEXT: {product_dict['product_name']} (ID: {product_dict['product_id']})")
+                        logger.info(f"🧠 STORED PRODUCT CONTEXT: {product_dict['product_name']} ready for potential shopping action")
 
-                    # Stage 3: Category-based search
-                    for category, keywords in category_keywords.items():
-                        if target_product_name in keywords:
-                            search_attempts.append({
-                                'pattern': f"%{category}%",
-                                'description': f'Category match: {category}',
-                                'search_field': 'category'
-                            })
+                        return product_dict
 
-                    # Stage 4: Partial word matching for compound words (🔧 CRITICAL FIX: Exclude problematic words)
-                    words = target_product_name.split()
-                    if len(words) > 1:
-                        for word in words:
-                            # 🔧 CRITICAL FIX: Exclude problematic short words and cart-related words
-                            if len(word) > 3 and word not in ['cart', 'the', 'and', 'for', 'with', 'from', 'that', 'this', 'item', 'product']:
-                                search_attempts.append({
-                                    'pattern': f"%{word}%",
-                                    'description': f'Word component match: {word}'
-                                })
+                    # Strategy 2: Individual word search within the same product
+                    word_patterns = [f"%{word}%" for word in cleaned_words]
+                    placeholders = ' OR '.join(['LOWER(product_name) LIKE LOWER(%s)'] * len(word_patterns))
 
-                    # 🆕 ENHANCED: Execute search attempts in order of priority
-                    for attempt in search_attempts:
-                        search_field = attempt.get('search_field', 'product_name')
+                    cursor.execute(f"""
+                        SELECT product_id, product_name, category, brand, description, price, currency, in_stock, stock_quantity,
+                               (SELECT COUNT(*) FROM unnest(%s) AS word WHERE LOWER(product_name) LIKE LOWER(word)) as word_matches
+                        FROM products
+                        WHERE ({placeholders}) AND in_stock = TRUE
+                        ORDER BY word_matches DESC, product_name
+                        LIMIT 1
+                    """, [word_patterns] + word_patterns)
 
-                        query = f"""
-                            SELECT product_id, product_name, category, brand, description, price, currency, in_stock, stock_quantity
-                            FROM products
-                            WHERE {search_field} ILIKE %s AND in_stock = TRUE
-                            ORDER BY
-                                (LOWER({search_field}) = LOWER(%s)) DESC,  -- Exact matches first
-                                LENGTH({search_field}) ASC,                -- Shorter names first
-                                price ASC
-                            LIMIT 1;
-                        """
+                    product = cursor.fetchone()
+                    if product:
+                        print_log(f"✅ Product found via Word matching: {product['product_name']}", 'success')
+                        product_dict = dict(product)
 
-                        cursor.execute(query, (attempt['pattern'], target_product_name))
-                        product_data = cursor.fetchone()
+                        # 🔧 CRITICAL FIX: Store this as last mentioned product for context
+                        self._last_mentioned_product = product_dict
+                        logger.info(f"🎯 EXTRACTED PRODUCT FOR CONTEXT: {product_dict['product_name']} (ID: {product_dict['product_id']})")
 
-                        if product_data:
-                            logger.info(f"✅ Product found via {attempt['description']}: {product_data['product_name']}")
-                            # Convert Decimal to float for easier handling if price is Decimal
-                            if 'price' in product_data and hasattr(product_data['price'], 'quantize'):
-                                product_data['price'] = float(product_data['price'])
-                            return dict(product_data)
-                        else:
-                            logger.debug(f"🔍 No match for {attempt['description']}: {attempt['pattern']}")
+                        return product_dict
 
-                    # 🆕 ENHANCED: Final fallback - brand-based search
-                    brand_keywords = ['apple', 'samsung', 'hp', 'dell', 'lenovo', 'tecno', 'infinix', 'xiaomi']
-                    for brand in brand_keywords:
-                        if brand in target_product_name:
-                            cursor.execute("""
-                                SELECT product_id, product_name, category, brand, description, price, currency, in_stock, stock_quantity
-                                FROM products
-                                WHERE brand ILIKE %s AND in_stock = TRUE
-                                ORDER BY price ASC
-                                LIMIT 1;
-                            """, (f"%{brand}%",))
-
-                            product_data = cursor.fetchone()
-                            if product_data:
-                                logger.info(f"✅ Product found via brand match ({brand}): {product_data['product_name']}")
-                                if 'price' in product_data and hasattr(product_data['price'], 'quantize'):
-                                    product_data['price'] = float(product_data['price'])
-                                return dict(product_data)
-
-                    logger.warning(f"🟡 No product found for '{target_product_name}' after all search attempts.")
+                    print_log(f"❌ No matching product found for: {cleaned_product_name}", 'warning')
                     return None
 
         except Exception as e:
-            logger.error(f"❌ Error querying product from DB: {e}")
+            print_log(f"❌ Database error in extract_product_info: {e}", 'error')
             return None
 
     def add_to_cart(self, customer_id: int, product_info: Dict, quantity: int = 1) -> Dict[str, Any]:
@@ -843,6 +844,10 @@ class OrderAIAssistant:
     ) -> Dict[str, Any]:
         """🎯 Process shopping conversation with intelligent context awareness using passed SessionState"""
 
+        # 🔧 CRITICAL FIX: Set session context for product extraction
+        self._current_session_id = session_id
+        self._current_customer_id = customer_id
+
         active_session_state = self._get_or_initialize_session_state(session_id, customer_id, current_session_state)
         active_session_state.current_intent = user_message
 
@@ -858,7 +863,20 @@ class OrderAIAssistant:
 
             if intent == 'add_to_cart':
                 product_name_from_intent = entities.get('product_name')
-                product_info = self.extract_product_info(user_message, product_name_hint=product_name_from_intent)
+
+                # 🔧 CRITICAL FIX: Check for pronoun usage and use session context
+                pronouns = ['it', 'this', 'that', 'them']
+                user_message_lower = user_message.lower().strip()
+
+                # If user used a pronoun and we have last mentioned product in session, use it
+                if (any(pronoun in user_message_lower.split()[:2] for pronoun in pronouns) and
+                    active_session_state.last_product_mentioned and
+                    active_session_state.last_product_mentioned.get('product_id')):
+
+                    logger.info(f"🎯 PRONOUN RESOLUTION: Using session context product: {active_session_state.last_product_mentioned.get('product_name')}")
+                    product_info = active_session_state.last_product_mentioned
+                else:
+                    product_info = self.extract_product_info(user_message, product_name_hint=product_name_from_intent)
 
                 if product_info and product_info.get('product_id'):
                     if product_info.get('stock_quantity', 0) > 0:
@@ -886,8 +904,9 @@ class OrderAIAssistant:
                         response_data['message'] = f"😔 Sorry, {product_info['product_name']} is currently out of stock."
                         active_session_state.last_product_mentioned = product_info
                 else:
-                    response_data['message'] = "🤔 I couldn't find that specific product. Can you try naming it again or browse our catalog?"
+                    response_data['message'] = "🤔 I couldn't find that specific product. Can you try naming it again or browse our catalog? Please mention the specific product name you'd like to add."
                     response_data['action'] = 'need_product_clarification'
+                    response_data['require_specific_product'] = True  # Flag to prevent AI hallucination
 
             elif intent == 'view_cart':
                 if active_session_state.cart_items:
@@ -1272,16 +1291,49 @@ class OrderAIAssistant:
             return state_from_mem
 
         logger.info(f"🧠 Initializing new session state for session {session_id}")
+
+        # 🔧 CRITICAL FIX: Try to retrieve last mentioned product from conversation context
+        last_product_context = None
+        try:
+            # Get conversation memory from enhanced_db_querying system
+            from .enhanced_db_querying import EnhancedDatabaseQuerying
+            enhanced_db = EnhancedDatabaseQuerying()
+            user_id = f"customer_{customer_id}" if customer_id else "anonymous"
+
+            # First try the new dedicated method for last mentioned product
+            if hasattr(enhanced_db, 'get_last_mentioned_product'):
+                last_product_context = enhanced_db.get_last_mentioned_product(user_id, session_id)
+                if last_product_context:
+                    logger.info(f"🧠 RETRIEVED LAST PRODUCT FROM NEW METHOD: {last_product_context.get('product_name')}")
+
+            # Fallback to enhanced conversation memory if needed
+            if not last_product_context and hasattr(enhanced_db, 'get_enhanced_conversation_memory'):
+                conversation_memory = enhanced_db.get_enhanced_conversation_memory(user_id, session_id, limit=5)
+
+                # Look for the most recent product mentioned in conversation context
+                if conversation_memory and conversation_memory.get('mentioned_products'):
+                    last_product_context = conversation_memory['mentioned_products'][0]  # Most recent
+                    logger.info(f"🧠 RETRIEVED PRODUCT CONTEXT: {last_product_context.get('product_name')} from conversation memory")
+
+                # Also check session state from conversation memory
+                session_state_data = conversation_memory.get('session_state', {}) if conversation_memory else {}
+                if not last_product_context and session_state_data.get('last_mentioned_product'):
+                    last_product_context = session_state_data['last_mentioned_product']
+                    logger.info(f"🧠 RETRIEVED PRODUCT CONTEXT: {last_product_context.get('product_name')} from session state")
+
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to retrieve product context from conversation memory: {e}")
+
         return SessionState(
             session_id=session_id,
             customer_id=customer_id,
             cart_items=[],
             checkout_state={},
             current_intent='initial',
-            last_product_mentioned=None,
+            last_product_mentioned=last_product_context,
             delivery_address=None,
             payment_method=None,
-            conversation_stage='browsing',
+            conversation_stage='product_discussed' if last_product_context else 'browsing',
             created_at=datetime.now(),
             updated_at=datetime.now()
         )

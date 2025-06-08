@@ -883,74 +883,92 @@ class OrderManagementSystem:
 
     def _update_customer_tier(self, cursor, customer_id: int, order_amount: float):
         """Update customer tier based on total spending with enhanced logic"""
-        # Get customer's total spending and current tier
-        cursor.execute("""
-            SELECT c.account_tier, COALESCE(SUM(o.total_amount), 0) as total_spent, COUNT(o.order_id) as order_count
-            FROM customers c
-            LEFT JOIN orders o ON c.customer_id = o.customer_id
-            WHERE c.customer_id = %s AND (o.order_status != 'Returned' OR o.order_status IS NULL)
-            GROUP BY c.account_tier
-        """, (customer_id,))
-
-        result = cursor.fetchone()
-        if not result:
-            logger.warning(f"⚠️ No customer data found for customer_id {customer_id}")
-            return
-
-        current_tier, total_spent, order_count = result
-        total_spent = float(total_spent or 0)
-
-        # Enhanced tier progression logic with order count requirements
-        tier_criteria = {
-            'Platinum': {'spending': 2000000, 'orders': 20},
-            'Gold': {'spending': 500000, 'orders': 10},
-            'Silver': {'spending': 100000, 'orders': 3},
-            'Bronze': {'spending': 0, 'orders': 0}
-        }
-
-        # Determine new tier based on spending and order count
-        new_tier = "Bronze"  # Default
-        for tier, criteria in tier_criteria.items():
-            if total_spent >= criteria['spending'] and order_count >= criteria['orders']:
-                new_tier = tier
-                break
-
-        # Update tier if changed
-        if new_tier != current_tier:
+        try:
+            # Get customer's total spending and current tier
             cursor.execute("""
-                UPDATE customers
-                SET account_tier = %s::account_tier_enum, updated_at = CURRENT_TIMESTAMP
-                WHERE customer_id = %s
-            """, (new_tier, customer_id))
+                SELECT c.account_tier, COALESCE(SUM(o.total_amount), 0)::FLOAT as total_spent, COUNT(o.order_id) as order_count
+                FROM customers c
+                LEFT JOIN orders o ON c.customer_id = o.customer_id
+                WHERE c.customer_id = %s AND (o.order_status != 'Returned' OR o.order_status IS NULL)
+                GROUP BY c.account_tier
+            """, (customer_id,))
 
-            logger.info(f"🏆 Customer {customer_id} upgraded from {current_tier} to {new_tier} tier!")
-            logger.info(f"   💰 Total spent: ₦{total_spent:,}")
-            logger.info(f"   📦 Order count: {order_count}")
+            result = cursor.fetchone()
+            if not result:
+                logger.warning(f"⚠️ No customer data found for customer_id {customer_id}")
+                return
 
-            # Log tier upgrade for analytics
-            try:
-                import json
-                from datetime import datetime
+            current_tier, total_spent, order_count = result
+
+            # 🔧 CRITICAL FIX: Handle both Decimal and float types safely
+            if hasattr(total_spent, '__str__') and str(total_spent).isdigit():
+                total_spent = float(total_spent)
+            elif hasattr(total_spent, '__float__'):
+                total_spent = float(total_spent)
+            elif isinstance(total_spent, str):
+                try:
+                    total_spent = float(total_spent)
+                except ValueError:
+                    logger.error(f"❌ Cannot convert total_spent '{total_spent}' to float for customer {customer_id}")
+                    total_spent = 0.0
+            else:
+                total_spent = float(total_spent or 0)
+
+            # Enhanced tier progression logic with order count requirements
+            tier_criteria = {
+                'Platinum': {'spending': 2000000, 'orders': 20},
+                'Gold': {'spending': 500000, 'orders': 10},
+                'Silver': {'spending': 100000, 'orders': 3},
+                'Bronze': {'spending': 0, 'orders': 0}
+            }
+
+            # Determine new tier based on spending and order count
+            new_tier = "Bronze"  # Default
+            for tier, criteria in tier_criteria.items():
+                if total_spent >= criteria['spending'] and order_count >= criteria['orders']:
+                    new_tier = tier
+                    break
+
+            # Update tier if changed
+            if new_tier != current_tier:
                 cursor.execute("""
-                    INSERT INTO analytics (metric_type, metric_value, time_period, created_at)
-                    VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
-                """, (
-                    'tier_upgrade',
-                    json.dumps({
-                        'customer_id': customer_id,
-                        'from_tier': current_tier,
-                        'to_tier': new_tier,
-                        'total_spent': total_spent,
-                        'order_count': order_count,
-                        'upgrade_date': datetime.now().isoformat()
-                    }),
-                    'event'
-                ))
-                logger.info(f"📊 Tier upgrade analytics logged")
-            except Exception as e:
-                logger.warning(f"⚠️ Failed to log tier upgrade analytics: {e}")
-        else:
-            logger.debug(f"👥 Customer {customer_id} remains on {current_tier} tier (₦{total_spent:,} spent, {order_count} orders)")
+                    UPDATE customers
+                    SET account_tier = %s::account_tier_enum, updated_at = CURRENT_TIMESTAMP
+                    WHERE customer_id = %s
+                """, (new_tier, customer_id))
+
+                logger.info(f"🏆 Customer {customer_id} upgraded from {current_tier} to {new_tier} tier!")
+                logger.info(f"   💰 Total spent: ₦{total_spent:,}")
+                logger.info(f"   📦 Order count: {order_count}")
+
+                # Log tier upgrade for analytics
+                try:
+                    import json
+                    from datetime import datetime
+                    cursor.execute("""
+                        INSERT INTO analytics (metric_type, metric_value, time_period, created_at)
+                        VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+                    """, (
+                        'tier_upgrade',
+                        json.dumps({
+                            'customer_id': customer_id,
+                            'from_tier': current_tier,
+                            'to_tier': new_tier,
+                            'total_spent': total_spent,
+                            'order_count': order_count,
+                            'upgrade_date': datetime.now().isoformat()
+                        }),
+                        'event'
+                    ))
+                    logger.info(f"📊 Tier upgrade analytics logged")
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to log tier upgrade analytics: {e}")
+            else:
+                logger.debug(f"👥 Customer {customer_id} remains on {current_tier} tier (₦{total_spent:,} spent, {order_count} orders)")
+
+        except Exception as e:
+            logger.error(f"❌ Error updating customer tier for customer {customer_id}: {e}")
+            # Don't let tier update failures block order creation
 
     def get_order_analytics(self, customer_id: int = None) -> Dict[str, Any]:
         """📊 Get order analytics and insights"""

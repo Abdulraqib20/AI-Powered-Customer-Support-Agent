@@ -88,11 +88,38 @@ app = Flask(__name__)
 
 # Flask Configuration
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'nigerian-ecommerce-support-2025')
-app.config['SESSION_TYPE'] = 'redis'
-app.config['SESSION_REDIS'] = redis.from_url('redis://localhost:6379')
-app.config['SESSION_PERMANENT'] = False
-app.config['SESSION_USE_SIGNER'] = True
-app.config['SESSION_KEY_PREFIX'] = 'support_agent:'
+
+# 🔧 CRITICAL FIX: Implement fallback session configuration for when Redis is unavailable
+try:
+    # Test Redis connection first
+    test_redis = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+    test_redis.ping()
+
+    # Redis is available, use Redis sessions
+    app.config['SESSION_TYPE'] = 'redis'
+    app.config['SESSION_REDIS'] = redis.from_url('redis://localhost:6379')
+    app.config['SESSION_PERMANENT'] = True
+    app.config['SESSION_USE_SIGNER'] = True
+    app.config['SESSION_KEY_PREFIX'] = 'support_agent:'
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)  # Keep sessions for 7 days
+
+    app_logger.info("✅ Redis available - using Redis sessions")
+
+except (redis.ConnectionError, redis.TimeoutError, Exception) as e:
+    app_logger.warning(f"⚠️ Redis not available ({e}), falling back to filesystem sessions")
+
+    # Fallback to filesystem sessions
+    app.config['SESSION_TYPE'] = 'filesystem'
+    app.config['SESSION_FILE_DIR'] = os.path.join(os.getcwd(), 'session_data')
+    app.config['SESSION_PERMANENT'] = True
+    app.config['SESSION_USE_SIGNER'] = True
+    app.config['SESSION_FILE_THRESHOLD'] = 500
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)  # Keep sessions for 7 days
+
+    # Create session directory if it doesn't exist
+    os.makedirs(app.config['SESSION_FILE_DIR'], exist_ok=True)
+
+    app_logger.info("✅ Using filesystem sessions as fallback")
 
 # Initialize extensions
 Session(app)
@@ -267,6 +294,9 @@ def before_request():
     # Skip session handling for static files
     if request.endpoint and request.endpoint.startswith('static'):
         return
+
+    # 🔧 CRITICAL FIX: Ensure session persistence
+    session.permanent = True
 
     # Initialize session if not exists
     if 'session_id' not in session:
@@ -1288,26 +1318,33 @@ def api_business_intelligence():
 
 @app.route('/api/conversations', methods=['GET'])
 def get_conversations():
-    """Get user conversations"""
+    """Get user conversations - supports both authenticated and guest users"""
     try:
-        # 🔧 FIX: Only authenticated users can access conversations
-        if not session.get('user_authenticated', False):
-            return jsonify({
-                'success': True,
-                'conversations': [],
-                'message': 'Please log in to access conversation history'
-            })
+        # 🔧 CRITICAL FIX: Support both authenticated and guest users
+        if session.get('user_authenticated', False):
+            # Authenticated user - use email-based lookup
+            user_email = session.get('customer_email')
+            if not user_email:
+                return jsonify({
+                    'success': True,
+                    'conversations': [],
+                    'message': 'User email not found in session'
+                })
 
-        user_email = session.get('customer_email')
-        if not user_email:
-            return jsonify({
-                'success': True,
-                'conversations': [],
-                'message': 'User email not found in session'
-            })
+            conversations = session_manager.get_user_conversations_by_email(user_email)
+            app_logger.info(f"🔍 Retrieved {len(conversations)} conversations for authenticated user {user_email}")
+        else:
+            # Guest user - use session-based lookup
+            session_id = session.get('session_id')
+            if not session_id:
+                return jsonify({
+                    'success': True,
+                    'conversations': [],
+                    'message': 'No session found'
+                })
 
-        # 🔧 FIX: Use email-based lookup for authenticated users
-        conversations = session_manager.get_user_conversations_by_email(user_email)
+            conversations = session_manager.get_user_conversations(session_id)
+            app_logger.info(f"🔍 Retrieved {len(conversations)} conversations for guest session {session_id}")
 
         # Convert to serializable format
         conversation_list = []
@@ -1332,32 +1369,49 @@ def get_conversations():
 
 @app.route('/api/conversations/<conversation_id>/messages', methods=['GET'])
 def get_conversation_messages(conversation_id):
-    """Get messages for a specific conversation"""
+    """Get messages for a specific conversation - supports both authenticated and guest users"""
     try:
-        # 🔧 FIX: Only authenticated users can access conversation messages
-        if not session.get('user_authenticated', False):
-            return jsonify({
-                'success': False,
-                'message': 'Please log in to access conversation messages'
-            }), 401
+        # 🔧 CRITICAL FIX: Support both authenticated and guest users
+        if session.get('user_authenticated', False):
+            # Authenticated user - verify by email
+            user_email = session.get('customer_email')
+            if not user_email:
+                return jsonify({
+                    'success': False,
+                    'message': 'User email not found in session'
+                }), 401
 
-        user_email = session.get('customer_email')
-        if not user_email:
-            return jsonify({
-                'success': False,
-                'message': 'User email not found in session'
-            }), 401
+            user_conversations = session_manager.get_user_conversations_by_email(user_email)
+            conversation_belongs_to_user = any(conv.conversation_id == conversation_id for conv in user_conversations)
 
-        # 🔧 CRITICAL FIX: Verify the conversation belongs to the current user by email
-        user_conversations = session_manager.get_user_conversations_by_email(user_email)
-        conversation_belongs_to_user = any(conv.conversation_id == conversation_id for conv in user_conversations)
+            if not conversation_belongs_to_user:
+                app_logger.warning(f"🚨 Unauthorized conversation access attempt: User {user_email} tried to access conversation {conversation_id}")
+                return jsonify({
+                    'success': False,
+                    'message': 'Conversation not found or access denied'
+                }), 403
 
-        if not conversation_belongs_to_user:
-            app_logger.warning(f"🚨 Unauthorized conversation access attempt: User {user_email} tried to access conversation {conversation_id}")
-            return jsonify({
-                'success': False,
-                'message': 'Conversation not found or access denied'
-            }), 403
+            app_logger.info(f"✅ Authenticated user {user_email} accessing conversation {conversation_id}")
+        else:
+            # Guest user - verify by session
+            session_id = session.get('session_id')
+            if not session_id:
+                return jsonify({
+                    'success': False,
+                    'message': 'No session found'
+                }), 401
+
+            user_conversations = session_manager.get_user_conversations(session_id)
+            conversation_belongs_to_user = any(conv.conversation_id == conversation_id for conv in user_conversations)
+
+            if not conversation_belongs_to_user:
+                app_logger.warning(f"🚨 Unauthorized conversation access attempt: Guest session {session_id} tried to access conversation {conversation_id}")
+                return jsonify({
+                    'success': False,
+                    'message': 'Conversation not found or access denied'
+                }), 403
+
+            app_logger.info(f"✅ Guest session {session_id} accessing conversation {conversation_id}")
 
         messages = session_manager.get_conversation_messages(conversation_id)
 
@@ -1383,17 +1437,23 @@ def get_conversation_messages(conversation_id):
 
 @app.route('/api/conversations/new', methods=['POST'])
 def create_new_conversation():
-    """Create a new conversation"""
+    """Create a new conversation - supports both authenticated and guest users"""
     try:
-        # 🔧 FIX: Only authenticated users can create conversations
-        if not session.get('user_authenticated', False):
+        # 🔧 CRITICAL FIX: Support both authenticated and guest users
+        session_id = session.get('session_id')
+        if not session_id:
             return jsonify({
                 'success': False,
-                'message': 'Please log in to create conversation history'
+                'message': 'No session found'
             }), 401
 
-        conversation_id = session_manager.create_conversation(session['session_id'])
+        conversation_id = session_manager.create_conversation(session_id)
         session['current_conversation_id'] = conversation_id
+
+        if session.get('user_authenticated', False):
+            app_logger.info(f"✅ Created new conversation {conversation_id} for authenticated user {session.get('customer_email')}")
+        else:
+            app_logger.info(f"✅ Created new conversation {conversation_id} for guest session {session_id}")
 
         return jsonify({
             'success': True,
@@ -1407,35 +1467,49 @@ def create_new_conversation():
 
 @app.route('/api/conversations/<conversation_id>/switch', methods=['POST'])
 def switch_conversation(conversation_id):
-    """Switch to a specific conversation - WITH AUTHORIZATION CHECK"""
+    """Switch to a specific conversation - supports both authenticated and guest users"""
     try:
-        # 🔧 CRITICAL SECURITY FIX: Only authenticated users can switch conversations
-        if not session.get('user_authenticated', False):
-            return jsonify({
-                'success': False,
-                'message': 'Please log in to access conversations'
-            }), 401
+        # 🔧 CRITICAL FIX: Support both authenticated and guest users
+        if session.get('user_authenticated', False):
+            # Authenticated user - verify by email
+            user_email = session.get('customer_email')
+            if not user_email:
+                return jsonify({
+                    'success': False,
+                    'message': 'User email not found in session'
+                }), 401
 
-        user_email = session.get('customer_email')
-        if not user_email:
-            return jsonify({
-                'success': False,
-                'message': 'User email not found in session'
-            }), 401
+            user_conversations = session_manager.get_user_conversations_by_email(user_email)
+            conversation_belongs_to_user = any(conv.conversation_id == conversation_id for conv in user_conversations)
 
-        # 🔧 CRITICAL SECURITY FIX: Verify the conversation belongs to the current user
-        user_conversations = session_manager.get_user_conversations_by_email(user_email)
-        conversation_belongs_to_user = any(conv.conversation_id == conversation_id for conv in user_conversations)
+            if not conversation_belongs_to_user:
+                app_logger.warning(f"🚨 Unauthorized conversation switch attempt: User {user_email} tried to switch to conversation {conversation_id}")
+                return jsonify({
+                    'success': False,
+                    'message': 'Conversation not found or access denied'
+                }), 403
 
-        if not conversation_belongs_to_user:
-            app_logger.warning(f"🚨 Unauthorized conversation switch attempt: User {user_email} tried to switch to conversation {conversation_id}")
-            return jsonify({
-                'success': False,
-                'message': 'Conversation not found or access denied'
-            }), 403
+            app_logger.info(f"🔄 Authenticated user {user_email} switching to conversation: {conversation_id}")
+        else:
+            # Guest user - verify by session
+            session_id = session.get('session_id')
+            if not session_id:
+                return jsonify({
+                    'success': False,
+                    'message': 'No session found'
+                }), 401
 
-        # Log the conversation switch
-        app_logger.info(f"🔄 User {user_email} switching to conversation: {conversation_id}")
+            user_conversations = session_manager.get_user_conversations(session_id)
+            conversation_belongs_to_user = any(conv.conversation_id == conversation_id for conv in user_conversations)
+
+            if not conversation_belongs_to_user:
+                app_logger.warning(f"🚨 Unauthorized conversation switch attempt: Guest session {session_id} tried to switch to conversation {conversation_id}")
+                return jsonify({
+                    'success': False,
+                    'message': 'Conversation not found or access denied'
+                }), 403
+
+            app_logger.info(f"🔄 Guest session {session_id} switching to conversation: {conversation_id}")
 
         # Update session
         session['current_conversation_id'] = conversation_id
@@ -3350,6 +3424,53 @@ def customer_profile_api():
             'success': False,
             'error': 'Server error',
             'message': 'An error occurred while processing your request'
+        }), 500
+
+
+@app.route('/api/session/debug', methods=['GET'])
+def debug_session():
+    """Debug endpoint to check session state"""
+    try:
+        session_info = {
+            'session_id': session.get('session_id'),
+            'user_authenticated': session.get('user_authenticated', False),
+            'customer_email': session.get('customer_email'),
+            'customer_id': session.get('customer_id'),
+            'current_conversation_id': session.get('current_conversation_id'),
+            'session_permanent': session.permanent,
+            'session_keys': list(session.keys()),
+            'session_type': app.config.get('SESSION_TYPE'),
+            'session_file_dir': app.config.get('SESSION_FILE_DIR'),
+        }
+
+        # Also check if session exists in database
+        try:
+            if session.get('session_id'):
+                conversations = session_manager.get_user_conversations(session['session_id'])
+                session_info['conversations_count'] = len(conversations)
+                session_info['conversations'] = [{
+                    'id': conv.conversation_id,
+                    'title': conv.conversation_title,
+                    'message_count': conv.message_count
+                } for conv in conversations[:5]]  # Show first 5
+            else:
+                session_info['conversations_count'] = 0
+                session_info['conversations'] = []
+        except Exception as e:
+            session_info['database_error'] = str(e)
+
+        app_logger.info(f"🔍 Session debug info: {session_info}")
+
+        return jsonify({
+            'success': True,
+            'session_info': session_info
+        })
+
+    except Exception as e:
+        app_logger.error(f"❌ Session debug error: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
         }), 500
 
 
