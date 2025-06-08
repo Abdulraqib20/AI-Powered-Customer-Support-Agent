@@ -1,5 +1,5 @@
 """
-📧 Email Service for RaqibTech Customer Support System
+📧 Email Service for raqibtech Customer Support System
 Handles welcome emails for new registrations and order confirmation emails
 """
 
@@ -641,7 +641,7 @@ class EmailService:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Order Confirmation - RaqibTech</title>
+    <title>Order Confirmation - raqibtech</title>
     <style>
         body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
         .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
@@ -658,7 +658,7 @@ class EmailService:
         .total-row { display: flex; justify-content: space-between; font-weight: bold; font-size: 1.1em; color: #333; border-top: 2px solid #28a745; padding-top: 10px; margin-top: 10px; }
         .tier-discount { color: #dc3545; }
         .delivery-info { background: linear-gradient(135deg, #17a2b8 0%, #6f42c1 100%); color: white; padding: 20px; border-radius: 8px; margin: 20px 0; }
-        .status-badge { display: inline-block; background-color: #ffc107; color: #333; padding: 5px 15px; border-radius: 20px; font-size: 0.9em; margin: 10px 0; }
+        .status-badge { display: inline-block; background-color: #ffc107; color: black; padding: 5px 15px; border-radius: 20px; font-size: 0.9em; margin: 10px 0; }
         .cta-button { display: inline-block; background-color: #17a2b8; color: white; text-decoration: none; padding: 12px 25px; border-radius: 5px; margin: 10px 5px; font-weight: bold; }
         .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; color: #666; font-size: 0.9em; }
         .support-info { background-color: #e3f2fd; padding: 15px; border-radius: 8px; margin: 20px 0; }
@@ -667,7 +667,7 @@ class EmailService:
 <body>
     <div class="container">
         <div class="header">
-            <div class="logo">🛒 RaqibTech</div>
+            <div class="logo">🛒 raqibtech</div>
             <p>Order Confirmation</p>
             <div class="order-number">Order #{{ order_id }}</div>
         </div>
@@ -738,15 +738,15 @@ class EmailService:
         </div>
 
         <div style="text-align: center; margin: 30px 0;">
-            <h3>🌟 Thank You for Choosing RaqibTech!</h3>
+            <h3>🌟 Thank You for Choosing raqibtech!</h3>
             <p>We appreciate your business and look forward to serving you again.</p>
             <a href="https://raqibtech.com" class="cta-button">🛍️ Continue Shopping</a>
         </div>
 
         <div class="footer">
             <p>Follow us for exclusive deals and updates:</p>
-            <p>🐦 Twitter: @RaqibTechNG | 📘 Facebook: RaqibTech Nigeria | 📸 Instagram: @RaqibTechNG</p>
-            <p>&copy; 2025 RaqibTech. All rights reserved. | Based in Lagos, Nigeria</p>
+                <p>🐦 Twitter: @raqibtechng | 📘 Facebook: raqibtech Nigeria | 📸 Instagram: @raqibtechng</p>
+            <p>&copy; 2025 raqibtech. All rights reserved. | Based in Lagos, Nigeria</p>
             <p style="font-size: 0.8em; color: #999;">
                 This email was sent to {{ customer_email }} regarding your order #{{ order_id }}.
                 <br>Order confirmation emails are automatically generated for your reference.
@@ -865,7 +865,7 @@ class EmailService:
                 order_status=order_data.get('order_status', 'Pending')
             )
 
-            subject = f"📦 Order Confirmation #{order_data.get('order_id', '')} - RaqibTech"
+            subject = f"📦 Order Confirmation #{order_data.get('order_id', '')} - raqibtech"
 
             return self.send_email(
                 to_email=order_data.get('customer_email'),
@@ -898,7 +898,7 @@ class EmailService:
                 <p><strong>Order ID:</strong> {order_data.get('order_id', '')}</p>
                 <p><strong>New Status:</strong> {new_status}</p>
                 <p>Track your order: <a href="https://raqibtech.com/track/{order_data.get('order_id', '')}">Click here</a></p>
-                <p>Thank you for choosing RaqibTech!</p>
+                <p>Thank you for choosing raqibtech!</p>
             </div>
             """
 
