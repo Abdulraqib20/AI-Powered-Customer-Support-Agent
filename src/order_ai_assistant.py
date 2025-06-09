@@ -18,6 +18,7 @@ Author: AI Assistant for Nigerian E-commerce Excellence
 import os
 import json
 import logging
+import psycopg2
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, asdict
@@ -181,6 +182,23 @@ class OrderAIAssistant:
 
         self.active_carts = {}  # In-memory cart storage (use Redis in production)
 
+        try:
+            from config.database_config import DATABASE_CONFIG
+            self.db_config = DATABASE_CONFIG
+            logger.info("✅ Database configuration loaded successfully")
+        except ImportError:
+            # Fallback database configuration
+            self.db_config = {
+                'host': os.getenv('DB_HOST', 'localhost'),
+                'port': os.getenv('DB_PORT', '5432'),
+                'database': os.getenv('DB_NAME', 'nigerian_ecommerce'),
+                'user': os.getenv('DB_USER', 'postgres'),
+                'password': os.getenv('DB_PASSWORD', 'oracle'),
+                'sslmode': os.getenv('DB_SSLMODE', 'prefer'),
+                'connect_timeout': int(os.getenv('DB_CONNECT_TIMEOUT', '10')),
+            }
+            logger.warning("⚠️ Using fallback database configuration")
+
         # Handle memory system - create a mock one if None is passed
         if memory_system is not None:
             self.memory_system = memory_system
@@ -192,6 +210,15 @@ class OrderAIAssistant:
                 def get_session_state(self, session_id): return None
                 def update_session_state(self, session_id, state): pass
             self.memory_system = MockMemorySystem()
+
+    def get_database_connection(self):
+        """🔧 CRITICAL FIX: Get database connection for product searches"""
+        try:
+            conn = psycopg2.connect(**self.db_config)
+            return conn
+        except Exception as e:
+            logger.error(f"❌ Database connection error: {e}")
+            raise Exception(f"Database connection failed: {e}")
 
     def parse_order_intent(self, user_message: str) -> Dict[str, Any]:
         """🧠 Parse user message to determine shopping intent"""
@@ -322,6 +349,8 @@ class OrderAIAssistant:
             (r'place\s*(my|the)?\s*order', 'place_order'),
             (r'confirm\s*(my|the)?\s*order', 'place_order'),
             (r'complete\s*(my|the)?\s*order', 'place_order'),
+            (r'proceed\s*to\s*(order|ordering)', 'place_order'),  # Added this pattern
+            (r'proceed\s*with\s*(my|the)?\s*order', 'place_order'),  # Added this pattern
             (r'proceed\s*to\s*che[ck]*out', 'checkout'),  # Handles "chekout", "checkout", "cheout" etc.
             (r'go\s*to\s*che[ck]*out', 'checkout'),
             (r'che[ck]*out\s*now', 'checkout'),
@@ -436,13 +465,32 @@ class OrderAIAssistant:
     def extract_product_info(self, user_message: str, product_name_hint: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """🔍 Extract product information from user message with enhanced context awareness"""
 
-        # 🔧 CRITICAL FIX: Handle pronoun resolution for "it", "this", "that"
+        # 🔧 ENHANCED PRONOUN DETECTION: Handle "it", "this", "that" anywhere in the message
         pronouns = ['it', 'this', 'that', 'them']
         user_message_lower = user_message.lower().strip()
+        words = user_message_lower.split()
 
-        # Check if user is using a pronoun to refer to a previously mentioned product
-        if any(pronoun == user_message_lower.split()[0] for pronoun in pronouns if user_message_lower.split()):
-            logger.info(f"🎯 PRONOUN DETECTED: '{user_message}' - checking for last mentioned product context")
+        # Check for contextual phrases that indicate user is referring to a previously mentioned product
+        context_indicators = [
+            'add it to cart',
+            'add to cart',
+            'buy it',
+            'get it',
+            'want it',
+            'need it',
+            'add them to cart',
+            'pieces and add',
+            'quantity and add'
+        ]
+
+        is_referring_to_context = (
+            any(pronoun in words for pronoun in pronouns) or  # Contains pronouns
+            any(indicator in user_message_lower for indicator in context_indicators) or  # Contains context indicators
+            (('add' in words or 'buy' in words) and len([w for w in words if len(w) >= 3]) <= 3)  # Short add/buy commands
+        )
+
+        if is_referring_to_context:
+            logger.info(f"🎯 CONTEXT REFERENCE DETECTED: '{user_message}' - checking for last mentioned product")
 
             # Try to get last mentioned product from session context
             if hasattr(self, '_last_mentioned_product') and self._last_mentioned_product:
@@ -469,8 +517,8 @@ class OrderAIAssistant:
             except Exception as e:
                 logger.warning(f"⚠️ Failed to retrieve product context from database: {e}")
 
-            # If no context, return None to prevent wrong product matching
-            logger.warning(f"⚠️ PRONOUN WITHOUT CONTEXT: '{user_message}' but no previous product context found")
+            # If it's clearly a context reference but no context found, return None
+            logger.warning(f"⚠️ CONTEXT REFERENCE WITHOUT CONTEXT: '{user_message}' but no previous product context found")
             return None
 
         if product_name_hint:
@@ -513,19 +561,19 @@ class OrderAIAssistant:
 
         # Clean up common stop words from product name
         words_to_filter = ['add', 'to', 'cart', 'buy', 'purchase', 'get', 'me', 'want', 'to', 'order',
-                          'please', 'can', 'you', 'i', 'my', 'the', 'a', 'an']
+                          'please', 'can', 'you', 'i', 'my', 'the', 'a', 'an', 'give', 'pieces', 'and',
+                          'put', 'place', 'proceed', 'checkout', 'confirm', 'continue', 'quantity', 'amount']
 
         # 🔧 ENHANCED FILTERING: Split and filter words, but preserve meaningful product terms
         # Don't filter if the word is longer than 3 characters or is a known product term
-        important_product_terms = ['phone', 'rice', 'dress', 'shoe', 'bag', 'book', 'oil', 'cream']
+        important_product_terms = ['phone', 'rice', 'dress', 'shoe', 'bag', 'book', 'oil', 'cream', 'milk', 'bread', 'fish', 'meat']
 
         cleaned_words = []
         for word in target_product_name.lower().split():
             # Keep the word if:
-            # 1. It's longer than 3 characters, OR
-            # 2. It's an important product term, OR
-            # 3. It's not in the common filter list
-            if (len(word) >= 3 and word not in words_to_filter) or word in important_product_terms:
+            # 1. It's longer than 3 characters AND not in filter list, OR
+            # 2. It's an important product term
+            if ((len(word) >= 3 and word not in words_to_filter) or word in important_product_terms):
                 cleaned_words.append(word)
 
         if not cleaned_words:
@@ -844,6 +892,10 @@ class OrderAIAssistant:
     ) -> Dict[str, Any]:
         """🎯 Process shopping conversation with intelligent context awareness using passed SessionState"""
 
+        # 🔧 CRITICAL FIX: Store session information for context tracking
+        self._current_session_id = session_id
+        self._current_customer_id = customer_id
+
         # 🔧 CRITICAL FIX: Set session context for product extraction
         self._current_session_id = session_id
         self._current_customer_id = customer_id
@@ -1014,8 +1066,35 @@ class OrderAIAssistant:
                 logger.info(f"Affirmative confirmation. Current stage: {active_session_state.conversation_stage}")
                 action_taken = False
 
-                # 🔧 CRITICAL FIX: Handle "yes, add to cart" context-aware responses
-                if active_session_state.last_product_mentioned and active_session_state.conversation_stage in ['browsing', 'product_discussed']:
+                # 🔧 CRITICAL FIX: Handle checkout flow confirmations FIRST (prioritize checkout flow)
+                if active_session_state.conversation_stage == 'awaiting_address_confirmation' and active_session_state.delivery_address:
+                    active_session_state.conversation_stage = 'address_set'
+                    checkout_result = self.progressive_checkout(user_message, customer_id, active_session_state)
+                    response_data.update(checkout_result)
+                    response_data['message'] = f"✅ Address confirmed! " + response_data.get('message', '')
+                    action_taken = True
+
+                elif active_session_state.conversation_stage == 'awaiting_payment_confirmation' and active_session_state.payment_method:
+                    active_session_state.conversation_stage = 'payment_method_set'
+                    checkout_result = self.progressive_checkout(user_message, customer_id, active_session_state)
+                    response_data.update(checkout_result)
+                    response_data['message'] = f"✅ Payment confirmed! " + response_data.get('message', '')
+                    action_taken = True
+
+                elif active_session_state.conversation_stage == 'awaiting_order_confirmation':
+                    logger.info("Affirmative for order confirmation. Proceeding to place order.")
+                    checkout_result = self.progressive_checkout(user_message, customer_id, active_session_state)
+                    response_data.update(checkout_result)
+                    action_taken = True
+
+                # Handle general checkout progression when user says "yes" during checkout flow
+                elif active_session_state.conversation_stage in ['address_set_need_payment', 'checkout_initiated_need_address']:
+                    checkout_result = self.progressive_checkout(user_message, customer_id, active_session_state)
+                    response_data.update(checkout_result)
+                    action_taken = True
+
+                # Handle "yes, add to cart" context-aware responses
+                elif active_session_state.last_product_mentioned and active_session_state.conversation_stage in ['browsing', 'product_discussed']:
                     logger.info(f"🎯 CONTEXT-AWARE ADD TO CART: Using last mentioned product: {active_session_state.last_product_mentioned.get('product_name')}")
                     product_info = active_session_state.last_product_mentioned
 
@@ -1045,34 +1124,9 @@ class OrderAIAssistant:
                             response_data['message'] = f"😔 Sorry, {product_info['product_name']} is currently out of stock."
                             action_taken = True
 
-                elif active_session_state.conversation_stage == 'awaiting_address_confirmation' and active_session_state.delivery_address:
-                    active_session_state.conversation_stage = 'address_set'
-                    self._save_session_state(session_id, active_session_state)
-                    checkout_result = self.progressive_checkout(user_message, customer_id, active_session_state)
-                    response_data.update(checkout_result)
-                    response_data['message'] = f"✅ Delivery address confirmed: {active_session_state.delivery_address.get('full_address')}. " + response_data.get('message', '')
-                    action_taken = True
-
-                elif active_session_state.conversation_stage == 'awaiting_payment_confirmation' and active_session_state.payment_method:
-                    active_session_state.conversation_stage = 'payment_method_set'
-                    self._save_session_state(session_id, active_session_state)
-                    checkout_result = self.progressive_checkout(user_message, customer_id, active_session_state)
-                    response_data.update(checkout_result)
-                    response_data['message'] = f"✅ Payment method confirmed: {active_session_state.payment_method}. " + response_data.get('message', '')
-                    action_taken = True
-
-                elif active_session_state.conversation_stage == 'awaiting_order_confirmation':
-                    logger.info("Affirmative for order confirmation. Proceeding to place order.")
-                    # progressive_checkout will handle the actual order placement if conditions are met
-                    checkout_result = self.progressive_checkout(user_message, customer_id, active_session_state)
-                    response_data.update(checkout_result)
-                    action_taken = True
-
-                if not action_taken: # Generic "yes", unsure what it's for, or fell through
+                if not action_taken: # Generic "yes", unsure what it's for
                     response_data['message'] = "Okay! What would you like to do next? You can view your cart, add more items, or ask for help."
                     response_data['action'] = 'generic_affirmation'
-                    # No specific state change here, but ensure current state is saved if it was somehow modified by a prior missed step
-                    # self._save_session_state(session_id, active_session_state) # Already saved at the end of method
 
             elif intent == 'negative_rejection':
                 logger.info(f"Negative rejection. Current stage: {active_session_state.conversation_stage}")
@@ -1482,6 +1536,32 @@ Your order has been successfully placed! 🚀
 We'll send you updates as it progresses.
 
 Thank you for shopping with raqibtech.com! 💙"""
+
+    def _get_cart_summary(self, cart: Dict) -> Dict[str, Any]:
+        """📋 Generate cart summary from cart data"""
+        return {
+            'items': cart['items'],
+            'total_items': sum(item['quantity'] for item in cart['items']),
+            'subtotal': cart['subtotal'],
+            'subtotal_formatted': f"₦{cart['subtotal']:,.2f}"
+        }
+
+    def _format_order_summary(self, calculation: Dict) -> str:
+        """💰 Format order calculation into readable summary"""
+        try:
+            if calculation.get('success'):
+                return f"""
+💰 **Order Summary**
+• Subtotal: ₦{calculation.get('subtotal', 0):,.2f}
+• Delivery: ₦{calculation.get('delivery_fee', 0):,.2f}
+• Total: ₦{calculation.get('total_amount', 0):,.2f}
+"""
+            else:
+                return f"Error calculating order: {calculation.get('error', 'Unknown error')}"
+        except Exception as e:
+            return f"Error formatting summary: {str(e)}"
+
+
 
 # Global instance for use in Flask app
 # Note: This will be created with a memory system when needed

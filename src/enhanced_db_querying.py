@@ -444,7 +444,7 @@ Nigerian E-commerce Context:
 - Platform: raqibtech.com
 - Currency: Nigerian Naira (₦)
 - Geographic Focus: 36 Nigerian states + FCT
-- Products: Electronics, Fashion, Beauty, Computing, Automotive, Books
+- Products: 'Automotive', 'Beauty', 'Books', 'Computing', 'Electronics', 'Fashion', 'Food Items', 'Home & Kitchen',
 - Payment Methods: Pay on Delivery, Bank Transfer, Card, RaqibTechPay
 
 {time_context}
@@ -3442,6 +3442,51 @@ How can I help you with your raqibtech.com experience today? 🌟"""
 
                             if shopping_result.get('success') and not shopping_result.get('should_redirect'):
                                 enhanced_response_text = self._generate_shopping_response(shopping_result)
+
+                                # 🆕 CRITICAL FIX: Store shopping conversation in database for persistence
+                                try:
+                                    user_id_for_shopping = session_context.get('user_id', 'anonymous') if session_context else 'anonymous'
+                                    self.store_shopping_conversation_context(
+                                        user_query=user_query,
+                                        response=enhanced_response_text,
+                                        user_id=user_id_for_shopping,
+                                        session_id=session_id,
+                                        shopping_data=shopping_result
+                                    )
+                                except Exception as e_shopping_db_store:
+                                    logger.warning(f"⚠️ Failed to store shopping context in database: {e_shopping_db_store}")
+
+                                # 🧠 Store in memory system if available
+                                if self.memory_system:
+                                    try:
+                                        turn_entities_for_log = {
+                                            'query_type': 'shopping_action',
+                                            'intent': shopping_result.get('action', 'shopping_success'),
+                                            'shopping_data': shopping_result
+                                        }
+                                        self.memory_system.store_conversation_turn(
+                                            session_id=session_id,
+                                            user_input=user_query,
+                                            ai_response=enhanced_response_text,
+                                            intent=shopping_result.get('action', 'shopping_success'),
+                                            entities=turn_entities_for_log,
+                                            session_state=session_context
+                                        )
+                                        logger.info(f"🧠 Shopping success logged in world-class memory for action: {shopping_result.get('action')}")
+                                    except Exception as e_mem_store_success:
+                                        logger.warning(f"⚠️ Failed to log successful shopping action: {e_mem_store_success}")
+
+                                return {
+                                    'success': True,
+                                    'response': enhanced_response_text,
+                                    'query_type': 'shopping_action',
+                                    'execution_time': f"{time.time() - start_time:.3f}s",
+                                    'shopping_action': shopping_result.get('action'),
+                                    'shopping_data': shopping_result,
+                                    'sql_query': None,
+                                    'results_count': 1
+                                }
+
                             elif shopping_result.get('require_specific_product'):
                                 # 🔧 CRITICAL FIX: Prevent AI hallucination when no product found
                                 enhanced_response_text = shopping_result.get('message', "I couldn't find that specific product. Please mention the specific product name you'd like to add to your cart.")
@@ -4748,11 +4793,75 @@ For all customer queries, always:
 3. Encourage tier progression when appropriate
 4. Be helpful and encouraging about account management
 
+=== COMPREHENSIVE PRODUCT CATALOG KNOWLEDGE ===
+
+**FOOD & STAPLES CATEGORY:**
+• **Grains & Cereals:** Golden Penny Semovita, Honeywell Wheat Flour, Mama Gold Rice (50kg), Cap Rice (25kg), Dangote Spaghetti, Cassava Flour (Garri)
+• **Proteins:** Titus Fish (Frozen), Chicken (Whole), Beef (Fresh Cut), Dried Fish (Stockfish), Smoked Turkey, Corned Beef, Sardine in Tomato Sauce
+• **Spices & Seasonings:** Maggi Cubes, Curry Powder, Thyme Leaves, Scotch Bonnet Pepper (Ata Rodo), Locust Beans (Iru)
+• **Cooking Oils:** Devon Kings Vegetable Oil, Red Palm Oil, Groundnut Oil, Coconut Oil (Virgin)
+• **Beverages:** Milo Chocolate Drink, Bournvita, Lipton Tea Bags, Peak Milk Powder, Hollandia Yoghurt
+• **Snacks:** Plantain Chips, Chin Chin, Groundnut (Roasted), Kuli Kuli, Coconut Candy
+• **Fresh Produce:** Yam Tuber (Medium), Sweet Potato, Plantain (Bunch)
+• **Canned Foods:** Sweet Corn (Canned), Honey
+
+**FASHION & APPAREL:**
+• **Men's Fashion:** Polo shirts, dress shirts, traditional wear, shoes, belts, wallets
+• **Women's Fashion:** Dresses, blouses, traditional wear, shoes, handbags, jewelry
+• **Unisex Items:** Jeans, t-shirts, sneakers, watches, accessories
+
+**ELECTRONICS & GADGETS:**
+• **Mobile Phones:** Latest smartphones, accessories, cases, chargers
+• **Computing:** Laptops, tablets, computer accessories, software
+• **Audio/Visual:** Headphones, speakers, smart TVs, gaming devices
+• **Home Appliances:** Refrigerators, washing machines, microwaves, fans
+
+**BEAUTY & PERSONAL CARE:**
+• **Skincare:** Moisturizers, cleansers, sunscreens, anti-aging products
+• **Haircare:** Shampoos, conditioners, styling products, hair treatments
+• **Cosmetics:** Makeup, nail polish, beauty tools, fragrances
+• **Personal Hygiene:** Soaps, deodorants, oral care products
+
+**HOME & LIVING:**
+• **Furniture:** Chairs, tables, beds, storage solutions
+• **Decor:** Wall art, lighting, rugs, curtains, decorative items
+• **Kitchen:** Cookware, utensils, small appliances, dining sets
+• **Bedding:** Sheets, pillows, comforters, mattresses
+
+**BOOKS & STATIONERY:**
+• **Educational:** Textbooks, workbooks, reference materials
+• **Fiction/Non-fiction:** Novels, biographies, self-help books
+• **Stationery:** Notebooks, pens, markers, office supplies
+
+**HEALTH & WELLNESS:**
+• **Supplements:** Vitamins, minerals, protein powders
+• **Medical Supplies:** First aid, thermometers, health monitors
+• **Fitness:** Exercise equipment, yoga mats, sports gear
+
+**PRODUCT SEARCH INTELLIGENCE:**
+When customers mention abbreviated terms, map them intelligently:
+• "spag/spagh" → Dangote Spaghetti 500g
+• "rice" → Mama Gold Rice or Cap Rice
+• "oil" → Devon Kings Vegetable Oil, Red Palm Oil, etc.
+• "milk" → Peak Milk Powder, Hollandia Yoghurt
+• "phone" → Mobile phones category
+• "laptop" → Computing category
+
+**PRICING RANGES (Nigerian Naira ₦):**
+• Food items: ₦1,500 - ₦85,000 (Rice 50kg being highest)
+• Electronics: ₦15,000 - ₦500,000+
+• Fashion: ₦5,000 - ₦75,000
+• Beauty: ₦2,000 - ₦25,000
+• Books: ₦3,000 - ₦15,000
+
 CRITICAL RULES:
 - ALWAYS exclude returned orders when calculating spending: AND order_status != 'Returned'
 - Platinum tier threshold is EXACTLY ₦2,000,000 (TWO MILLION NAIRA) - NEVER use ₦1,000,000
 - Gold tier threshold is ₦500,000, Silver tier threshold is ₦100,000
 - Never show spending amounts that include returned orders
+- When users ask about food, show food products. When they say "spag", understand they mean spaghetti
+- Always check product availability with: AND in_stock = TRUE
+- Use intelligent product matching for abbreviations and common terms
 
 Current timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 Database schema: Customers, Orders, Products, Order_Items, Customer_Conversations, Analytics tables available.
