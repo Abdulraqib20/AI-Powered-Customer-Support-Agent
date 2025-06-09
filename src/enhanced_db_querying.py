@@ -87,9 +87,14 @@ NIGERIAN_PAYMENT_METHODS = [
     'Pay on Delivery', 'Bank Transfer', 'Card', 'RaqibTechPay'
 ]
 
+# # 🆕 PRODUCT CATEGORIES for Nigerian E-commerce
+# NIGERIAN_PRODUCT_CATEGORIES = [
+#     'Electronics', 'Fashion', 'Beauty', 'Computing', 'Automotive', 'Books'
+# ]
+
 # 🆕 PRODUCT CATEGORIES for Nigerian E-commerce
 NIGERIAN_PRODUCT_CATEGORIES = [
-    'Electronics', 'Fashion', 'Beauty', 'Computing', 'Automotive', 'Books'
+    'Automotive', 'Beauty', 'Books', 'Computing', 'Electronics', 'Fashion', 'Food Items', 'Home & Kitchen',
 ]
 
 # 🆕 POPULAR BRANDS in Nigerian Market
