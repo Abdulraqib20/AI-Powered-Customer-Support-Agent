@@ -310,6 +310,9 @@ class EnhancedDatabaseQuerying:
             logger.warning(f"⚠️ Redis not available for conversation memory: {e}")
             self.redis_client = None
 
+        # 🔧 CRITICAL FIX: Initialize in-memory store for Redis fallback
+        self._memory_store = {}
+
         logger.info("🚀 Enhanced Database Querying System initialized successfully")
 
     def classify_query_intent(self, user_query: str, conversation_history: List[Dict] = None) -> Tuple[QueryType, Dict[str, Any]]:
@@ -337,6 +340,50 @@ class EnhancedDatabaseQuerying:
 
                 # If no specific new entity found, assume it's a continuation of the same query type
                 return QueryType(last_turn['query_type']), new_entities
+
+        # 🔧 CRITICAL FIX: Handle order-related follow-up questions
+        if conversation_history:
+            # Check if the previous query was about orders
+            last_turn = conversation_history[0]
+            if last_turn.get('query_type') == 'ORDER_ANALYTICS' or 'order' in last_turn.get('user_query', '').lower():
+                # Check if current query is asking about contents/items in the order
+                order_content_keywords = [
+                    'what are in', 'what is in', 'what\'s in', 'contents of', 'items in',
+                    'products in', 'food items', 'what did i order', 'what did i buy',
+                    'show me the items', 'list the items', 'what products'
+                ]
+
+                if any(keyword in query_lower for keyword in order_content_keywords):
+                    logger.info(f"🎯 ORDER FOLLOW-UP DETECTED: User asking about order contents after order query")
+
+                    # Extract order ID from previous conversation
+                    order_id = None
+                    if 'execution_result' in last_turn and last_turn['execution_result']:
+                        for result in last_turn['execution_result']:
+                            if isinstance(result, dict) and 'order_id' in result:
+                                order_id = result['order_id']
+                                break
+
+                    # Also check if order ID was mentioned in the response
+                    if not order_id and 'response' in last_turn:
+                        import re
+                        order_match = re.search(r'order\s+#?(\d+)', last_turn['response'], re.IGNORECASE)
+                        if order_match:
+                            order_id = order_match.group(1)
+
+                    if order_id:
+                        entities['order_id'] = order_id
+                        entities['order_content_inquiry'] = True
+                        logger.info(f"🎯 CONTEXT: User asking about contents of order #{order_id}")
+                        return QueryType.ORDER_ANALYTICS, entities
+                    else:
+                        logger.warning("⚠️ Could not extract order ID from previous conversation")
+
+                # Check if asking about recent/last order specifically
+                elif any(keyword in query_lower for keyword in ['recent order', 'last order', 'latest order', 'most recent']):
+                    entities['recent_order_inquiry'] = True
+                    logger.info(f"🎯 CONTEXT: User asking about recent order details")
+                    return QueryType.ORDER_ANALYTICS, entities
 
         # Initialize entities dictionary with all required fields
         entities = {

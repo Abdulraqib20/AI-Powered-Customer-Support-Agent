@@ -10,6 +10,11 @@ def setup_logging():
     log_dir = Path(__file__).parent / "logs"
     log_dir.mkdir(exist_ok=True)
 
+    # 🔧 CRITICAL FIX: Clear existing handlers to prevent duplicate logs
+    for logger_name in ['customer_support_app', 'api_usage', 'app_errors', 'werkzeug', 'flask.app']:
+        logger = logging.getLogger(logger_name)
+        logger.handlers.clear()  # Clear existing handlers
+
     # Logging configuration
     config = {
         'version': 1,
