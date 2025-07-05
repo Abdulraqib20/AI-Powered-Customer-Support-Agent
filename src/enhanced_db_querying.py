@@ -321,6 +321,63 @@ class EnhancedDatabaseQuerying:
         """
         query_lower = user_query.lower()
 
+        # 🔧 CRITICAL FIX: Handle order-related follow-up questions
+        if conversation_history:
+            # Check if the previous query was about orders
+            last_turn = conversation_history[0]
+            if last_turn.get('query_type') == 'ORDER_ANALYTICS' or 'order' in last_turn.get('user_query', '').lower():
+                # Check if current query is asking about contents/items in the order
+                order_content_keywords = [
+                    'what are in', 'what is in', 'what\'s in', 'contents of', 'items in',
+                    'products in', 'food items', 'what did i order', 'what did i buy',
+                    'show me the items', 'list the items', 'what products',
+                    'what are the items', 'what items are', 'which products',
+                    'contents', 'what\'s inside', 'what am i getting'
+                ]
+
+                if any(keyword in query_lower for keyword in order_content_keywords):
+                    logger.info(f"🎯 ORDER FOLLOW-UP DETECTED: User asking about order contents after order query")
+
+                    # Initialize entities
+                    entities = {
+                        'order_id': None,
+                        'order_content_inquiry': True,
+                        'customer_id': None,
+                        'product_categories': [],
+                        'brands': [],
+                        'product_keywords': [],
+                        'price_query': False,
+                        'inventory_query': False,
+                        'shopping_intent': False,
+                        'recommendation_intent': False,
+                        'max_budget': None,
+                        'delivery_date': None,
+                        'payment_method': None,
+                        'order_status': None,
+                        'geographic_location': None,
+                        'needs_customer_lookup': False
+                    }
+
+                    # Extract order ID from previous conversation
+                    order_id = None
+                    if 'execution_result' in last_turn and last_turn['execution_result']:
+                        for result in last_turn['execution_result']:
+                            if isinstance(result, dict) and 'order_id' in result:
+                                order_id = result['order_id']
+                                break
+
+                    # Also check if order ID was mentioned in the response
+                    if not order_id and 'response' in last_turn:
+                        import re
+                        order_match = re.search(r'order\s+#?(\d+)', last_turn['response'], re.IGNORECASE)
+                        if order_match:
+                            order_id = order_match.group(1)
+
+                    if order_id:
+                        entities['order_id'] = order_id
+                        logger.info(f"🎯 CONTEXT: User asking about contents of order #{order_id}")
+                        return QueryType.ORDER_ANALYTICS, entities
+
         # 🚨 ADMIN CONTEXT-AWARENESS FIX: Handle short, contextual follow-up queries from admins
         if conversation_history and len(user_query.split()) < 5: # Short query
             last_turn = conversation_history[0]
@@ -341,49 +398,7 @@ class EnhancedDatabaseQuerying:
                 # If no specific new entity found, assume it's a continuation of the same query type
                 return QueryType(last_turn['query_type']), new_entities
 
-        # 🔧 CRITICAL FIX: Handle order-related follow-up questions
-        if conversation_history:
-            # Check if the previous query was about orders
-            last_turn = conversation_history[0]
-            if last_turn.get('query_type') == 'ORDER_ANALYTICS' or 'order' in last_turn.get('user_query', '').lower():
-                # Check if current query is asking about contents/items in the order
-                order_content_keywords = [
-                    'what are in', 'what is in', 'what\'s in', 'contents of', 'items in',
-                    'products in', 'food items', 'what did i order', 'what did i buy',
-                    'show me the items', 'list the items', 'what products'
-                ]
 
-                if any(keyword in query_lower for keyword in order_content_keywords):
-                    logger.info(f"🎯 ORDER FOLLOW-UP DETECTED: User asking about order contents after order query")
-
-                    # Extract order ID from previous conversation
-                    order_id = None
-                    if 'execution_result' in last_turn and last_turn['execution_result']:
-                        for result in last_turn['execution_result']:
-                            if isinstance(result, dict) and 'order_id' in result:
-                                order_id = result['order_id']
-                                break
-
-                    # Also check if order ID was mentioned in the response
-                    if not order_id and 'response' in last_turn:
-                        import re
-                        order_match = re.search(r'order\s+#?(\d+)', last_turn['response'], re.IGNORECASE)
-                        if order_match:
-                            order_id = order_match.group(1)
-
-                    if order_id:
-                        entities['order_id'] = order_id
-                        entities['order_content_inquiry'] = True
-                        logger.info(f"🎯 CONTEXT: User asking about contents of order #{order_id}")
-                        return QueryType.ORDER_ANALYTICS, entities
-                    else:
-                        logger.warning("⚠️ Could not extract order ID from previous conversation")
-
-                # Check if asking about recent/last order specifically
-                elif any(keyword in query_lower for keyword in ['recent order', 'last order', 'latest order', 'most recent']):
-                    entities['recent_order_inquiry'] = True
-                    logger.info(f"🎯 CONTEXT: User asking about recent order details")
-                    return QueryType.ORDER_ANALYTICS, entities
 
         # Initialize entities dictionary with all required fields
         entities = {
@@ -679,6 +694,14 @@ Classify this query and extract relevant entities. Return JSON format:
         🔍 Generate Nigerian context-aware SQL queries using AI
         """
 
+        # 🚨 CRITICAL: Handle order content inquiries FIRST - bypass AI generation entirely
+        if entities.get('order_content_inquiry') and entities.get('order_id'):
+            order_id = entities.get('order_id')
+            print_log(f"🎯 ORDER CONTENT INQUIRY: Generating specific order details SQL for order #{order_id}", 'info')
+            return f"""SELECT o.order_id, o.product_category, o.total_amount, o.order_status, o.payment_method, o.delivery_date, o.created_at
+                      FROM orders o
+                      WHERE o.order_id = {order_id}"""
+
         # 🚨 EARLY INTERCEPT: Platinum tier "how much more" queries - NUCLEAR OPTION
         customer_id = entities.get('customer_id') or entities.get('context_customer_id')
         if (customer_id and 'platinum' in user_query.lower() and
@@ -812,6 +835,7 @@ EXAMPLES:
 - "Track my order" with customer_id=1503: SELECT * FROM orders WHERE customer_id = 1503
 - "Order history" with customer_id=1503: SELECT o.*, c.name FROM orders o JOIN customers c ON o.customer_id = c.customer_id WHERE o.customer_id = 1503
 - "Track order 12345": SELECT * FROM orders WHERE order_id = 12345
+- "What are in the food items?" with order_content_inquiry=True, order_id=34662: SELECT o.order_id, o.product_category, o.total_amount, o.order_status, o.payment_method, o.delivery_date FROM orders o WHERE o.order_id = 34662
 - "When did customer 1503 join us" with context_customer_id=1503: SELECT created_at FROM customers WHERE customer_id = 1503
 - "What is their account tier" with context_customer_id=1503: SELECT account_tier FROM customers WHERE customer_id = 1503
 - "When did this customer join" with context_customer_id=1503, customer_id=1505: SELECT created_at FROM customers WHERE customer_id = 1503
