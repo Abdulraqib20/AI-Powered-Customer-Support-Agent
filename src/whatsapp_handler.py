@@ -180,9 +180,14 @@ class WhatsAppBusinessHandler:
             # Process message with AI assistant
             ai_response = self._process_with_ai(message.content, customer_id, session_id, message.from_number)
 
+            # DEBUG: Log the full AI response structure
+            logger.info(f"🔍 DEBUG: Full AI response structure: {ai_response}")
+            logger.info(f"🔍 DEBUG: AI response keys: {list(ai_response.keys()) if ai_response else 'None'}")
+
             # Send response back to WhatsApp
             if ai_response and ai_response.get('success'):
-                response_message = ai_response.get('message', 'I understand. How can I help you?')
+                response_message = ai_response.get('response', 'I understand. How can I help you?')
+                logger.info(f"🔍 DEBUG: Extracted response_message: '{response_message}'")
                 sent_message = self._send_whatsapp_message(message.from_number, response_message, ai_response)
 
                 if sent_message:
