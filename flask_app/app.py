@@ -61,13 +61,22 @@ from src.session_manager import session_manager
 # Add src directory to path for imports
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
+# Initialize loggers FIRST before any conditional imports
+app_logger, api_logger, error_logger = setup_logging()
+
 # 🆕 Import new systems
 from src.recommendation_engine import ProductRecommendationEngine
 from src.order_management import OrderManagementSystem
 from src.email_service import EmailService
 
-# Initialize loggers FIRST before any conditional imports
-app_logger, api_logger, error_logger = setup_logging()
+# 📱 WhatsApp Business API integration
+try:
+    from src.whatsapp_handler import get_whatsapp_handler
+    app_logger.info("✅ WhatsApp Business API handler imported successfully")
+    WHATSAPP_AVAILABLE = True
+except ImportError as e:
+    app_logger.warning(f"⚠️ WhatsApp Business API handler not available: {e}")
+    WHATSAPP_AVAILABLE = False
 
 # Add import for the enhanced customer support recommendation system
 try:
@@ -294,6 +303,9 @@ def before_request():
     # Skip session handling for static files
     if request.endpoint and request.endpoint.startswith('static'):
         return
+
+    # Log all incoming requests for debugging
+    app_logger.info(f"🌐 {request.method} {request.path} - {request.remote_addr}")
 
     # 🔧 CRITICAL FIX: Ensure session persistence
     session.permanent = True
@@ -3509,6 +3521,247 @@ def debug_session():
         }), 500
 
 
+# 📱 ================================
+# WHATSAPP BUSINESS API ENDPOINTS
+# ================================
+
+@app.route('/webhook/whatsapp', methods=['GET'])
+def whatsapp_webhook_verify():
+    """Verify WhatsApp webhook for Meta Business API"""
+    try:
+        if not WHATSAPP_AVAILABLE:
+            return jsonify({'error': 'WhatsApp integration not available'}), 503
+
+        # Get verification parameters
+        mode = request.args.get('hub.mode')
+        token = request.args.get('hub.verify_token')
+        challenge = request.args.get('hub.challenge')
+
+        app_logger.info(f"📱 WhatsApp webhook verification request: mode={mode}, token={'***' if token else None}")
+
+        # Verify webhook with WhatsApp handler
+        whatsapp_handler = get_whatsapp_handler()
+        result = whatsapp_handler.verify_webhook(mode, token, challenge)
+
+        if result:
+            app_logger.info("✅ WhatsApp webhook verified successfully")
+            return result  # Return challenge string
+        else:
+            app_logger.warning("❌ WhatsApp webhook verification failed")
+            return 'Verification failed', 403
+
+    except Exception as e:
+        app_logger.error(f"❌ WhatsApp webhook verification error: {e}")
+        return jsonify({'error': 'Verification failed'}), 500
+
+
+@app.route('/webhook/whatsapp', methods=['POST'])
+def whatsapp_webhook_handler():
+    """Handle incoming WhatsApp messages and events"""
+    try:
+        if not WHATSAPP_AVAILABLE:
+            return jsonify({'error': 'WhatsApp integration not available'}), 503
+
+        # Get webhook data
+        webhook_data = request.get_json()
+
+        if not webhook_data:
+            return jsonify({'error': 'No data received'}), 400
+
+        app_logger.info(f"📱 Received WhatsApp webhook data: {len(json.dumps(webhook_data))} bytes")
+
+        # Process with WhatsApp handler
+        whatsapp_handler = get_whatsapp_handler()
+        result = whatsapp_handler.process_webhook_data(webhook_data)
+
+        if result.get('success'):
+            app_logger.info(f"✅ WhatsApp webhook processed: {result.get('processed_messages', 0)} messages")
+            return jsonify({
+                'status': 'success',
+                'processed_messages': result.get('processed_messages', 0)
+            })
+        else:
+            app_logger.error(f"❌ WhatsApp webhook processing failed: {result.get('error')}")
+            return jsonify({
+                'status': 'error',
+                'error': result.get('error', 'Unknown error')
+            }), 500
+
+    except Exception as e:
+        app_logger.error(f"❌ WhatsApp webhook handler error: {e}")
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/whatsapp/send-message', methods=['POST'])
+def send_whatsapp_message():
+    """Send a WhatsApp message (for testing and admin use)"""
+    try:
+        if not WHATSAPP_AVAILABLE:
+            return jsonify({'error': 'WhatsApp integration not available'}), 503
+
+        # Check if user is authenticated (optional security check)
+        if not session.get('user_authenticated'):
+            return jsonify({'error': 'Authentication required'}), 401
+
+        data = request.get_json()
+        to_number = data.get('to_number')
+        message = data.get('message')
+
+        if not to_number or not message:
+            return jsonify({'error': 'to_number and message are required'}), 400
+
+        # Send message via WhatsApp handler
+        whatsapp_handler = get_whatsapp_handler()
+        result = whatsapp_handler._send_whatsapp_message(to_number, message)
+
+        if result:
+            app_logger.info(f"✅ WhatsApp message sent to {to_number}")
+            return jsonify({
+                'success': True,
+                'message_id': result.get('id'),
+                'status': 'sent'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to send message'
+            }), 500
+
+    except Exception as e:
+        app_logger.error(f"❌ Send WhatsApp message error: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/whatsapp/conversations', methods=['GET'])
+def get_whatsapp_conversations():
+    """Get WhatsApp conversations for the current user"""
+    try:
+        if not WHATSAPP_AVAILABLE:
+            return jsonify({'error': 'WhatsApp integration not available'}), 503
+
+        customer_id = session.get('customer_id')
+        if not customer_id:
+            return jsonify({'error': 'Authentication required'}), 401
+
+        # Get WhatsApp conversations from database
+        db_config = {
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'port': os.getenv('DB_PORT', '5432'),
+            'database': os.getenv('DB_NAME', 'nigerian_ecommerce'),
+            'user': os.getenv('DB_USER', 'postgres'),
+            'password': os.getenv('DB_PASSWORD', 'oracle'),
+        }
+
+        with psycopg2.connect(**db_config) as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("""
+                    SELECT wc.conversation_id, wc.phone_number, wc.conversation_status,
+                           wc.last_message_time, wc.created_at,
+                           COUNT(wm.message_id) as message_count
+                    FROM whatsapp_conversations wc
+                    LEFT JOIN whatsapp_messages wm ON wc.conversation_id = wm.conversation_id
+                    WHERE wc.customer_id = %s
+                    GROUP BY wc.conversation_id, wc.phone_number, wc.conversation_status,
+                             wc.last_message_time, wc.created_at
+                    ORDER BY wc.last_message_time DESC
+                    LIMIT 20
+                """, (customer_id,))
+
+                conversations = []
+                for row in cursor.fetchall():
+                    conversations.append({
+                        'conversation_id': row['conversation_id'],
+                        'phone_number': row['phone_number'],
+                        'status': row['conversation_status'],
+                        'last_message_time': row['last_message_time'].isoformat(),
+                        'created_at': row['created_at'].isoformat(),
+                        'message_count': row['message_count']
+                    })
+
+                return jsonify({
+                    'success': True,
+                    'conversations': conversations,
+                    'total': len(conversations)
+                })
+
+    except Exception as e:
+        app_logger.error(f"❌ Get WhatsApp conversations error: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/whatsapp/status', methods=['GET'])
+def whatsapp_integration_status():
+    """Get WhatsApp integration status and configuration"""
+    try:
+        status_info = {
+            'available': WHATSAPP_AVAILABLE,
+            'timestamp': datetime.now().isoformat()
+        }
+
+        if WHATSAPP_AVAILABLE:
+            whatsapp_handler = get_whatsapp_handler()
+            status_info.update({
+                'configured': whatsapp_handler.config.is_configured(),
+                'api_base_url': whatsapp_handler.config.api_base_url,
+                'developer_number': whatsapp_handler.config.developer_number,
+                'phone_number_id_set': bool(whatsapp_handler.config.phone_number_id),
+                'access_token_set': bool(whatsapp_handler.config.access_token),
+                'webhook_token_set': bool(whatsapp_handler.config.webhook_verify_token)
+            })
+
+        return jsonify(status_info)
+
+    except Exception as e:
+        app_logger.error(f"❌ WhatsApp status check error: {e}")
+        return jsonify({
+            'available': False,
+            'error': str(e)
+        }), 500
+
+
 if __name__ == '__main__':
+    # Configure Flask's built-in logger to show in console
+    import logging
+
+    # 🔧 CRITICAL FIX: Clear existing handlers to prevent duplicate logs
+    for logger_name in ['flask.app', 'werkzeug', 'customer_support_app']:
+        logger = logging.getLogger(logger_name)
+        logger.handlers.clear()  # Clear existing handlers
+
+    # Set Flask's logger to show request logs in console
+    werkzeug_logger = logging.getLogger('werkzeug')
+    werkzeug_logger.setLevel(logging.INFO)
+
+    # Ensure all Flask logs go to console
+    flask_logger = logging.getLogger('flask.app')
+    flask_logger.setLevel(logging.INFO)
+
+    # Create single console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    console_handler.setFormatter(formatter)
+
+    # Add single handler to each logger
+    werkzeug_logger.addHandler(console_handler)
+    flask_logger.addHandler(console_handler)
+
+    # Prevent propagation to avoid duplicate logs
+    werkzeug_logger.propagate = False
+    flask_logger.propagate = False
+
+    # Enable verbose logging for requests
+    app.logger.info("🚀 Starting Flask application with full logging enabled")
+    app.logger.info("📝 All HTTP requests will be logged to console")
+
     # Initialize session
     app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)
