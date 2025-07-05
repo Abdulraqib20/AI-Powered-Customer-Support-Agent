@@ -7,14 +7,17 @@ import os
 import json
 import requests
 import logging
+import re
+import uuid
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
 import psycopg2
 from psycopg2.extras import RealDictCursor
-import uuid
 import hashlib
 import hmac
 from dotenv import load_dotenv
+from src.order_image_generator import generate_order_image, cleanup_order_image
+import redis
 
 load_dotenv(override=True)
 
@@ -210,6 +213,13 @@ class WhatsAppBusinessHandler:
                         # For order confirmations, only do light cleaning (remove AI tokens but keep all content)
                         cleaned_response = self._light_clean_ai_response(response_message)
                         logger.info(f"🔍 DEBUG: Light cleaned order confirmation: '{cleaned_response}'")
+
+                        # Generate and send order confirmation image
+                        image_sent = self._send_order_confirmation_image(message.from_number, ai_response, customer_id)
+                        if image_sent:
+                            logger.info(f"📸 Order confirmation image sent successfully")
+                        else:
+                            logger.warning(f"⚠️ Failed to send order confirmation image, fallback to text only")
                     else:
                         cleaned_response = self._clean_ai_response(response_message)
                         logger.info(f"🔍 DEBUG: Cleaned response_message: '{cleaned_response}'")
@@ -336,6 +346,247 @@ class WhatsAppBusinessHandler:
 
         except Exception as e:
             logger.error(f"❌ Error sending WhatsApp message: {e}")
+            return None
+
+    def _send_order_confirmation_image(self, to_number: str, ai_response: Dict, customer_id: int = None) -> bool:
+        """Generate and send order confirmation image via WhatsApp"""
+        try:
+            # Extract order data from AI response with customer_id for database lookup
+            order_data = self._extract_order_data_for_image(ai_response, customer_id)
+
+            # Generate image using the sophisticated emoji generator
+            from .order_image_generator import generate_order_image, cleanup_order_image
+            image_path = generate_order_image(order_data)
+            if not image_path:
+                logger.error("❌ Failed to generate order confirmation image")
+                return False
+
+            # Send image via WhatsApp
+            success = self._send_whatsapp_image(to_number, image_path, "🎉 Order Confirmation - raqibtech.com")
+
+            # Clean up temporary image file
+            cleanup_order_image(image_path)
+
+            return success
+
+        except Exception as e:
+            logger.error(f"❌ Error sending order confirmation image: {e}")
+            return False
+
+    def _extract_order_data_for_image(self, ai_response: Dict, customer_id: int = None) -> Dict[str, Any]:
+        """Extract order data from AI response for image generation with database customer lookup"""
+        try:
+            # Get order ID from AI response
+            order_id = ai_response.get('order_id', 'N/A')
+
+            # The order_summary is a formatted string, we need to parse key information from it
+            order_summary_text = ai_response.get('order_summary', '')
+
+            # Get real customer name from database
+            customer_name = 'Valued Customer'  # Default fallback
+            if customer_id:
+                try:
+                    user_info = self._get_authenticated_user_info(customer_id)
+                    if user_info and user_info.get('name'):
+                        customer_name = user_info['name']
+                    else:
+                        # Fallback: try to get customer name from customers table
+                        with self.get_database_connection() as conn:
+                            with conn.cursor() as cursor:
+                                cursor.execute("SELECT name FROM customers WHERE customer_id = %s", (customer_id,))
+                                result = cursor.fetchone()
+                                if result and result[0]:
+                                    customer_name = result[0]
+                    logger.info(f"✅ Retrieved customer name from database: {customer_name}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Could not retrieve customer name from database: {e}")
+
+            # Parse basic info from the formatted text
+            order_data = {
+                'order_id': order_id,
+                'total_amount': 0,
+                'subtotal': 0,
+                'delivery_fee': 4350.0,  # Default delivery fee
+                'payment_method': 'Not specified',
+                'delivery_address': 'Not specified',
+                'status': 'Pending',  # Default status for placed orders
+                'customer_name': customer_name,  # Use real customer name from database
+                'items': []
+            }
+
+            if isinstance(order_summary_text, str):
+                # Extract total amount using regex
+                total_match = re.search(r'Total:\s*₦([\d,]+\.?\d*)', order_summary_text)
+                if total_match:
+                    total_str = total_match.group(1).replace(',', '')
+                    try:
+                        order_data['total_amount'] = float(total_str)
+                    except ValueError:
+                        order_data['total_amount'] = 0
+
+                # Extract payment method
+                payment_match = re.search(r'Payment:\s*([^\n]+)', order_summary_text)
+                if payment_match:
+                    order_data['payment_method'] = payment_match.group(1).strip()
+
+                # Extract delivery address
+                delivery_match = re.search(r'Delivery:\s*([^\n]+)', order_summary_text)
+                if delivery_match:
+                    order_data['delivery_address'] = delivery_match.group(1).strip()
+
+                # Extract items using regex - pattern: "• Product Name x{quantity} - ₦{price}"
+                item_pattern = r'•\s*([^x\n]+?)\s*x(\d+)\s*-\s*₦([\d,]+\.?\d*)'
+                items = re.findall(item_pattern, order_summary_text)
+
+                total_items_value = 0
+                for item_match in items:
+                    product_name = item_match[0].strip()
+                    quantity = int(item_match[1])
+                    subtotal_str = item_match[2].replace(',', '')
+                    try:
+                        subtotal = float(subtotal_str)
+                        price = subtotal / quantity if quantity > 0 else 0
+                        total_items_value += subtotal
+
+                        order_data['items'].append({
+                            'product_name': product_name,
+                            'quantity': quantity,
+                            'price': price,
+                            'subtotal': subtotal
+                        })
+                    except ValueError:
+                        # Skip invalid items
+                        continue
+
+                # Calculate subtotal and delivery fee
+                order_data['subtotal'] = total_items_value
+
+                # If total is available, calculate delivery fee
+                if order_data['total_amount'] > 0 and total_items_value > 0:
+                    calculated_delivery = order_data['total_amount'] - total_items_value
+                    if calculated_delivery > 0:
+                        order_data['delivery_fee'] = calculated_delivery
+
+            # Ensure we have at least one item for display
+            if not order_data['items']:
+                order_data['items'] = [{
+                    'product_name': 'Order Item',
+                    'quantity': 1,
+                    'price': max(0, order_data['total_amount'] - order_data['delivery_fee']),
+                    'subtotal': max(0, order_data['total_amount'] - order_data['delivery_fee'])
+                }]
+                order_data['subtotal'] = max(0, order_data['total_amount'] - order_data['delivery_fee'])
+
+            logger.info(f"✅ Extracted order data for image: Order {order_id}, Customer: {customer_name}, Total: ₦{order_data['total_amount']:,.2f}")
+            return order_data
+
+        except Exception as e:
+            logger.error(f"❌ Error extracting order data for image: {e}")
+            import traceback
+            traceback.print_exc()
+
+            # Return fallback data with real customer name if available
+            fallback_customer_name = 'Valued Customer'
+            if customer_id:
+                try:
+                    user_info = self._get_authenticated_user_info(customer_id)
+                    if user_info and user_info.get('name'):
+                        fallback_customer_name = user_info['name']
+                except:
+                    pass
+
+            return {
+                'order_id': ai_response.get('order_id', 'N/A'),
+                'total_amount': 0,
+                'subtotal': 0,
+                'delivery_fee': 4350.0,
+                'payment_method': 'Not specified',
+                'delivery_address': 'Not specified',
+                'status': 'Pending',
+                'customer_name': fallback_customer_name,
+                'items': [{'product_name': 'Order Item', 'quantity': 1, 'price': 0, 'subtotal': 0}]
+            }
+
+    def _send_whatsapp_image(self, to_number: str, image_path: str, caption: str = "") -> bool:
+        """Send image via WhatsApp Business API"""
+        try:
+            if not self.config.is_configured():
+                logger.warning("⚠️ WhatsApp not configured, simulating image send")
+                return True  # Simulate success
+
+            # First, upload the image to WhatsApp
+            media_id = self._upload_whatsapp_media(image_path)
+            if not media_id:
+                logger.error("❌ Failed to upload image to WhatsApp")
+                return False
+
+            # Send the image message
+            url = f"{self.config.api_base_url}/{self.config.phone_number_id}/messages"
+            headers = {
+                'Authorization': f'Bearer {self.config.access_token}',
+                'Content-Type': 'application/json'
+            }
+
+            # Remove + prefix from phone number
+            clean_number = to_number.replace('+', '') if to_number else to_number
+
+            data = {
+                'messaging_product': 'whatsapp',
+                'to': clean_number,
+                'type': 'image',
+                'image': {
+                    'id': media_id
+                }
+            }
+
+            if caption:
+                data['image']['caption'] = caption
+
+            response = requests.post(url, headers=headers, json=data)
+
+            if response.status_code == 200:
+                logger.info(f"✅ WhatsApp image sent to {clean_number}")
+                return True
+            else:
+                logger.error(f"❌ Failed to send WhatsApp image: {response.status_code} - {response.text}")
+                return False
+
+        except Exception as e:
+            logger.error(f"❌ Error sending WhatsApp image: {e}")
+            return False
+
+    def _upload_whatsapp_media(self, file_path: str) -> Optional[str]:
+        """Upload media file to WhatsApp and return media ID"""
+        try:
+            if not self.config.is_configured():
+                return "simulated_media_id"  # Simulate for testing
+
+            url = f"{self.config.api_base_url}/{self.config.phone_number_id}/media"
+            headers = {
+                'Authorization': f'Bearer {self.config.access_token}'
+            }
+
+            # Prepare multipart form data with proper file type
+            with open(file_path, 'rb') as f:
+                files = {
+                    'file': (os.path.basename(file_path), f, 'image/png'),
+                    'messaging_product': (None, 'whatsapp'),
+                    'type': (None, 'image/png')
+                }
+
+                response = requests.post(url, headers=headers, files=files)
+
+            if response.status_code == 200:
+                result = response.json()
+                media_id = result.get('id')
+                logger.info(f"✅ Media uploaded successfully, ID: {media_id}")
+                return media_id
+            else:
+                logger.error(f"❌ Failed to upload media: {response.status_code} - {response.text}")
+                return None
+
+        except Exception as e:
+            logger.error(f"❌ Error uploading media: {e}")
             return None
 
     def format_message_for_whatsapp(self, message: str, ai_response: Dict = None) -> str:
@@ -1327,7 +1578,6 @@ If you already have a RaqibTech account with email, you can link it to this What
 
                     # Step 5: Clear Redis cache if available
                     try:
-                        import redis
                         redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
                         # Clear conversation history
                         redis_client.delete(f"conversation:{customer['email']}")
@@ -1395,7 +1645,6 @@ If you already have a RaqibTech account with email, you can link it to this What
 
             # Try Redis first
             try:
-                import redis
                 redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
                 redis_client.setex(key, 3600, json.dumps(progress_data))  # 1 hour expiry
                 logger.info(f"✅ Stored signup progress in Redis for {phone_number}")
@@ -1421,7 +1670,6 @@ If you already have a RaqibTech account with email, you can link it to this What
 
             # Try Redis first
             try:
-                import redis
                 redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
                 progress_json = redis_client.get(key)
                 if progress_json:
@@ -1455,7 +1703,6 @@ If you already have a RaqibTech account with email, you can link it to this What
 
             # Clear from Redis
             try:
-                import redis
                 redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
                 redis_client.delete(key)
             except:
