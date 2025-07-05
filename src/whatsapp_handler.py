@@ -195,13 +195,24 @@ class WhatsAppBusinessHandler:
 
                 # Send response back to WhatsApp
                 if ai_response and ai_response.get('success'):
-                    response_message = ai_response.get('response', 'I understand. How can I help you?')
+                    # Handle both shopping responses ('message') and general responses ('response')
+                    response_message = ai_response.get('message') or ai_response.get('response', 'I understand. How can I help you?')
                     logger.info(f"🔍 DEBUG: Extracted response_message: '{response_message}'")
-                    sent_message = self._send_whatsapp_message(message.from_number, response_message, ai_response)
+
+                    # For shopping responses, format them properly for WhatsApp
+                    if ai_response.get('action') in ['add_to_cart_success', 'cart_displayed', 'checkout_ready', 'product_found']:
+                        response_message = self._format_shopping_response(ai_response)
+                        logger.info(f"🔍 DEBUG: Formatted shopping response: '{response_message}'")
+
+                    # Clean up AI response formatting tokens and duplicates
+                    cleaned_response = self._clean_ai_response(response_message)
+                    logger.info(f"🔍 DEBUG: Cleaned response_message: '{cleaned_response}'")
+
+                    sent_message = self._send_whatsapp_message(message.from_number, cleaned_response, ai_response)
 
                 if sent_message:
                     # Store outbound message
-                    self._store_outbound_message(message.from_number, response_message, session_id, customer_id, sent_message.get('id'))
+                    self._store_outbound_message(message.from_number, cleaned_response, session_id, customer_id, sent_message.get('id'))
 
                 return {
                     'customer_id': customer_id,
@@ -236,13 +247,26 @@ class WhatsAppBusinessHandler:
             from .enhanced_db_querying import EnhancedDatabaseQuerying
             enhanced_db = EnhancedDatabaseQuerying()
 
+            # Get authentication status and user details for proper context
+            is_authenticated = self._is_user_authenticated(customer_id)
+            user_info = self._get_authenticated_user_info(customer_id) if is_authenticated else {}
+
+            # Set correct user_id for conversation history lookup
+            user_id = user_info.get('email', phone_number) if is_authenticated else 'anonymous'
+
             general_response = enhanced_db.process_enhanced_query(
                 user_query=message_content,
                 session_context={
                     'customer_id': customer_id,
                     'session_id': session_id,
                     'channel': 'whatsapp',
-                    'phone_number': phone_number
+                    'phone_number': phone_number,
+                    'user_authenticated': is_authenticated,
+                    'user_id': user_id,
+                    'customer_name': user_info.get('name'),
+                    'customer_email': user_info.get('email'),
+                    'user_role': 'customer',  # ✅ Fixed: Always 'customer' for regular users
+                    'account_tier': user_info.get('tier')
                 }
             )
 
@@ -311,6 +335,48 @@ class WhatsAppBusinessHandler:
     def format_message_for_whatsapp(self, message: str, ai_response: Dict = None) -> str:
         """Public method to format AI response message for WhatsApp"""
         return self._format_message_for_whatsapp(message, ai_response)
+
+    def _clean_ai_response(self, message: str) -> str:
+        """Clean up AI response formatting tokens and duplicates"""
+        if not message:
+            return message
+
+        # Remove AI model formatting tokens and artifacts
+        patterns_to_remove = [
+            r'assistant<\|header_end\|>',
+            r'<\|header_start\|>',
+            r'<\|header_end\|>',
+            r'<\|.*?\|>',  # Any other special tokens
+            r'Yourassistant',
+            r'assistant\s*$',  # "assistant" at end of line
+            r'assistant\s*assistant',  # Duplicate "assistant"
+            r'^\s*assistant\s*',  # "assistant" at start of line
+        ]
+
+        import re
+        cleaned = message
+        for pattern in patterns_to_remove:
+            cleaned = re.sub(pattern, '', cleaned, flags=re.MULTILINE | re.IGNORECASE)
+
+        # Clean up excessive newlines and duplicate content
+        lines = cleaned.split('\n')
+        unique_lines = []
+        seen_lines = set()
+
+        for line in lines:
+            stripped = line.strip()
+            if stripped and stripped not in seen_lines:
+                unique_lines.append(line)
+                seen_lines.add(stripped)
+            elif not stripped:  # Keep empty lines for formatting
+                unique_lines.append(line)
+
+        # Join lines and clean up excessive whitespace
+        cleaned = '\n'.join(unique_lines)
+        cleaned = re.sub(r'\n\s*\n\s*\n', '\n\n', cleaned)  # Max 2 consecutive newlines
+        cleaned = cleaned.strip()
+
+        return cleaned if cleaned else "I understand. How can I help you?"
 
     def _format_message_for_whatsapp(self, message: str, ai_response: Dict = None) -> str:
         """Format AI response message for WhatsApp"""
@@ -465,7 +531,21 @@ class WhatsAppBusinessHandler:
 
             with self.get_database_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                    # Check for existing session first
+                    # Check for existing authenticated session first (email-based)
+                    cursor.execute("""
+                        SELECT us.session_id, us.user_identifier
+                        FROM user_sessions us
+                        JOIN customers c ON c.email = us.user_identifier
+                        WHERE c.whatsapp_number = %s AND c.customer_id = %s
+                        ORDER BY us.last_active DESC LIMIT 1
+                    """, (phone_number, customer_id))
+
+                    authenticated_session = cursor.fetchone()
+                    if authenticated_session:
+                        logger.info(f"✅ Using existing authenticated session: {authenticated_session['session_id']} ({authenticated_session['user_identifier']})")
+                        return authenticated_session['session_id']
+
+                    # Check for existing WhatsApp session (guest)
                     cursor.execute("""
                         SELECT session_id FROM user_sessions
                         WHERE user_identifier = %s
@@ -673,6 +753,9 @@ Thank you for choosing RaqibTech! 🎉"""
         elif any(keyword in content_lower for keyword in ['login', 'sign in', 'signin']):
             return self._handle_login_command(phone_number, customer_id, session_id)
 
+        elif any(keyword in content_lower for keyword in ['logout', 'sign out', 'signout', 'log out']):
+            return self._handle_logout_command(phone_number, customer_id, session_id)
+
         elif any(keyword in content_lower for keyword in ['link account', 'connect account', 'upgrade account']):
             return self._handle_account_linking(phone_number, customer_id, session_id)
 
@@ -806,7 +889,7 @@ Type: `signup` to create your account
 
             return {
                 'success': True,
-                'response': f"✅ Email **{email}** verified!\n\n📝 Now complete your profile:\n`complete signup: Full Name | State | LGA | Your Address`\n\n*Example:*\n`complete signup: John Doe | Lagos | Ikeja | 123 Main Street, VI`",
+                'response': f"✅ Email **{email}** verified!\n\n📝 Now complete your profile:\n`complete signup: Full Name | State | LGA | Your Address`\n\n*Example:*\n`complete signup: Abdulraqib Omotosho | Lagos | Ikeja | St. 123 Victoria Island `",
                 'query_type': 'authentication_email_verified',
                 'channel': 'whatsapp'
             }
@@ -838,7 +921,7 @@ Type: `signup` to create your account
             if len(parts) != 4:
                 return {
                     'success': True,
-                    'response': "❌ Invalid format. Please use:\n`complete signup: Full Name | State | LGA | Your Address`\n\n*Example:*\n`complete signup: John Doe | Lagos | Ikeja | 123 Main Street`",
+                    'response': "❌ Invalid format. Please use:\n`complete signup: Full Name | State | LGA | Your Address`\n\n*Example:*\n`complete signup: Abdulraqib Omotosho | Lagos | Ikeja | St. 123 Victoria Island `",
                     'query_type': 'authentication_error',
                     'channel': 'whatsapp'
                 }
@@ -1112,6 +1195,121 @@ If you already have a RaqibTech account with email, you can link it to this What
                 'channel': 'whatsapp'
             }
 
+    def _handle_logout_command(self, phone_number: str, customer_id: int, session_id: str) -> Dict:
+        """Handle WhatsApp logout command - properly clear authentication state"""
+        try:
+            # Check if user is currently authenticated
+            if not self._is_user_authenticated(customer_id):
+                return {
+                    'success': True,
+                    'response': "ℹ️ You're not currently logged in. You're browsing as a guest.\n\n🔑 To login, type: `login`\n🆕 To create account, type: `signup`",
+                    'query_type': 'authentication_info',
+                    'channel': 'whatsapp'
+                }
+
+            # Get user info for personalized goodbye message
+            user_info = self._get_authenticated_user_info(customer_id)
+            user_name = user_info.get('name', 'there')
+
+            # Perform logout operations
+            logout_successful = self._perform_logout(phone_number, customer_id, session_id)
+
+            if logout_successful:
+                return {
+                    'success': True,
+                    'response': f"👋 **Goodbye, {user_name}!**\n\n✅ You've been successfully logged out from WhatsApp\n🔒 Your session has been cleared for security\n\n🔑 To login again, type: `login`\n🆕 New to RaqibTech? Type: `signup`\n\n*Thanks for using RaqibTech! Have a great day!* ✨",
+                    'query_type': 'authentication_logout',
+                    'channel': 'whatsapp'
+                }
+            else:
+                return {
+                    'success': True,
+                    'response': "❌ Logout failed. Please try again or contact support.",
+                    'query_type': 'authentication_error',
+                    'channel': 'whatsapp'
+                }
+
+        except Exception as e:
+            logger.error(f"❌ Error in logout command: {e}")
+            return {
+                'success': True,
+                'response': "❌ There was an issue logging out. Please try again.",
+                'query_type': 'authentication_error',
+                'channel': 'whatsapp'
+            }
+
+    def _perform_logout(self, phone_number: str, customer_id: int, session_id: str) -> bool:
+        """Perform actual logout operations - clear authentication state and session data"""
+        try:
+            formatted_phone = self._format_nigerian_phone(phone_number)
+
+            with self.get_database_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+
+                    # Step 1: Get current customer info before logout
+                    cursor.execute("""
+                        SELECT email, name, whatsapp_number FROM customers
+                        WHERE customer_id = %s
+                    """, (customer_id,))
+
+                    customer = cursor.fetchone()
+                    if not customer:
+                        return False
+
+                    # Step 2: Convert customer back to guest status
+                    # Generate new guest name and email
+                    import random
+                    guest_suffix = str(random.randint(1000, 9999))
+                    guest_name = f"WhatsApp User {guest_suffix}"
+                    guest_email = f"whatsapp-{phone_number.replace('+', '')}@guest.raqibtech.com"
+
+                    # Reset customer to guest status
+                    cursor.execute("""
+                        UPDATE customers SET
+                            name = %s,
+                            email = %s,
+                            user_role = 'guest',
+                            whatsapp_verified = false,
+                            account_tier = 'Bronze',
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE customer_id = %s
+                    """, (guest_name, guest_email, customer_id))
+
+                    # Step 3: Clear all sessions for this user
+                    cursor.execute("""
+                        DELETE FROM user_sessions
+                        WHERE session_id = %s OR user_identifier = %s OR user_identifier = %s
+                    """, (session_id, customer['email'], f"whatsapp:{phone_number}"))
+
+                    # Step 4: Clear any signup progress data
+                    cursor.execute("""
+                        DELETE FROM whatsapp_signup_progress
+                        WHERE phone_number = %s
+                    """, (phone_number,))
+
+                    conn.commit()
+
+                    logger.info(f"✅ Logout successful for {phone_number} -> {customer['email']} (Customer ID: {customer_id})")
+
+                    # Step 5: Clear Redis cache if available
+                    try:
+                        import redis
+                        redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+                        # Clear conversation history
+                        redis_client.delete(f"conversation:{customer['email']}")
+                        redis_client.delete(f"conversation:{session_id}")
+                        # Clear signup progress
+                        redis_client.delete(f"whatsapp_signup:{phone_number}")
+                        logger.info(f"✅ Cleared Redis cache for logged out user")
+                    except:
+                        logger.info("ℹ️ Redis cache clearing skipped (Redis not available)")
+
+                    return True
+
+        except Exception as e:
+            logger.error(f"❌ Error performing logout: {e}")
+            return False
+
     def _is_user_authenticated(self, customer_id: int) -> bool:
         """Check if WhatsApp user is authenticated (not a guest)"""
         try:
@@ -1237,6 +1435,93 @@ If you already have a RaqibTech account with email, you can link it to this What
 
         except Exception as e:
             logger.error(f"❌ Error clearing signup progress: {e}")
+
+    def _format_shopping_response(self, ai_response: Dict) -> str:
+        """Format shopping responses for WhatsApp display"""
+        action = ai_response.get('action', '')
+        base_message = ai_response.get('message', '')
+
+        if action == 'add_to_cart_success':
+            # Format add to cart success with cart summary
+            cart_summary = ai_response.get('cart_summary', {})
+            product_added = ai_response.get('product_added', {})
+
+            formatted_message = f"🛒 *{base_message}*\n\n"
+
+            # Add product details
+            if product_added:
+                formatted_message += f"📦 *{product_added['product_name']}*\n"
+                formatted_message += f"💰 Price: {product_added.get('currency', 'NGN')} {product_added['price']:,.0f}\n\n"
+
+            # Add cart summary
+            if cart_summary and cart_summary.get('items'):
+                formatted_message += "*🛒 Your Cart:*\n"
+                for item in cart_summary['items']:
+                    formatted_message += f"• {item['product_name']} (₦{item['price']:,.0f}) x{item['quantity']}\n"
+
+                formatted_message += f"\n*Total: {cart_summary.get('subtotal_formatted', '₦0.00')}*\n\n"
+                formatted_message += "💬 Type *'checkout'* to complete your order\n"
+                formatted_message += "🛍️ Type *'show cart'* to view full cart"
+
+            return formatted_message
+
+        elif action == 'cart_displayed':
+            # Format cart display
+            cart_summary = ai_response.get('cart_summary', {})
+            formatted_message = f"🛒 *Your Shopping Cart*\n\n"
+
+            if cart_summary and cart_summary.get('items'):
+                for item in cart_summary['items']:
+                    formatted_message += f"📦 *{item['product_name']}*\n"
+                    formatted_message += f"   ₦{item['price']:,.0f} x {item['quantity']} = ₦{item['subtotal']:,.0f}\n\n"
+
+                formatted_message += f"*💰 Total: {cart_summary.get('subtotal_formatted', '₦0.00')}*\n\n"
+                formatted_message += "💳 Type *'checkout'* to complete order\n"
+                formatted_message += "➕ Type *'add [product]'* to add more items"
+            else:
+                formatted_message += "Your cart is empty 🛒\n\n"
+                formatted_message += "🛍️ Browse our products by typing what you're looking for!"
+
+            return formatted_message
+
+        elif action == 'checkout_ready':
+            # Format checkout confirmation
+            formatted_message = f"💳 *{base_message}*\n\n"
+
+            # Add order summary if available
+            cart_summary = ai_response.get('cart_summary', {})
+            if cart_summary and cart_summary.get('items'):
+                formatted_message += "*📋 Order Summary:*\n"
+                for item in cart_summary['items']:
+                    formatted_message += f"• {item['product_name']} x{item['quantity']}\n"
+
+                formatted_message += f"\n*💰 Total: {cart_summary.get('subtotal_formatted', '₦0.00')}*\n\n"
+                formatted_message += "✅ Type *'confirm order'* to place your order\n"
+                formatted_message += "✏️ Type *'edit cart'* to make changes"
+
+            return formatted_message
+
+        elif action == 'product_found':
+            # Format product details
+            product = ai_response.get('product_details', {})
+            formatted_message = f"🔍 *{base_message}*\n\n"
+
+            if product:
+                formatted_message += f"📦 *{product['product_name']}*\n"
+                formatted_message += f"🏷️ Brand: {product.get('brand', 'N/A')}\n"
+                formatted_message += f"💰 Price: ₦{product['price']:,.0f}\n"
+                formatted_message += f"📊 Stock: {product.get('stock_quantity', 0)} available\n\n"
+
+                if product.get('description'):
+                    formatted_message += f"📝 {product['description']}\n\n"
+
+                formatted_message += f"🛒 Type *'add to cart'* to add this item\n"
+                formatted_message += f"🔍 Type *'similar products'* for alternatives"
+
+            return formatted_message
+
+        # Default formatting for other actions
+        return base_message
 
 # Singleton instance
 whatsapp_handler = None

@@ -697,9 +697,11 @@ Classify this query and extract relevant entities. Return JSON format:
         # 🚨 CRITICAL: Handle order content inquiries FIRST - bypass AI generation entirely
         if entities.get('order_content_inquiry') and entities.get('order_id'):
             order_id = entities.get('order_id')
-            print_log(f"🎯 ORDER CONTENT INQUIRY: Generating specific order details SQL for order #{order_id}", 'info')
-            return f"""SELECT o.order_id, o.product_category, o.total_amount, o.order_status, o.payment_method, o.delivery_date, o.created_at
+            print_log(f"🎯 ORDER CONTENT INQUIRY: Generating enhanced order details SQL with product info for order #{order_id}", 'info')
+            return f"""SELECT o.order_id, o.total_amount, o.order_status, o.payment_method, o.delivery_date, o.created_at,
+                              p.product_name, p.brand, p.description, p.price as unit_price, p.category as product_category
                       FROM orders o
+                      LEFT JOIN products p ON o.product_id = p.product_id
                       WHERE o.order_id = {order_id}"""
 
         # 🚨 EARLY INTERCEPT: Platinum tier "how much more" queries - NUCLEAR OPTION
