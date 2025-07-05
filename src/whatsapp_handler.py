@@ -177,18 +177,27 @@ class WhatsAppBusinessHandler:
             # Store incoming message
             self._store_message(message, session_id, customer_id, 'inbound')
 
-            # Process message with AI assistant
-            ai_response = self._process_with_ai(message.content, customer_id, session_id, message.from_number)
+                        # Check for authentication commands first
+            auth_response = self._process_authentication_commands(message.content, message.from_number, customer_id, session_id)
 
-            # DEBUG: Log the full AI response structure
-            logger.info(f"🔍 DEBUG: Full AI response structure: {ai_response}")
-            logger.info(f"🔍 DEBUG: AI response keys: {list(ai_response.keys()) if ai_response else 'None'}")
+            if auth_response:
+                # Handle authentication command
+                logger.info(f"🔐 Processing authentication command from {message.from_number}")
+                response_message = auth_response.get('response', 'Authentication command processed.')
+                sent_message = self._send_whatsapp_message(message.from_number, response_message, auth_response)
+            else:
+                # Process message with AI assistant
+                ai_response = self._process_with_ai(message.content, customer_id, session_id, message.from_number)
 
-            # Send response back to WhatsApp
-            if ai_response and ai_response.get('success'):
-                response_message = ai_response.get('response', 'I understand. How can I help you?')
-                logger.info(f"🔍 DEBUG: Extracted response_message: '{response_message}'")
-                sent_message = self._send_whatsapp_message(message.from_number, response_message, ai_response)
+                # DEBUG: Log the full AI response structure
+                logger.info(f"🔍 DEBUG: Full AI response structure: {ai_response}")
+                logger.info(f"🔍 DEBUG: AI response keys: {list(ai_response.keys()) if ai_response else 'None'}")
+
+                # Send response back to WhatsApp
+                if ai_response and ai_response.get('success'):
+                    response_message = ai_response.get('response', 'I understand. How can I help you?')
+                    logger.info(f"🔍 DEBUG: Extracted response_message: '{response_message}'")
+                    sent_message = self._send_whatsapp_message(message.from_number, response_message, ai_response)
 
                 if sent_message:
                     # Store outbound message
@@ -636,6 +645,598 @@ class WhatsAppBusinessHandler:
 Track your order: https://raqibtech.com/orders/{order_id}
 
 Thank you for choosing RaqibTech! 🎉"""
+
+    def _process_authentication_commands(self, message_content: str, phone_number: str, customer_id: int, session_id: str) -> Optional[Dict]:
+        """Handle WhatsApp authentication commands (signup, login, account linking)"""
+        content_lower = message_content.lower().strip()
+
+        # Check for SPECIFIC authentication commands first (order matters!)
+        if content_lower.startswith('verify email:'):
+            # Handle email verification step
+            email = content_lower.replace('verify email:', '').strip()
+            return self._handle_email_verification(email, phone_number, customer_id, session_id)
+
+        elif content_lower.startswith('complete signup:'):
+            # Handle complete signup with user details
+            signup_data = content_lower.replace('complete signup:', '').strip()
+            return self._handle_complete_signup(signup_data, phone_number, customer_id, session_id)
+
+        elif content_lower.startswith('login email:'):
+            # Handle login with email - MUST come before general 'login' check
+            email = content_lower.replace('login email:', '').strip()
+            return self._handle_email_login(email, phone_number, customer_id, session_id)
+
+        # Check for GENERAL authentication commands (less specific)
+        elif any(keyword in content_lower for keyword in ['signup', 'register', 'create account', 'sign up']):
+            return self._handle_signup_command(phone_number, customer_id, session_id)
+
+        elif any(keyword in content_lower for keyword in ['login', 'sign in', 'signin']):
+            return self._handle_login_command(phone_number, customer_id, session_id)
+
+        elif any(keyword in content_lower for keyword in ['link account', 'connect account', 'upgrade account']):
+            return self._handle_account_linking(phone_number, customer_id, session_id)
+
+        return None
+
+    def _handle_signup_command(self, phone_number: str, customer_id: int, session_id: str) -> Dict:
+        """Handle WhatsApp signup command"""
+        try:
+            # Check if user is already authenticated
+            if self._is_user_authenticated(customer_id):
+                return {
+                    'success': True,
+                    'response': "✅ You're already registered! Your account is fully activated with access to all features.\n\n🔍 Try asking: 'show my orders' or 'update my profile'",
+                    'query_type': 'authentication',
+                    'channel': 'whatsapp'
+                }
+
+            signup_instructions = """
+🆕 **Create Your RaqibTech Account**
+
+To upgrade from guest to full customer access, please provide:
+
+**Step 1:** Send your email address like this:
+`verify email: your-email@example.com`
+
+**Step 2:** Once verified, complete your profile:
+`complete signup: Abdulraqib Omotosho | Lagos | Ikeja | Street 123 Victoria Island`
+
+**Benefits of Full Account:**
+✅ Order history & tracking
+✅ Personalized recommendations
+✅ Account tiers (Bronze→Gold→Platinum)
+✅ Faster checkout
+✅ Exclusive offers
+
+*Already have an account? Type: `login`*
+            """
+
+            return {
+                'success': True,
+                'response': signup_instructions,
+                'query_type': 'authentication_signup',
+                'channel': 'whatsapp'
+            }
+
+        except Exception as e:
+            logger.error(f"❌ Error in WhatsApp signup command: {e}")
+            return {
+                'success': True,
+                'response': "Sorry, there was an issue starting the signup process. Please try again or contact support.",
+                'query_type': 'authentication_error',
+                'channel': 'whatsapp'
+            }
+
+    def _handle_login_command(self, phone_number: str, customer_id: int, session_id: str) -> Dict:
+        """Handle WhatsApp login command"""
+        try:
+            # Check if user is already authenticated
+            if self._is_user_authenticated(customer_id):
+                user_info = self._get_authenticated_user_info(customer_id)
+                return {
+                    'success': True,
+                    'response': f"✅ Already logged in as **{user_info['name']}**!\n\n🔍 Try: 'show my orders' or 'my account details'",
+                    'query_type': 'authentication',
+                    'channel': 'whatsapp'
+                }
+
+            login_instructions = """
+🔑 **Login to Your RaqibTech Account**
+
+**Option 1:** Login with email
+`login email: your-email@example.com`
+
+**Option 2:** Link your WhatsApp to existing account
+`link account`
+
+**New to RaqibTech?**
+Type: `signup` to create your account
+
+*We'll verify your email and automatically log you in!*
+            """
+
+            return {
+                'success': True,
+                'response': login_instructions,
+                'query_type': 'authentication_login',
+                'channel': 'whatsapp'
+            }
+
+        except Exception as e:
+            logger.error(f"❌ Error in WhatsApp login command: {e}")
+            return {
+                'success': True,
+                'response': "Sorry, there was an issue with the login process. Please try again or contact support.",
+                'query_type': 'authentication_error',
+                'channel': 'whatsapp'
+            }
+
+    def _handle_email_verification(self, email: str, phone_number: str, customer_id: int, session_id: str) -> Dict:
+        """Handle email verification step"""
+        try:
+            import re
+
+            # Validate email format
+            email_regex = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
+            if not re.match(email_regex, email):
+                return {
+                    'success': True,
+                    'response': "❌ Invalid email format. Please try again:\n`verify email: your-email@example.com`",
+                    'query_type': 'authentication_error',
+                    'channel': 'whatsapp'
+                }
+
+            # Check if email already exists
+            with self.get_database_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute("SELECT customer_id, name FROM customers WHERE email = %s", (email.lower(),))
+                    existing_customer = cursor.fetchone()
+
+                    if existing_customer:
+                        # Email exists - suggest login instead
+                        return {
+                            'success': True,
+                            'response': f"📧 This email is already registered!\n\n🔑 To login, type:\n`login email: {email}`\n\n🔗 Or to link this WhatsApp to your existing account:\n`link account`",
+                            'query_type': 'authentication_existing_email',
+                            'channel': 'whatsapp'
+                        }
+
+            # Store email for signup process
+            self._store_signup_progress(phone_number, session_id, {'email': email.lower(), 'step': 'email_verified'})
+
+            return {
+                'success': True,
+                'response': f"✅ Email **{email}** verified!\n\n📝 Now complete your profile:\n`complete signup: Full Name | State | LGA | Your Address`\n\n*Example:*\n`complete signup: John Doe | Lagos | Ikeja | 123 Main Street, VI`",
+                'query_type': 'authentication_email_verified',
+                'channel': 'whatsapp'
+            }
+
+        except Exception as e:
+            logger.error(f"❌ Error in email verification: {e}")
+            return {
+                'success': True,
+                'response': "Sorry, there was an issue verifying your email. Please try again.",
+                'query_type': 'authentication_error',
+                'channel': 'whatsapp'
+            }
+
+    def _handle_complete_signup(self, signup_data: str, phone_number: str, customer_id: int, session_id: str) -> Dict:
+        """Handle complete signup with user details"""
+        try:
+            # Get stored email from signup progress
+            progress = self._get_signup_progress(phone_number, session_id)
+            if not progress or progress.get('step') != 'email_verified':
+                return {
+                    'success': True,
+                    'response': "❌ Please start with email verification first:\n`verify email: your-email@example.com`",
+                    'query_type': 'authentication_error',
+                    'channel': 'whatsapp'
+                }
+
+            # Parse signup data: "Full Name | State | LGA | Address"
+            parts = [part.strip() for part in signup_data.split('|')]
+            if len(parts) != 4:
+                return {
+                    'success': True,
+                    'response': "❌ Invalid format. Please use:\n`complete signup: Full Name | State | LGA | Your Address`\n\n*Example:*\n`complete signup: John Doe | Lagos | Ikeja | 123 Main Street`",
+                    'query_type': 'authentication_error',
+                    'channel': 'whatsapp'
+                }
+
+            full_name, state, lga, address = parts
+            email = progress['email']
+            formatted_phone = self._format_nigerian_phone(phone_number)
+
+            # Validate Nigerian phone format
+            import re
+            nigerian_phone_regex = r'^(\+234|0)[7-9][0-1]\d{8}$'
+            if not re.match(nigerian_phone_regex, formatted_phone):
+                return {
+                    'success': True,
+                    'response': f"❌ Phone number format issue. Contact support with your number: {phone_number}",
+                    'query_type': 'authentication_error',
+                    'channel': 'whatsapp'
+                }
+
+            # Create full customer account (upgrade from guest)
+            with self.get_database_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    # Update existing WhatsApp guest account to full account
+                    cursor.execute("""
+                        UPDATE customers
+                        SET name = %s, email = %s, phone = %s, state = %s, lga = %s,
+                            address = %s, account_tier = %s, user_role = %s,
+                            preferences = %s, updated_at = CURRENT_TIMESTAMP
+                        WHERE customer_id = %s
+                        RETURNING customer_id, name, email
+                    """, (
+                        full_name, email, formatted_phone, state, lga, address,
+                        'Bronze', 'customer',  # Upgrade from guest to customer
+                        json.dumps({
+                            'language': 'English',
+                            'notifications': True,
+                            'newsletter': True,
+                            'whatsapp_verified': True
+                        }),
+                        customer_id
+                    ))
+
+                    updated_customer = cursor.fetchone()
+                    if not updated_customer:
+                        raise Exception("Failed to upgrade customer account")
+
+                    # Update session to authenticated status
+                    cursor.execute("""
+                        UPDATE user_sessions
+                        SET user_identifier = %s,
+                            session_data = %s,
+                            last_active = CURRENT_TIMESTAMP
+                        WHERE session_id = %s
+                    """, (
+                        email,
+                        json.dumps({
+                            'channel': 'whatsapp',
+                            'phone_number': phone_number,
+                            'customer_id': customer_id,
+                            'authenticated': True,
+                            'upgrade_time': datetime.now().isoformat(),
+                            'email': email,
+                            'name': full_name
+                        }),
+                        session_id
+                    ))
+
+                    conn.commit()
+
+                    # Clear signup progress
+                    self._clear_signup_progress(phone_number, session_id)
+
+                    logger.info(f"✅ WhatsApp user upgraded: {phone_number} -> {email} (Customer ID: {customer_id})")
+
+                    return {
+                        'success': True,
+                        'response': f"🎉 **Welcome to RaqibTech, {full_name}!**\n\n✅ Your account is now fully activated!\n📧 Email: {email}\n🏆 Account Tier: Bronze\n\n**New Features Unlocked:**\n• Order history & tracking\n• Personalized recommendations\n• Faster checkout\n• Account tier benefits\n\n🛒 Try: 'show my orders' or 'recommend products'",
+                        'query_type': 'authentication_success',
+                        'channel': 'whatsapp',
+                        'customer_id': customer_id,
+                        'authenticated': True
+                    }
+
+        except Exception as e:
+            logger.error(f"❌ Error completing WhatsApp signup: {e}")
+            return {
+                'success': True,
+                'response': "❌ Signup failed. Please try again or contact support.",
+                'query_type': 'authentication_error',
+                'channel': 'whatsapp'
+            }
+
+    def _handle_email_login(self, email: str, phone_number: str, customer_id: int, session_id: str) -> Dict:
+        """Handle login with email address"""
+        try:
+            import re
+
+            # Validate email format
+            email_regex = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
+            if not re.match(email_regex, email):
+                return {
+                    'success': True,
+                    'response': "❌ Invalid email format. Please try again:\n`login email: your-email@example.com`",
+                    'query_type': 'authentication_error',
+                    'channel': 'whatsapp'
+                }
+
+            with self.get_database_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    # Find customer by email
+                    cursor.execute("""
+                        SELECT customer_id, name, email, user_role, account_status, whatsapp_number
+                        FROM customers
+                        WHERE email = %s
+                    """, (email.lower(),))
+
+                    customer = cursor.fetchone()
+                    if not customer:
+                        return {
+                            'success': True,
+                            'response': f"❌ No account found with email: {email}\n\n🆕 Create account: `signup`\n🔗 Link WhatsApp: `link account`",
+                            'query_type': 'authentication_error',
+                            'channel': 'whatsapp'
+                        }
+
+                    # Check account status
+                    if customer['account_status'] != 'active':
+                        return {
+                            'success': True,
+                            'response': f"❌ Account is {customer['account_status']}. Please contact support.",
+                            'query_type': 'authentication_error',
+                            'channel': 'whatsapp'
+                        }
+
+                    # Link WhatsApp to existing account or login existing WhatsApp user
+                    existing_customer_id = customer['customer_id']
+
+                    if customer_id != existing_customer_id:
+                        # Different customer - need to link WhatsApp to email account
+                        # First, transfer any existing WhatsApp messages to the email account
+                        cursor.execute("""
+                            UPDATE whatsapp_messages
+                            SET customer_id = %s
+                            WHERE customer_id = %s
+                        """, (existing_customer_id, customer_id))
+
+                        # Update any sessions to point to the email account
+                        cursor.execute("""
+                            UPDATE user_sessions
+                            SET session_data = jsonb_set(session_data, '{customer_id}', %s::text::jsonb)
+                            WHERE session_id = %s
+                        """, (existing_customer_id, session_id))
+
+                        # Delete the temporary WhatsApp guest account
+                        cursor.execute("DELETE FROM customers WHERE customer_id = %s", (customer_id,))
+
+                        # Then update the email account with the WhatsApp number
+                        cursor.execute("""
+                            UPDATE customers
+                            SET whatsapp_number = %s, whatsapp_verified = true, whatsapp_opt_in = true,
+                                whatsapp_first_contact = CURRENT_TIMESTAMP
+                            WHERE customer_id = %s
+                        """, (phone_number, existing_customer_id))
+
+                        customer_id = existing_customer_id  # Use the email account's customer_id
+
+                    # Handle existing email sessions - merge WhatsApp session with email session
+                    cursor.execute("""
+                        SELECT session_id FROM user_sessions
+                        WHERE user_identifier = %s
+                    """, (email,))
+                    existing_email_session = cursor.fetchone()
+
+                    if existing_email_session:
+                        # Update existing email session to include WhatsApp data
+                        cursor.execute("""
+                            UPDATE user_sessions
+                            SET session_data = jsonb_set(
+                                session_data,
+                                '{whatsapp_linked}',
+                                %s::jsonb
+                            ),
+                            last_active = CURRENT_TIMESTAMP
+                            WHERE user_identifier = %s
+                        """, (
+                            json.dumps({
+                                'phone_number': phone_number,
+                                'linked_time': datetime.now().isoformat(),
+                                'whatsapp_session_id': session_id
+                            }),
+                            email
+                        ))
+
+                        # Delete the temporary WhatsApp session
+                        cursor.execute("DELETE FROM user_sessions WHERE session_id = %s", (session_id,))
+                        session_id = existing_email_session['session_id']
+                    else:
+                        # Update current session with authentication
+                        cursor.execute("""
+                            UPDATE user_sessions
+                            SET user_identifier = %s,
+                                session_data = %s,
+                                last_active = CURRENT_TIMESTAMP
+                            WHERE session_id = %s
+                        """, (
+                            email,
+                            json.dumps({
+                                'channel': 'whatsapp',
+                                'phone_number': phone_number,
+                                'customer_id': customer_id,
+                                'authenticated': True,
+                                'login_time': datetime.now().isoformat(),
+                                'email': email,
+                                'name': customer['name']
+                            }),
+                            session_id
+                        ))
+
+                    conn.commit()
+
+                    logger.info(f"✅ WhatsApp login successful: {phone_number} -> {email} (Customer ID: {customer_id})")
+
+                    return {
+                        'success': True,
+                        'response': f"🔑 **Welcome back, {customer['name']}!**\n\n✅ Successfully logged in via WhatsApp\n📧 Email: {email}\n\n🛒 Try: 'show my orders' or 'my account'",
+                        'query_type': 'authentication_success',
+                        'channel': 'whatsapp',
+                        'customer_id': customer_id,
+                        'authenticated': True
+                    }
+
+        except Exception as e:
+            logger.error(f"❌ Error in WhatsApp email login: {e}")
+            return {
+                'success': True,
+                'response': "❌ Login failed. Please try again or contact support.",
+                'query_type': 'authentication_error',
+                'channel': 'whatsapp'
+            }
+
+    def _handle_account_linking(self, phone_number: str, customer_id: int, session_id: str) -> Dict:
+        """Handle account linking between WhatsApp and email accounts"""
+        try:
+            instructions = """
+🔗 **Link Your WhatsApp to Email Account**
+
+If you already have a RaqibTech account with email, you can link it to this WhatsApp number.
+
+**Step 1:** Login with your email:
+`login email: your-registered-email@example.com`
+
+**Don't have an email account?**
+`signup` - Create a new account
+
+*This will give you access to your order history, preferences, and account benefits!*
+            """
+
+            return {
+                'success': True,
+                'response': instructions,
+                'query_type': 'authentication_linking',
+                'channel': 'whatsapp'
+            }
+
+        except Exception as e:
+            logger.error(f"❌ Error in account linking: {e}")
+            return {
+                'success': True,
+                'response': "Sorry, there was an issue with account linking. Please try again.",
+                'query_type': 'authentication_error',
+                'channel': 'whatsapp'
+            }
+
+    def _is_user_authenticated(self, customer_id: int) -> bool:
+        """Check if WhatsApp user is authenticated (not a guest)"""
+        try:
+            with self.get_database_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute("""
+                        SELECT user_role, email FROM customers
+                        WHERE customer_id = %s
+                    """, (customer_id,))
+
+                    customer = cursor.fetchone()
+                    if customer:
+                        # User is authenticated if they have customer role and real email (not auto-generated)
+                        return (customer['user_role'] == 'customer' and
+                                not customer['email'].startswith('whatsapp'))
+                    return False
+        except Exception as e:
+            logger.error(f"❌ Error checking authentication status: {e}")
+            return False
+
+    def _get_authenticated_user_info(self, customer_id: int) -> Dict:
+        """Get authenticated user information"""
+        try:
+            with self.get_database_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute("""
+                        SELECT name, email, account_tier FROM customers
+                        WHERE customer_id = %s
+                    """, (customer_id,))
+
+                    customer = cursor.fetchone()
+                    if customer:
+                        return {
+                            'name': customer['name'],
+                            'email': customer['email'],
+                            'tier': customer['account_tier']
+                        }
+            return {}
+        except Exception as e:
+            logger.error(f"❌ Error getting user info: {e}")
+            return {}
+
+    def _store_signup_progress(self, phone_number: str, session_id: str, progress_data: Dict):
+        """Store signup progress in Redis or database"""
+        try:
+            # Store in Redis if available, otherwise in database
+            key = f"whatsapp_signup:{phone_number}"
+            progress_data['timestamp'] = datetime.now().isoformat()
+
+            # Try Redis first
+            try:
+                import redis
+                redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+                redis_client.setex(key, 3600, json.dumps(progress_data))  # 1 hour expiry
+                logger.info(f"✅ Stored signup progress in Redis for {phone_number}")
+            except:
+                # Fallback to database storage
+                with self.get_database_connection() as conn:
+                    with conn.cursor() as cursor:
+                        cursor.execute("""
+                            INSERT INTO whatsapp_signup_progress (phone_number, session_id, progress_data, created_at)
+                            VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+                            ON CONFLICT (phone_number)
+                            DO UPDATE SET progress_data = %s, updated_at = CURRENT_TIMESTAMP
+                        """, (phone_number, session_id, json.dumps(progress_data), json.dumps(progress_data)))
+                        conn.commit()
+
+        except Exception as e:
+            logger.error(f"❌ Error storing signup progress: {e}")
+
+    def _get_signup_progress(self, phone_number: str, session_id: str) -> Optional[Dict]:
+        """Get signup progress from Redis or database"""
+        try:
+            key = f"whatsapp_signup:{phone_number}"
+
+            # Try Redis first
+            try:
+                import redis
+                redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+                progress_json = redis_client.get(key)
+                if progress_json:
+                    return json.loads(progress_json)
+            except:
+                pass
+
+            # Fallback to database
+            with self.get_database_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute("""
+                        SELECT progress_data FROM whatsapp_signup_progress
+                        WHERE phone_number = %s
+                        ORDER BY updated_at DESC LIMIT 1
+                    """, (phone_number,))
+
+                    result = cursor.fetchone()
+                    if result:
+                        return json.loads(result['progress_data'])
+
+            return None
+
+        except Exception as e:
+            logger.error(f"❌ Error getting signup progress: {e}")
+            return None
+
+    def _clear_signup_progress(self, phone_number: str, session_id: str):
+        """Clear signup progress after successful completion"""
+        try:
+            key = f"whatsapp_signup:{phone_number}"
+
+            # Clear from Redis
+            try:
+                import redis
+                redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+                redis_client.delete(key)
+            except:
+                pass
+
+            # Clear from database
+            with self.get_database_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("DELETE FROM whatsapp_signup_progress WHERE phone_number = %s", (phone_number,))
+                    conn.commit()
+
+        except Exception as e:
+            logger.error(f"❌ Error clearing signup progress: {e}")
 
 # Singleton instance
 whatsapp_handler = None
