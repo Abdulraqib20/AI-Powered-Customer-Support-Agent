@@ -14,6 +14,9 @@ from psycopg2.extras import RealDictCursor
 import uuid
 import hashlib
 import hmac
+from dotenv import load_dotenv
+
+load_dotenv(override=True)
 
 # Import existing system components
 from .order_ai_assistant import OrderAIAssistant
