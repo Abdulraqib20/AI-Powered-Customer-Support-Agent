@@ -14,12 +14,22 @@ function Test-DockerRunning {
     }
 }
 
-# Function to check if a service is running
-function Test-ServiceRunning {
-    param($ServiceName, $Port)
+# Function to check if Redis is responding
+function Test-RedisRunning {
     try {
-        $connection = Test-NetConnection -ComputerName localhost -Port $Port -WarningAction SilentlyContinue -InformationLevel Quiet
-        return $connection.TcpTestSucceeded
+        $result = docker exec redis-server redis-cli ping 2>$null
+        return $result -eq "PONG"
+    }
+    catch {
+        return $false
+    }
+}
+
+# Function to check if Qdrant is responding
+function Test-QdrantRunning {
+    try {
+        $response = Invoke-RestMethod -Uri "http://localhost:6333/collections" -Method GET -TimeoutSec 5 -ErrorAction SilentlyContinue
+        return $true
     }
     catch {
         return $false
@@ -49,23 +59,27 @@ function Start-DockerContainer {
         docker start $ContainerName
         if ($LASTEXITCODE -eq 0) {
             Write-Host "$ServiceName container started successfully" -ForegroundColor Green
-        } else {
+        }
+        else {
             Write-Host "Failed to start existing container, removing and recreating..." -ForegroundColor Yellow
             docker rm -f $ContainerName 2>$null
             Write-Host "Creating new $ContainerName container..." -ForegroundColor Cyan
             Invoke-Expression "docker run -d --name $ContainerName $Ports $ImageName"
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "$ServiceName container created and started successfully" -ForegroundColor Green
-            } else {
+            }
+            else {
                 throw "Failed to create $ServiceName container"
             }
         }
-    } else {
+    }
+    else {
         Write-Host "Creating new $ContainerName container..." -ForegroundColor Cyan
         Invoke-Expression "docker run -d --name $ContainerName $Ports $ImageName"
         if ($LASTEXITCODE -eq 0) {
             Write-Host "$ServiceName container created and started successfully" -ForegroundColor Green
-        } else {
+        }
+        else {
             throw "Failed to create $ServiceName container"
         }
     }
@@ -81,31 +95,56 @@ if (-not (Test-DockerRunning)) {
 }
 Write-Host "Docker is running" -ForegroundColor Green
 
+# Clean up old containers if they exist
+Write-Host ""
+Write-Host "Cleaning up old containers..." -ForegroundColor Yellow
+docker rm -f redis-server qdrant-server 2>$null | Out-Null
+
 # Start Redis container
 Write-Host ""
 Write-Host "Setting up Redis service..." -ForegroundColor Yellow
 try {
     Start-DockerContainer -ContainerName "redis-server" -ImageName "redis:latest" -Ports "-p 6379:6379" -ServiceName "Redis"
 
+    # Wait for container to be fully ready
+    Write-Host "Waiting for Redis to initialize..." -ForegroundColor Yellow
+    Start-Sleep -Seconds 3
+
     # Wait and verify Redis is responding
-    Write-Host "Waiting for Redis to be ready..." -ForegroundColor Yellow
+    Write-Host "Checking Redis connectivity..." -ForegroundColor Yellow
     $timeout = 30
     $elapsed = 0
-    while (-not (Test-ServiceRunning "Redis" 6379) -and $elapsed -lt $timeout) {
-        Start-Sleep -Seconds 2
-        $elapsed += 2
-        Write-Host "." -NoNewline -ForegroundColor Yellow
+    $redisReady = $false
+
+    while (-not $redisReady -and $elapsed -lt $timeout) {
+        $redisReady = Test-RedisRunning
+        if (-not $redisReady) {
+            Start-Sleep -Seconds 2
+            $elapsed += 2
+            Write-Host "." -NoNewline -ForegroundColor Yellow
+        }
     }
     Write-Host ""
 
-    if (Test-ServiceRunning "Redis" 6379) {
-        Write-Host "Redis is ready and responding on port 6379" -ForegroundColor Green
-    } else {
-        throw "Redis failed to become ready within $timeout seconds"
+    if ($redisReady) {
+        Write-Host "Redis is ready and responding (PONG received)" -ForegroundColor Green
+    }
+    else {
+        Write-Host "Trying alternative connectivity test..." -ForegroundColor Yellow
+        # Fallback test using netstat
+        $netstatResult = netstat -an | Select-String "6379.*LISTENING"
+        if ($netstatResult) {
+            Write-Host "Redis is listening on port 6379 (fallback test passed)" -ForegroundColor Green
+        }
+        else {
+            throw "Redis failed to become ready within $timeout seconds"
+        }
     }
 }
 catch {
     Write-Host "ERROR with Redis: $_" -ForegroundColor Red
+    Write-Host "Checking Redis container logs..." -ForegroundColor Yellow
+    docker logs redis-server --tail 10
     exit 1
 }
 
@@ -115,25 +154,45 @@ Write-Host "Setting up Qdrant service..." -ForegroundColor Yellow
 try {
     Start-DockerContainer -ContainerName "qdrant-server" -ImageName "qdrant/qdrant" -Ports "-p 6333:6333 -p 6334:6334" -ServiceName "Qdrant"
 
+    # Wait for container to be fully ready
+    Write-Host "Waiting for Qdrant to initialize..." -ForegroundColor Yellow
+    Start-Sleep -Seconds 5
+
     # Wait and verify Qdrant is responding
-    Write-Host "Waiting for Qdrant to be ready..." -ForegroundColor Yellow
+    Write-Host "Checking Qdrant connectivity..." -ForegroundColor Yellow
     $timeout = 45
     $elapsed = 0
-    while (-not (Test-ServiceRunning "Qdrant" 6333) -and $elapsed -lt $timeout) {
-        Start-Sleep -Seconds 3
-        $elapsed += 3
-        Write-Host "." -NoNewline -ForegroundColor Yellow
+    $qdrantReady = $false
+
+    while (-not $qdrantReady -and $elapsed -lt $timeout) {
+        $qdrantReady = Test-QdrantRunning
+        if (-not $qdrantReady) {
+            Start-Sleep -Seconds 3
+            $elapsed += 3
+            Write-Host "." -NoNewline -ForegroundColor Yellow
+        }
     }
     Write-Host ""
 
-    if (Test-ServiceRunning "Qdrant" 6333) {
+    if ($qdrantReady) {
         Write-Host "Qdrant is ready and responding on port 6333" -ForegroundColor Green
-    } else {
-        throw "Qdrant failed to become ready within $timeout seconds"
+    }
+    else {
+        Write-Host "Trying alternative connectivity test..." -ForegroundColor Yellow
+        # Fallback test using netstat
+        $netstatResult = netstat -an | Select-String "6333.*LISTENING"
+        if ($netstatResult) {
+            Write-Host "Qdrant is listening on port 6333 (fallback test passed)" -ForegroundColor Green
+        }
+        else {
+            throw "Qdrant failed to become ready within $timeout seconds"
+        }
     }
 }
 catch {
     Write-Host "ERROR with Qdrant: $_" -ForegroundColor Red
+    Write-Host "Checking Qdrant container logs..." -ForegroundColor Yellow
+    docker logs qdrant-server --tail 10
     exit 1
 }
 
@@ -152,9 +211,11 @@ try {
     # Check if run.py exists, otherwise use app.py directly
     if (Test-Path "flask_app/run.py") {
         python flask_app/run.py
-    } elseif (Test-Path "flask_app/app.py") {
+    }
+    elseif (Test-Path "flask_app/app.py") {
         python flask_app/app.py
-    } else {
+    }
+    else {
         throw "Neither flask_app/run.py nor flask_app/app.py found!"
     }
 }
