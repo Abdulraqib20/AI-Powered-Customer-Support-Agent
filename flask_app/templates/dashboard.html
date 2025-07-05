@@ -5072,7 +5072,7 @@ async function quickOrderProduct() {
 
         if (data.success && data.shopping_result) {
             // Show checkout modal with product details
-            showCheckoutModal(data.shopping_result, quantity, deliveryState);
+            await showCheckoutModal(data.shopping_result, quantity, deliveryState);
         } else {
             showAlert('Product not found or out of stock. Try asking our AI assistant for alternatives.', 'warning');
         }
@@ -5108,9 +5108,12 @@ function trackGuestOrder() {
     }
 }
 
-function showCheckoutModal(productData, quantity, deliveryState) {
+async function showCheckoutModal(productData, quantity, deliveryState) {
     // Populate checkout modal with product data
     const modal = new bootstrap.Modal(document.getElementById('checkoutModal'));
+
+    // Store product data globally for delivery calculation
+    window.currentProductData = productData;
 
     // Update product information
     document.getElementById('checkout-product-name').textContent = productData.product_name || 'Product';
@@ -5134,10 +5137,17 @@ function showCheckoutModal(productData, quantity, deliveryState) {
     // Update delivery information
     document.getElementById('checkout-delivery-state').textContent = deliveryState;
 
-    // Calculate totals
+    // Calculate totals (async to get accurate delivery fee)
     const subtotal = unitPrice * quantity;
-    const deliveryFee = calculateDeliveryFee(deliveryState);
     const discount = calculateTierDiscount(subtotal, customerTier);
+
+    // Show loading state
+    document.getElementById('checkout-subtotal').textContent = formatNaira(subtotal);
+    document.getElementById('checkout-delivery-fee').textContent = 'Calculating...';
+    document.getElementById('checkout-total').textContent = 'Calculating...';
+
+    // Calculate delivery fee with actual weight
+    const deliveryFee = await calculateDeliveryFee(deliveryState, productData, quantity);
     const total = subtotal + deliveryFee - discount;
 
     document.getElementById('checkout-subtotal').textContent = formatNaira(subtotal);
@@ -5162,38 +5172,67 @@ function showCheckoutModal(productData, quantity, deliveryState) {
     modal.show();
 }
 
-function calculateDeliveryFee(state) {
-    // 🔧 FIXED: Updated to match backend NigerianDeliveryCalculator exactly
+async function calculateDeliveryFee(state, productData, quantity) {
+    // 🔧 FIXED: Use dynamic API call for accurate delivery fee calculation
+    try {
+        // Get product weight from the passed productData
+        const weight_kg = productData.weight_kg || 1.0;
+        const subtotal = productData.price * quantity;
+
+        const response = await fetch('/api/delivery-fee', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                state: state,
+                weight_kg: weight_kg * quantity,
+                order_value: subtotal
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            return result.delivery_fee;
+        } else {
+            console.error('Delivery fee calculation failed:', result.error);
+            // Fallback to basic zones if API fails
+            return calculateDeliveryFeeFallback(state);
+        }
+    } catch (error) {
+        console.error('Error calculating delivery fee:', error);
+        // Fallback to basic zones if API fails
+        return calculateDeliveryFeeFallback(state);
+    }
+}
+
+// Fallback function for when API is unavailable (🔧 FIXED: Updated to match new rates)
+function calculateDeliveryFeeFallback(state) {
     const deliveryZones = {
-        // Lagos Metro
-        'Lagos': 2500,  // 2000 base + 500 per kg
+        // Lagos Metro - 1500 base + 150 per kg (estimate 1kg)
+        'Lagos': 1650,
 
-        // Abuja FCT
-        'Abuja': 3100,  // 2500 base + 600 per kg
-        'FCT': 3100,
+        // Abuja FCT - 2000 base + 200 per kg (estimate 1kg)
+        'Abuja': 2200,
+        'FCT': 2200,
 
-        // Major Cities
-        'Kano': 3700,   // 3000 base + 700 per kg
-        'Rivers': 3700,
-        'Oyo': 3700,
-        'Kaduna': 3700,
-        'Anambra': 3700,
-        'Edo': 3700,
-        'Enugu': 3700,
-        'Delta': 3700,
-        'Imo': 3700,
+        // Major Cities - 2500 base + 250 per kg (estimate 1kg)
+        'Kano': 2750, 'Rivers': 2750, 'Oyo': 2750, 'Kaduna': 2750,
+        'Anambra': 2750, 'Edo': 2750, 'Enugu': 2750, 'Delta': 2750,
+        'Imo': 2750,
 
-        // Other States (including Kwara)
-        'Abia': 4800, 'Adamawa': 4800, 'Akwa Ibom': 4800, 'Bauchi': 4800,
-        'Bayelsa': 4800, 'Benue': 4800, 'Borno': 4800, 'Cross River': 4800,
-        'Ebonyi': 4800, 'Ekiti': 4800, 'Gombe': 4800, 'Jigawa': 4800,
-        'Kebbi': 4800, 'Kogi': 4800, 'Kwara': 4800, 'Nasarawa': 4800,
-        'Niger': 4800, 'Ondo': 4800, 'Osun': 4800, 'Ogun': 4800,
-        'Plateau': 4800, 'Sokoto': 4800, 'Taraba': 4800, 'Yobe': 4800,
-        'Zamfara': 4800
+        // Other States - 3000 base + 300 per kg (estimate 1kg)
+        'Abia': 3300, 'Adamawa': 3300, 'Akwa Ibom': 3300, 'Bauchi': 3300,
+        'Bayelsa': 3300, 'Benue': 3300, 'Borno': 3300, 'Cross River': 3300,
+        'Ebonyi': 3300, 'Ekiti': 3300, 'Gombe': 3300, 'Jigawa': 3300,
+        'Kebbi': 3300, 'Kogi': 3300, 'Kwara': 3300, 'Nasarawa': 3300,
+        'Niger': 3300, 'Ondo': 3300, 'Osun': 3300, 'Ogun': 3300,
+        'Plateau': 3300, 'Sokoto': 3300, 'Taraba': 3300, 'Yobe': 3300,
+        'Zamfara': 3300
     };
 
-    return deliveryZones[state] || 4800;  // 🔧 FIXED: Default to Other States fee
+    return deliveryZones[state] || 3300;  // Default to Other States fee
 }
 
 function calculateTierDiscount(subtotal, tier) {

@@ -205,8 +205,14 @@ class WhatsAppBusinessHandler:
                         logger.info(f"🔍 DEBUG: Formatted shopping response: '{response_message}'")
 
                     # Clean up AI response formatting tokens and duplicates
-                    cleaned_response = self._clean_ai_response(response_message)
-                    logger.info(f"🔍 DEBUG: Cleaned response_message: '{cleaned_response}'")
+                    # BUT exempt order confirmations from aggressive cleaning to preserve full details
+                    if ai_response.get('action') == 'order_placed':
+                        # For order confirmations, only do light cleaning (remove AI tokens but keep all content)
+                        cleaned_response = self._light_clean_ai_response(response_message)
+                        logger.info(f"🔍 DEBUG: Light cleaned order confirmation: '{cleaned_response}'")
+                    else:
+                        cleaned_response = self._clean_ai_response(response_message)
+                        logger.info(f"🔍 DEBUG: Cleaned response_message: '{cleaned_response}'")
 
                     sent_message = self._send_whatsapp_message(message.from_number, cleaned_response, ai_response)
 
@@ -335,6 +341,34 @@ class WhatsAppBusinessHandler:
     def format_message_for_whatsapp(self, message: str, ai_response: Dict = None) -> str:
         """Public method to format AI response message for WhatsApp"""
         return self._format_message_for_whatsapp(message, ai_response)
+
+    def _light_clean_ai_response(self, message: str) -> str:
+        """Light cleaning for order confirmations - only remove AI tokens, preserve all content"""
+        if not message:
+            return message
+
+        # Remove AI model formatting tokens and artifacts ONLY
+        patterns_to_remove = [
+            r'assistant<\|header_end\|>',
+            r'<\|header_start\|>',
+            r'<\|header_end\|>',
+            r'<\|.*?\|>',  # Any other special tokens
+            r'Yourassistant',
+            r'assistant\s*$',  # "assistant" at end of line
+            r'assistant\s*assistant',  # Duplicate "assistant"
+            r'^\s*assistant\s*',  # "assistant" at start of line
+        ]
+
+        import re
+        cleaned = message
+        for pattern in patterns_to_remove:
+            cleaned = re.sub(pattern, '', cleaned, flags=re.MULTILINE | re.IGNORECASE)
+
+        # Only clean up excessive consecutive newlines (preserve formatting structure)
+        cleaned = re.sub(r'\n\s*\n\s*\n', '\n\n', cleaned)  # Max 2 consecutive newlines
+        cleaned = cleaned.strip()
+
+        return cleaned if cleaned else "I understand. How can I help you?"
 
     def _clean_ai_response(self, message: str) -> str:
         """Clean up AI response formatting tokens and duplicates"""

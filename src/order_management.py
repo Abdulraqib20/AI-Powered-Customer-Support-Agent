@@ -106,24 +106,24 @@ class OrderSummary:
 class NigerianDeliveryCalculator:
     """Nigerian state-based delivery fee and time calculator"""
 
-    # Delivery zones and fees (in Naira)
+    # Delivery zones and fees (in Naira) - 🔧 FIXED: Reduced to reasonable rates
     DELIVERY_ZONES = {
         "Lagos Metro": {
             "states": ["Lagos"],
-            "base_fee": 2000,
-            "per_kg_fee": 500,
+            "base_fee": 1500,
+            "per_kg_fee": 150,
             "delivery_days": 1
         },
-            "Abuja FCT": {
-        "states": ["FCT", "Abuja"],
-        "base_fee": 2500,
-        "per_kg_fee": 600,
-        "delivery_days": 2
-    },
+        "Abuja FCT": {
+            "states": ["FCT", "Abuja"],
+            "base_fee": 2000,
+            "per_kg_fee": 200,
+            "delivery_days": 2
+        },
         "Major Cities": {
             "states": ["Kano", "Rivers", "Oyo", "Kaduna", "Anambra", "Edo", "Enugu", "Delta", "Imo"],
-            "base_fee": 3000,
-            "per_kg_fee": 700,
+            "base_fee": 2500,
+            "per_kg_fee": 250,
             "delivery_days": 3
         },
         "Other States": {
@@ -131,8 +131,8 @@ class NigerianDeliveryCalculator:
                       "Cross River", "Ebonyi", "Ekiti", "Gombe", "Jigawa", "Kebbi", "Kogi",
                       "Kwara", "Nasarawa", "Niger", "Ondo", "Osun", "Ogun", "Plateau",
                       "Sokoto", "Taraba", "Yobe", "Zamfara"],
-            "base_fee": 4000,
-            "per_kg_fee": 800,
+            "base_fee": 3000,
+            "per_kg_fee": 300,
             "delivery_days": 5
         }
     }
@@ -601,6 +601,7 @@ class OrderManagementSystem:
                             p.category,
                             p.brand,
                             p.price,
+                            p.weight_kg,
                             1 as quantity
                         FROM orders o
                         LEFT JOIN products p ON o.product_id = p.product_id
@@ -616,9 +617,12 @@ class OrderManagementSystem:
                         # Calculate subtotal from actual product prices
                         subtotal = sum(float(product['price']) * int(product['quantity']) for product in products)
 
-                        # Calculate delivery fee based on customer's state
+                        # Calculate total weight from actual product weights
+                        total_weight = sum(float(product.get('weight_kg', 1.0)) * int(product['quantity']) for product in products)
+
+                        # Calculate delivery fee based on customer's state and ACTUAL WEIGHT
                         delivery_fee, delivery_days, delivery_zone = self.delivery_calculator.calculate_delivery_fee(
-                            order_data['state'], 1.0, subtotal
+                            order_data['state'], total_weight, subtotal
                         )
 
                         # Calculate tier discount

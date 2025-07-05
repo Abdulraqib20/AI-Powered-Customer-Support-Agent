@@ -1,7 +1,14 @@
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import os
+import sys
 from dotenv import load_dotenv
+
+# Add the project root to the Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Import the new delivery calculator
+from src.order_management import NigerianDeliveryCalculator
 
 load_dotenv()
 
@@ -21,7 +28,7 @@ def fix_all_database_pricing():
         print('🔧 COMPREHENSIVE DATABASE PRICING FIX')
         print('=' * 70)
 
-        # Get all active orders that need fixing
+        # Get all active orders that need fixing with product weights
         cursor.execute('''
             SELECT
                 o.order_id,
@@ -29,6 +36,7 @@ def fix_all_database_pricing():
                 p.product_id,
                 p.product_name,
                 p.price,
+                p.weight_kg,
                 o.total_amount,
                 c.account_tier,
                 c.state,
@@ -45,14 +53,8 @@ def fix_all_database_pricing():
         print(f'📊 Found {len(orders)} orders to check and fix')
         print()
 
-        # Define delivery fees (matching your system logic)
-        delivery_zones = {
-            'Lagos': 2500,
-            'FCT': 3100,  # Abuja
-            'Rivers': 3700, 'Ogun': 3700, 'Kano': 3700, 'Kaduna': 3700,
-            'Oyo': 3700, 'Delta': 3700, 'Imo': 3700, 'Akwa Ibom': 3700,
-            'Ondo': 3700, 'Anambra': 3700, 'Edo': 3700, 'Abia': 3700
-        }
+        # Use the new delivery calculator
+        delivery_calculator = NigerianDeliveryCalculator()
 
         # Tier discounts
         tier_discounts = {
@@ -77,12 +79,15 @@ def fix_all_database_pricing():
             for order in batch:
                 order_id = order['order_id']
                 price = float(order['price'])
+                weight_kg = float(order['weight_kg']) if order['weight_kg'] else 1.0
                 tier = order['account_tier'] or 'Bronze'
                 state = order['state']
                 stored_total = float(order['total_amount'])
 
-                # Calculate expected delivery fee
-                delivery_fee = delivery_zones.get(state, 4800)  # Default 4800 for other states
+                # Calculate expected delivery fee using new weight-based calculator
+                delivery_fee, delivery_days, delivery_zone = delivery_calculator.calculate_delivery_fee(
+                    state, weight_kg, price
+                )
 
                 # Calculate tier discount
                 tier_discount_rate = tier_discounts.get(tier, 0.0)
@@ -152,6 +157,7 @@ def fix_all_database_pricing():
             SELECT
                 o.order_id,
                 p.price,
+                p.weight_kg,
                 o.total_amount,
                 c.account_tier,
                 c.state
@@ -168,12 +174,15 @@ def fix_all_database_pricing():
 
         for order in verification_orders:
             price = float(order['price'])
+            weight_kg = float(order['weight_kg']) if order['weight_kg'] else 1.0
             tier = order['account_tier'] or 'Bronze'
             state = order['state']
             stored_total = float(order['total_amount'])
 
-            # Recalculate expected total
-            delivery_fee = delivery_zones.get(state, 4800)
+            # Recalculate expected total using new delivery calculator
+            delivery_fee, delivery_days, delivery_zone = delivery_calculator.calculate_delivery_fee(
+                state, weight_kg, price
+            )
             tier_discount_rate = tier_discounts.get(tier, 0.0)
             tier_discount = price * tier_discount_rate
 
