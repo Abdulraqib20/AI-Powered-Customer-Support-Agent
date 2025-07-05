@@ -383,9 +383,28 @@ class WhatsAppBusinessHandler:
 
         return None
 
+    def _format_nigerian_phone(self, phone_number: str) -> str:
+        """Format phone number to comply with database constraint"""
+        # Remove any existing + or 0 prefix
+        cleaned = phone_number.lstrip('+0')
+
+        # If starts with 234, add + prefix for international format
+        if cleaned.startswith('234'):
+            return f"+{cleaned}"
+
+        # If it's a 10-digit local number, add +234 prefix
+        if len(cleaned) == 10 and cleaned[0] in '789':
+            return f"+234{cleaned}"
+
+        # Return original if format is unclear
+        return phone_number
+
     def _get_or_create_customer(self, phone_number: str) -> int:
         """Get existing customer or create new one for WhatsApp number"""
         try:
+            # Format phone number for database constraint compliance
+            formatted_phone = self._format_nigerian_phone(phone_number)
+
             with self.get_database_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                     # Check if customer exists with this WhatsApp number
@@ -409,11 +428,11 @@ class WhatsAppBusinessHandler:
                     """, (
                         f"WhatsApp User {phone_number[-4:]}",  # name
                         f"whatsapp{phone_number[-10:]}@raqibtech.com",  # email
-                        phone_number,  # phone
+                        formatted_phone,  # phone - use formatted version for DB constraint
                         'Lagos',  # state
                         'Lagos Island',  # lga
                         'WhatsApp Customer Address (To be updated)',  # address
-                        phone_number,  # whatsapp_number
+                        phone_number,  # whatsapp_number - keep original for WhatsApp API
                         True,  # whatsapp_opt_in
                         True  # whatsapp_verified
                     ))
@@ -433,41 +452,42 @@ class WhatsAppBusinessHandler:
     def _get_or_create_session(self, phone_number: str, customer_id: int) -> str:
         """Get or create session for WhatsApp conversation"""
         try:
-            # Create proper UUID session ID for WhatsApp
-            session_id = str(uuid.uuid4())
+            user_identifier = f"whatsapp:{phone_number}"
 
-            # Use existing session manager to create/get session
             with self.get_database_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                    # Create or get session
+                    # Check for existing session first
                     cursor.execute("""
                         SELECT session_id FROM user_sessions
                         WHERE user_identifier = %s
                         ORDER BY created_at DESC LIMIT 1
-                    """, (phone_number,))
+                    """, (user_identifier,))
 
                     existing = cursor.fetchone()
                     if existing:
+                        logger.info(f"✅ Using existing WhatsApp session: {existing['session_id']}")
                         return existing['session_id']
 
                     # Create new session with proper UUID
+                    session_id = str(uuid.uuid4())
                     cursor.execute("""
                         INSERT INTO user_sessions (session_id, user_identifier, session_data)
                         VALUES (%s, %s, %s)
-                    """, (session_id, f"whatsapp:{phone_number}", json.dumps({
+                    """, (session_id, user_identifier, json.dumps({
                         'channel': 'whatsapp',
                         'phone_number': phone_number,
                         'customer_id': customer_id,
                         'created_via': 'whatsapp_business_api'
                     })))
                     conn.commit()
-                    logger.info(f"✅ Created WhatsApp session: {session_id}")
+                    logger.info(f"✅ Created new WhatsApp session: {session_id}")
 
                     return session_id
 
         except Exception as e:
-            logger.error(f"❌ Error creating WhatsApp session: {e}")
-            return str(uuid.uuid4())  # Always return proper UUID
+            logger.error(f"❌ Error handling WhatsApp session: {e}")
+            # Return a fallback session ID
+            return str(uuid.uuid4())
 
     def _store_message(self, message: WhatsAppMessage, session_id: str, customer_id: int, direction: str):
         """Store WhatsApp message in database"""
