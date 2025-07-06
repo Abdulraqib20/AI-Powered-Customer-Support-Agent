@@ -902,10 +902,10 @@ class OrderManagementSystem:
     def _update_customer_tier(self, cursor, customer_id: int, order_amount: float):
         """Update customer tier based on total spending with enhanced logic"""
         try:
-            # Get customer's total spending and current tier
+            # 🔧 FIXED: Simplified SQL query to avoid casting issues
             cursor.execute("""
                 SELECT c.account_tier,
-                       COALESCE(SUM(CASE WHEN o.order_status != 'Returned' THEN o.total_amount ELSE 0 END), 0)::FLOAT as total_spent,
+                       COALESCE(SUM(CASE WHEN o.order_status != 'Returned' THEN o.total_amount ELSE 0 END), 0) as total_spent,
                        COUNT(CASE WHEN o.order_status != 'Returned' THEN o.order_id END) as order_count
                 FROM customers c
                 LEFT JOIN orders o ON c.customer_id = o.customer_id
@@ -918,27 +918,32 @@ class OrderManagementSystem:
                 logger.warning(f"⚠️ No customer data found for customer_id {customer_id}")
                 return
 
-            current_tier, total_spent, order_count = result
+            current_tier, total_spent_raw, order_count = result
 
-            # 🔧 CRITICAL FIX: Handle both Decimal and float types safely
+            # 🔧 ROBUST TYPE CONVERSION: Handle PostgreSQL Decimal/numeric types
             try:
-                # First, check if it's already a numeric type
-                if isinstance(total_spent, (int, float)):
-                    total_spent = float(total_spent)
-                elif hasattr(total_spent, '__float__'):
-                    total_spent = float(total_spent)
-                elif isinstance(total_spent, str):
-                    # Check if it's a numeric string
-                    if total_spent.replace('.', '').replace('-', '').isdigit():
-                        total_spent = float(total_spent)
+                # Convert to float safely - handle Decimal, float, int, str, None
+                if total_spent_raw is None:
+                    total_spent = 0.0
+                elif isinstance(total_spent_raw, (int, float)):
+                    total_spent = float(total_spent_raw)
+                elif hasattr(total_spent_raw, '__float__'):  # Decimal type
+                    total_spent = float(total_spent_raw)
+                elif isinstance(total_spent_raw, str):
+                    # Only try to convert if it's a valid numeric string
+                    if total_spent_raw.replace('.', '').replace('-', '').replace(',', '').isdigit():
+                        total_spent = float(total_spent_raw.replace(',', ''))
                     else:
-                        logger.error(f"❌ Cannot convert total_spent '{total_spent}' to float for customer {customer_id}")
+                        logger.error(f"❌ Invalid total_spent string '{total_spent_raw}' for customer {customer_id}")
                         total_spent = 0.0
                 else:
-                    # Handle None or other types
-                    total_spent = float(total_spent or 0)
-            except (ValueError, TypeError) as e:
-                logger.error(f"❌ Error converting total_spent '{total_spent}' to float for customer {customer_id}: {e}")
+                    # Last resort - try direct conversion
+                    total_spent = float(total_spent_raw)
+
+                logger.debug(f"💰 Customer {customer_id} - Total spent: ₦{total_spent:,.2f} (from {type(total_spent_raw).__name__}: {total_spent_raw})")
+
+            except (ValueError, TypeError, AttributeError) as e:
+                logger.error(f"❌ Error converting total_spent '{total_spent_raw}' (type: {type(total_spent_raw).__name__}) to float for customer {customer_id}: {e}")
                 total_spent = 0.0
 
             # Enhanced tier progression logic with order count requirements

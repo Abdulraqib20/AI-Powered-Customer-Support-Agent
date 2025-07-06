@@ -1524,14 +1524,12 @@ If you already have a RaqibTech account with email, you can link it to this What
             }
 
     def _perform_logout(self, phone_number: str, customer_id: int, session_id: str) -> bool:
-        """Perform actual logout operations - clear authentication state and session data"""
+        """Perform actual logout operations - clear session data while preserving customer account"""
         try:
-            formatted_phone = self._format_nigerian_phone(phone_number)
-
             with self.get_database_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
 
-                    # Step 1: Get current customer info before logout
+                    # Step 1: Get current customer info for logging
                     cursor.execute("""
                         SELECT email, name, whatsapp_number FROM customers
                         WHERE customer_id = %s
@@ -1541,32 +1539,33 @@ If you already have a RaqibTech account with email, you can link it to this What
                     if not customer:
                         return False
 
-                    # Step 2: Convert customer back to guest status
-                    # Generate new guest name and email
-                    import random
-                    guest_suffix = str(random.randint(1000, 9999))
-                    guest_name = f"WhatsApp User {guest_suffix}"
-                    guest_email = f"whatsapp-{phone_number.replace('+', '')}@guest.raqibtech.com"
-
-                    # Reset customer to guest status
-                    cursor.execute("""
-                        UPDATE customers SET
-                            name = %s,
-                            email = %s,
-                            user_role = 'guest',
-                            whatsapp_verified = false,
-                            account_tier = 'Bronze',
-                            updated_at = CURRENT_TIMESTAMP
-                        WHERE customer_id = %s
-                    """, (guest_name, guest_email, customer_id))
-
-                    # Step 3: Clear all sessions for this user
+                    # Step 2: Clear all sessions for this user (comprehensive approach)
+                    # Method 1: Clear by direct identifiers
                     cursor.execute("""
                         DELETE FROM user_sessions
                         WHERE session_id = %s OR user_identifier = %s OR user_identifier = %s
                     """, (session_id, customer['email'], f"whatsapp:{phone_number}"))
 
-                    # Step 4: Clear any signup progress data
+                    sessions_cleared_1 = cursor.rowcount
+
+                    # Method 2: Clear any remaining sessions linked to this customer
+                    # This ensures complete logout by clearing sessions found via customer relationships
+                    cursor.execute("""
+                        DELETE FROM user_sessions
+                        WHERE session_id IN (
+                            SELECT DISTINCT us.session_id
+                            FROM user_sessions us
+                            JOIN customers c ON (c.email = us.user_identifier OR c.whatsapp_number = %s)
+                            WHERE c.customer_id = %s
+                        )
+                    """, (phone_number, customer_id))
+
+                    sessions_cleared_2 = cursor.rowcount
+                    total_sessions = sessions_cleared_1 + sessions_cleared_2
+
+                    logger.info(f"🗑️ Session cleanup: {sessions_cleared_1} direct + {sessions_cleared_2} linked = {total_sessions} total sessions cleared")
+
+                    # Step 3: Clear any signup progress data
                     cursor.execute("""
                         DELETE FROM whatsapp_signup_progress
                         WHERE phone_number = %s
@@ -1574,9 +1573,9 @@ If you already have a RaqibTech account with email, you can link it to this What
 
                     conn.commit()
 
-                    logger.info(f"✅ Logout successful for {phone_number} -> {customer['email']} (Customer ID: {customer_id})")
+                    logger.info(f"✅ Logout successful for {phone_number} -> {customer['email']} (Customer ID: {customer_id}). Customer account preserved.")
 
-                    # Step 5: Clear Redis cache if available
+                    # Step 4: Clear Redis cache if available
                     try:
                         redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
                         # Clear conversation history
@@ -1595,21 +1594,44 @@ If you already have a RaqibTech account with email, you can link it to this What
             return False
 
     def _is_user_authenticated(self, customer_id: int) -> bool:
-        """Check if WhatsApp user is authenticated (not a guest)"""
+        """Check if WhatsApp user is authenticated (has valid customer account AND active session)"""
         try:
             with self.get_database_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    # Step 1: Check if customer has valid account
                     cursor.execute("""
                         SELECT user_role, email FROM customers
                         WHERE customer_id = %s
                     """, (customer_id,))
 
                     customer = cursor.fetchone()
-                    if customer:
-                        # User is authenticated if they have customer role and real email (not auto-generated)
-                        return (customer['user_role'] == 'customer' and
-                                not customer['email'].startswith('whatsapp'))
-                    return False
+                    if not customer:
+                        return False
+
+                    # Check if customer has valid account (not guest)
+                    has_valid_account = (customer['user_role'] == 'customer' and
+                                       not customer['email'].startswith('whatsapp'))
+
+                    if not has_valid_account:
+                        return False
+
+                    # Step 2: Check if they have an active authenticated session
+                    cursor.execute("""
+                        SELECT session_id FROM user_sessions
+                        WHERE user_identifier = %s
+                    """, (customer['email'],))
+
+                    active_session = cursor.fetchone()
+
+                    # User is authenticated only if they have both valid account AND active session
+                    is_authenticated = active_session is not None
+
+                    logger.info(f"🔐 Authentication check for customer {customer_id}: "
+                              f"valid_account={has_valid_account}, active_session={is_authenticated}, "
+                              f"email={customer['email']}")
+
+                    return is_authenticated
+
         except Exception as e:
             logger.error(f"❌ Error checking authentication status: {e}")
             return False
