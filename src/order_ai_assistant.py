@@ -1184,6 +1184,17 @@ class OrderAIAssistant:
         if not self.order_system:
             return {'success': False, 'message': "Order system is currently unavailable.", 'action': 'system_error'}
 
+        # 🎯 FIXED: Handle "order_placed" stage properly - don't show annoying empty cart message
+        if session_state.conversation_stage == 'order_placed':
+            # Customer just placed an order successfully, provide helpful message instead of "cart is empty"
+            last_order_id = session_state.checkout_state.get('last_order_id', 'Unknown') if session_state.checkout_state else 'Unknown'
+            return {
+                'success': True,
+                'message': f"✅ Your order {last_order_id} was already placed successfully! 🎉\n\n🛍️ Want to start a new order? Just tell me what you'd like to buy!",
+                'action': 'order_already_placed',
+                'order_id': last_order_id
+            }
+
         # Use passed session_state for cart items
         if not session_state.cart_items:
             session_state.conversation_stage = 'cart_empty_checkout_attempt'

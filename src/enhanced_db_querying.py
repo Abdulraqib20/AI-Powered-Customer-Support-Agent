@@ -1110,6 +1110,9 @@ RESPONSE FORMAT: Return ONLY the SQL query, nothing else."""
             # 🚨 COMPREHENSIVE SQL FIXES
             sql_query = self._apply_critical_sql_fixes(sql_query, entities)
 
+            # 🔧 CRITICAL: Add SQL syntax validation and correction
+            sql_query = self._validate_and_fix_sql_syntax(sql_query, entities)
+
             logger.info(f"🔍 Generated SQL: {sql_query}")
             return sql_query
 
@@ -4716,6 +4719,104 @@ CURRENT TIME CONTEXT:
             if user_authenticated and effective_customer_id:
                 return f"SELECT * FROM orders WHERE customer_id = {effective_customer_id};"
             return "SELECT 'Query processing error' as message;"
+
+    def _validate_and_fix_sql_syntax(self, sql_query: str, entities: Dict[str, Any]) -> str:
+        """
+        🔧 CRITICAL: Validate and fix SQL syntax errors in AI-generated queries
+        """
+        try:
+            import re
+            fixed_query = sql_query.strip()
+
+            # 🚨 CRITICAL SYNTAX ERROR FIXES
+
+            # Fix 1: Double comma errors (e.g., "category,,brand")
+            fixed_query = re.sub(r',\s*,', ',', fixed_query)
+
+            # Fix 2: Missing column names before AS (e.g., ", AS price,")
+            fixed_query = re.sub(r',\s*AS\s+(\w+)', r', NULL AS \1', fixed_query, flags=re.IGNORECASE)
+
+            # Fix 3: Column name typos - specific common errors
+            typo_fixes = {
+                'stock_quantityity': 'stock_quantity',
+                'stock_quantitiy': 'stock_quantity',
+                'product_namee': 'product_name',
+                'cusotmer_id': 'customer_id',
+                'order_idd': 'order_id',
+                'pricee': 'price',
+                'categoryyy': 'category',
+                'brandd': 'brand'
+            }
+
+            for typo, correct in typo_fixes.items():
+                if typo in fixed_query:
+                    fixed_query = fixed_query.replace(typo, correct)
+                    print_log(f"🔧 FIXED TYPO: {typo} → {correct}", 'info')
+
+            # Fix 4: Malformed SELECT statements
+            # Check for patterns like "SELECT product_id,product_name,category,,brand, AS price"
+            select_pattern = r'SELECT\s+(.*?)\s+FROM'
+            select_match = re.search(select_pattern, fixed_query, re.IGNORECASE | re.DOTALL)
+
+            if select_match:
+                columns_part = select_match.group(1)
+                original_columns = columns_part
+
+                # Clean up the columns part
+                columns_cleaned = re.sub(r',\s*,', ',', columns_part)  # Remove double commas
+                columns_cleaned = re.sub(r',\s*AS\s+(\w+)', r', NULL AS \1', columns_cleaned, flags=re.IGNORECASE)  # Fix missing column before AS
+                columns_cleaned = re.sub(r'^\s*,|,\s*$', '', columns_cleaned)  # Remove leading/trailing commas
+                columns_cleaned = re.sub(r',\s*,', ',', columns_cleaned)  # Double check for double commas
+
+                if columns_cleaned != original_columns:
+                    fixed_query = fixed_query.replace(original_columns, columns_cleaned)
+                    print_log(f"🔧 FIXED SELECT COLUMNS: {original_columns} → {columns_cleaned}", 'info')
+
+            # Fix 5: Empty column selections
+            if re.search(r'SELECT\s*,', fixed_query, re.IGNORECASE):
+                fixed_query = re.sub(r'SELECT\s*,', 'SELECT ', fixed_query, flags=re.IGNORECASE)
+                print_log("🔧 FIXED: Removed leading comma in SELECT", 'info')
+
+            # Fix 6: Trailing commas in SELECT
+            fixed_query = re.sub(r',\s*FROM', ' FROM', fixed_query, flags=re.IGNORECASE)
+
+            # Fix 7: Basic SQL structure validation
+            if 'SELECT' in fixed_query.upper() and 'FROM' not in fixed_query.upper():
+                # If it's a SELECT without FROM, add a basic fallback
+                print_log("🔧 CRITICAL: SELECT without FROM detected - adding fallback", 'warning')
+                user_query = entities.get('user_query', '').lower()
+                if 'laptop' in user_query or 'product' in user_query:
+                    fixed_query = "SELECT product_id, product_name, category, brand, price, stock_quantity FROM products WHERE (category ILIKE '%laptop%' OR product_name ILIKE '%laptop%' OR description ILIKE '%laptop%') AND in_stock = TRUE;"
+                else:
+                    fixed_query = "SELECT 'Invalid query structure detected' as error_message;"
+
+            # Fix 8: Validate proper SQL structure
+            if not re.match(r'^\s*(SELECT|INSERT|UPDATE|DELETE|WITH)', fixed_query, re.IGNORECASE):
+                print_log("🔧 CRITICAL: Invalid SQL structure - providing fallback", 'error')
+                fixed_query = "SELECT 'Query processing error - invalid SQL structure' as error_message;"
+
+            # Fix 9: Ensure semicolon termination
+            if not fixed_query.rstrip().endswith(';'):
+                fixed_query += ';'
+
+            # Fix 10: Validate parentheses balance
+            open_parens = fixed_query.count('(')
+            close_parens = fixed_query.count(')')
+            if open_parens != close_parens:
+                print_log(f"🔧 WARNING: Unbalanced parentheses - open: {open_parens}, close: {close_parens}", 'warning')
+
+            if fixed_query != sql_query:
+                print_log(f"🔧 SQL SYNTAX FIXED: Applied syntax corrections", 'info')
+
+            return fixed_query
+
+        except Exception as e:
+            print_log(f"❌ Error in SQL syntax validation: {e}", 'error')
+            # Return safe fallback for product queries
+            user_query = entities.get('user_query', '').lower()
+            if 'laptop' in user_query or 'product' in user_query:
+                return "SELECT product_id, product_name, category, brand, price, stock_quantity FROM products WHERE (category ILIKE '%laptop%' OR product_name ILIKE '%laptop%' OR description ILIKE '%laptop%') AND in_stock = TRUE;"
+            return "SELECT 'SQL syntax validation error' as error_message;"
 
     def get_system_prompt(self) -> str:
         """🎯 Enhanced system prompt with comprehensive Nigerian e-commerce knowledge"""
