@@ -449,7 +449,7 @@ class WhatsAppBusinessHandler:
                 'order_id': order_id,
                 'total_amount': 0,
                 'subtotal': 0,
-                'delivery_fee': 4350.0,  # Default delivery fee
+                'delivery_fee': self._calculate_delivery_fee(customer_id),  # 🎯 Dynamic delivery fee
                 'payment_method': 'Not specified',
                 'delivery_address': 'Not specified',
                 'status': 'Pending',  # Default status for placed orders
@@ -542,7 +542,7 @@ class WhatsAppBusinessHandler:
                 'order_id': ai_response.get('order_id', 'N/A'),
                 'total_amount': 0,
                 'subtotal': 0,
-                'delivery_fee': 4350.0,
+                'delivery_fee': self._calculate_delivery_fee(customer_id),  # 🎯 Dynamic delivery fee
                 'payment_method': 'Not specified',
                 'delivery_address': 'Not specified',
                 'status': 'Pending',
@@ -1896,6 +1896,176 @@ If you already have a RaqibTech account with email, you can link it to this What
 
         # Default formatting for other actions
         return base_message
+
+    def _calculate_delivery_fee(self, customer_id: int = None, order_value: float = 0, state: str = None) -> float:
+        """🚚 Calculate delivery fee using the simplified delivery calculator"""
+        try:
+            # Import here to avoid circular imports
+            from src.order_management import NigerianDeliveryCalculator
+
+            # If state not provided, try to get from customer
+            if not state and customer_id:
+                try:
+                    with self.get_database_connection() as conn:
+                        with conn.cursor() as cursor:
+                            cursor.execute("SELECT state FROM customers WHERE customer_id = %s", (customer_id,))
+                            result = cursor.fetchone()
+                            if result and result[0]:
+                                state = result[0]
+                except Exception as e:
+                    logger.warning(f"⚠️ Could not retrieve customer state: {e}")
+
+            # Default to Lagos if no state found
+            if not state:
+                state = "Lagos"
+                logger.debug(f"Using default state 'Lagos' for delivery calculation")
+
+            # Use the simplified delivery calculator
+            delivery_fee, delivery_days, delivery_zone = NigerianDeliveryCalculator.calculate_delivery_fee(
+                state, None, order_value  # No weight calculation!
+            )
+
+            logger.info(f"🚚 Calculated delivery fee: ₦{delivery_fee:,.2f} for {state} (order value: ₦{order_value:,.2f})")
+            return delivery_fee
+
+        except Exception as e:
+            logger.error(f"❌ Error calculating delivery fee: {e}")
+            # Fallback to Lagos rate
+            return 1500.0
+
+    def _extract_order_data_for_image(self, ai_response: Dict, customer_id: int = None) -> Dict[str, Any]:
+        """Extract order data from AI response for image generation with database customer lookup"""
+        try:
+            # Get order ID from AI response
+            order_id = ai_response.get('order_id', 'N/A')
+
+            # The order_summary is a formatted string, we need to parse key information from it
+            order_summary_text = ai_response.get('order_summary', '')
+
+            # Get real customer name from database
+            customer_name = 'Valued Customer'  # Default fallback
+            if customer_id:
+                try:
+                    user_info = self._get_authenticated_user_info(customer_id)
+                    if user_info and user_info.get('name'):
+                        customer_name = user_info['name']
+                    else:
+                        # Fallback: try to get customer name from customers table
+                        with self.get_database_connection() as conn:
+                            with conn.cursor() as cursor:
+                                cursor.execute("SELECT name FROM customers WHERE customer_id = %s", (customer_id,))
+                                result = cursor.fetchone()
+                                if result and result[0]:
+                                    customer_name = result[0]
+                    logger.info(f"✅ Retrieved customer name from database: {customer_name}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Could not retrieve customer name from database: {e}")
+
+            # Parse basic info from the formatted text
+            order_data = {
+                'order_id': order_id,
+                'total_amount': 0,
+                'subtotal': 0,
+                'delivery_fee': self._calculate_delivery_fee(customer_id),  # 🎯 Dynamic delivery fee
+                'payment_method': 'Not specified',
+                'delivery_address': 'Not specified',
+                'status': 'Pending',  # Default status for placed orders
+                'customer_name': customer_name,  # Use real customer name from database
+                'items': []
+            }
+
+            if isinstance(order_summary_text, str):
+                # Extract total amount using regex
+                total_match = re.search(r'Total:\s*₦([\d,]+\.?\d*)', order_summary_text)
+                if total_match:
+                    total_str = total_match.group(1).replace(',', '')
+                    try:
+                        order_data['total_amount'] = float(total_str)
+                    except ValueError:
+                        order_data['total_amount'] = 0
+
+                # Extract payment method
+                payment_match = re.search(r'Payment:\s*([^\n]+)', order_summary_text)
+                if payment_match:
+                    order_data['payment_method'] = payment_match.group(1).strip()
+
+                # Extract delivery address
+                delivery_match = re.search(r'Delivery:\s*([^\n]+)', order_summary_text)
+                if delivery_match:
+                    order_data['delivery_address'] = delivery_match.group(1).strip()
+
+                # Extract items using regex - pattern: "• Product Name x{quantity} - ₦{price}"
+                item_pattern = r'•\s*([^x\n]+?)\s*x(\d+)\s*-\s*₦([\d,]+\.?\d*)'
+                items = re.findall(item_pattern, order_summary_text)
+
+                total_items_value = 0
+                for item_match in items:
+                    product_name = item_match[0].strip()
+                    quantity = int(item_match[1])
+                    subtotal_str = item_match[2].replace(',', '')
+                    try:
+                        subtotal = float(subtotal_str)
+                        price = subtotal / quantity if quantity > 0 else 0
+                        total_items_value += subtotal
+
+                        order_data['items'].append({
+                            'product_name': product_name,
+                            'quantity': quantity,
+                            'price': price,
+                            'subtotal': subtotal
+                        })
+                    except ValueError:
+                        # Skip invalid items
+                        continue
+
+                # Calculate subtotal and delivery fee
+                order_data['subtotal'] = total_items_value
+
+                # If total is available, calculate delivery fee
+                if order_data['total_amount'] > 0 and total_items_value > 0:
+                    calculated_delivery = order_data['total_amount'] - total_items_value
+                    if calculated_delivery > 0:
+                        order_data['delivery_fee'] = calculated_delivery
+
+            # Ensure we have at least one item for display
+            if not order_data['items']:
+                order_data['items'] = [{
+                    'product_name': 'Order Item',
+                    'quantity': 1,
+                    'price': max(0, order_data['total_amount'] - order_data['delivery_fee']),
+                    'subtotal': max(0, order_data['total_amount'] - order_data['delivery_fee'])
+                }]
+                order_data['subtotal'] = max(0, order_data['total_amount'] - order_data['delivery_fee'])
+
+            logger.info(f"✅ Extracted order data for image: Order {order_id}, Customer: {customer_name}, Total: ₦{order_data['total_amount']:,.2f}")
+            return order_data
+
+        except Exception as e:
+            logger.error(f"❌ Error extracting order data for image: {e}")
+            import traceback
+            traceback.print_exc()
+
+            # Return fallback data with real customer name if available
+            fallback_customer_name = 'Valued Customer'
+            if customer_id:
+                try:
+                    user_info = self._get_authenticated_user_info(customer_id)
+                    if user_info and user_info.get('name'):
+                        fallback_customer_name = user_info['name']
+                except:
+                    pass
+
+            return {
+                'order_id': ai_response.get('order_id', 'N/A'),
+                'total_amount': 0,
+                'subtotal': 0,
+                'delivery_fee': self._calculate_delivery_fee(customer_id),  # 🎯 Dynamic delivery fee
+                'payment_method': 'Not specified',
+                'delivery_address': 'Not specified',
+                'status': 'Pending',
+                'customer_name': fallback_customer_name,
+                'items': [{'product_name': 'Order Item', 'quantity': 1, 'price': 0, 'subtotal': 0}]
+            }
 
 # Singleton instance
 whatsapp_handler = None

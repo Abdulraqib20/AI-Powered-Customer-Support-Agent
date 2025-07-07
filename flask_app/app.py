@@ -2393,18 +2393,18 @@ def calculate_order_totals():
 
 @app.route('/api/delivery-fee', methods=['POST'])
 def calculate_delivery_fee():
-    """🚚 Standardized delivery fee calculation endpoint"""
+    """🚚 SIMPLIFIED delivery fee calculation endpoint - Location & Tier Based Only"""
     try:
         data = request.get_json()
         state = data.get('state', 'Lagos')
-        weight_kg = data.get('weight_kg', 1.0)
         order_value = data.get('order_value', 0)
+        # weight_kg is ignored now but kept for backward compatibility
 
-        # Use the order management system's delivery calculator
+        # Use the simplified delivery calculator
         from src.order_management import NigerianDeliveryCalculator
 
         delivery_fee, delivery_days, delivery_zone = NigerianDeliveryCalculator.calculate_delivery_fee(
-            state, weight_kg, order_value
+            state, None, order_value  # No weight calculation!
         )
 
         return jsonify({
@@ -2413,8 +2413,8 @@ def calculate_delivery_fee():
             'delivery_days': delivery_days,
             'delivery_zone': delivery_zone,
             'state': state,
-            'weight_kg': weight_kg,
-            'message': f'Delivery to {state}: ₦{delivery_fee:,.2f} ({delivery_days} days)'
+            'message': f'Delivery to {state}: ₦{delivery_fee:,.2f} ({delivery_days} days)',
+            'calculation_method': 'location_based_only'  # For debugging
         })
 
     except Exception as e:

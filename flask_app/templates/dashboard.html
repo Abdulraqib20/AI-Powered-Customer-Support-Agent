@@ -5173,10 +5173,8 @@ async function showCheckoutModal(productData, quantity, deliveryState) {
 }
 
 async function calculateDeliveryFee(state, productData, quantity) {
-    // 🔧 FIXED: Use dynamic API call for accurate delivery fee calculation
+    // 🎯 SIMPLIFIED: Location-based delivery fee calculation only
     try {
-        // Get product weight from the passed productData
-        const weight_kg = productData.weight_kg || 1.0;
         const subtotal = productData.price * quantity;
 
         const response = await fetch('/api/delivery-fee', {
@@ -5186,8 +5184,7 @@ async function calculateDeliveryFee(state, productData, quantity) {
             },
             body: JSON.stringify({
                 state: state,
-                weight_kg: weight_kg * quantity,
-                order_value: subtotal
+                order_value: subtotal  // No weight calculation needed!
             })
         });
 
@@ -5207,32 +5204,32 @@ async function calculateDeliveryFee(state, productData, quantity) {
     }
 }
 
-// Fallback function for when API is unavailable (🔧 FIXED: Updated to match new rates)
+// 🎯 SIMPLIFIED: Fallback function using new fixed delivery rates
 function calculateDeliveryFeeFallback(state) {
     const deliveryZones = {
-        // Lagos Metro - 1500 base + 150 per kg (estimate 1kg)
-        'Lagos': 1650,
+        // Lagos Metro - Fixed ₦1,500
+        'Lagos': 1500,
 
-        // Abuja FCT - 2000 base + 200 per kg (estimate 1kg)
-        'Abuja': 2200,
-        'FCT': 2200,
+        // Abuja FCT - Fixed ₦2,000
+        'Abuja': 2000,
+        'FCT': 2000,
 
-        // Major Cities - 2500 base + 250 per kg (estimate 1kg)
-        'Kano': 2750, 'Rivers': 2750, 'Oyo': 2750, 'Kaduna': 2750,
-        'Anambra': 2750, 'Edo': 2750, 'Enugu': 2750, 'Delta': 2750,
-        'Imo': 2750,
+        // Major Cities - Fixed ₦2,500
+        'Kano': 2500, 'Rivers': 2500, 'Oyo': 2500, 'Kaduna': 2500,
+        'Anambra': 2500, 'Edo': 2500, 'Enugu': 2500, 'Delta': 2500,
+        'Imo': 2500,
 
-        // Other States - 3000 base + 300 per kg (estimate 1kg)
-        'Abia': 3300, 'Adamawa': 3300, 'Akwa Ibom': 3300, 'Bauchi': 3300,
-        'Bayelsa': 3300, 'Benue': 3300, 'Borno': 3300, 'Cross River': 3300,
-        'Ebonyi': 3300, 'Ekiti': 3300, 'Gombe': 3300, 'Jigawa': 3300,
-        'Kebbi': 3300, 'Kogi': 3300, 'Kwara': 3300, 'Nasarawa': 3300,
-        'Niger': 3300, 'Ondo': 3300, 'Osun': 3300, 'Ogun': 3300,
-        'Plateau': 3300, 'Sokoto': 3300, 'Taraba': 3300, 'Yobe': 3300,
-        'Zamfara': 3300
+        // Other States - Fixed ₦3,000
+        'Abia': 3000, 'Adamawa': 3000, 'Akwa Ibom': 3000, 'Bauchi': 3000,
+        'Bayelsa': 3000, 'Benue': 3000, 'Borno': 3000, 'Cross River': 3000,
+        'Ebonyi': 3000, 'Ekiti': 3000, 'Gombe': 3000, 'Jigawa': 3000,
+        'Kebbi': 3000, 'Kogi': 3000, 'Kwara': 3000, 'Nasarawa': 3000,
+        'Niger': 3000, 'Ondo': 3000, 'Osun': 3000, 'Ogun': 3000,
+        'Plateau': 3000, 'Sokoto': 3000, 'Taraba': 3000, 'Yobe': 3000,
+        'Zamfara': 3000
     };
 
-    return deliveryZones[state] || 3300;  // Default to Other States fee
+    return deliveryZones[state] || 3000;  // Default to Other States fee
 }
 
 function calculateTierDiscount(subtotal, tier) {

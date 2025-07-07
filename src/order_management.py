@@ -104,26 +104,23 @@ class OrderSummary:
     estimated_delivery: datetime
 
 class NigerianDeliveryCalculator:
-    """Nigerian state-based delivery fee and time calculator"""
+    """🚚 Simplified Nigerian state-based delivery fee calculator - Location & Tier Based Only"""
 
-    # Delivery zones and fees (in Naira) - 🔧 FIXED: Reduced to reasonable rates
+    # 🎯 SIMPLIFIED DELIVERY ZONES - Fixed fees only, no weight calculation
     DELIVERY_ZONES = {
         "Lagos Metro": {
             "states": ["Lagos"],
-            "base_fee": 1500,
-            "per_kg_fee": 150,
+            "fixed_fee": 1500,  # Flat rate - no per_kg nonsense
             "delivery_days": 1
         },
         "Abuja FCT": {
             "states": ["FCT", "Abuja"],
-            "base_fee": 2000,
-            "per_kg_fee": 200,
+            "fixed_fee": 2000,  # Flat rate
             "delivery_days": 2
         },
         "Major Cities": {
             "states": ["Kano", "Rivers", "Oyo", "Kaduna", "Anambra", "Edo", "Enugu", "Delta", "Imo"],
-            "base_fee": 2500,
-            "per_kg_fee": 250,
+            "fixed_fee": 2500,  # Flat rate
             "delivery_days": 3
         },
         "Other States": {
@@ -131,15 +128,24 @@ class NigerianDeliveryCalculator:
                       "Cross River", "Ebonyi", "Ekiti", "Gombe", "Jigawa", "Kebbi", "Kogi",
                       "Kwara", "Nasarawa", "Niger", "Ondo", "Osun", "Ogun", "Plateau",
                       "Sokoto", "Taraba", "Yobe", "Zamfara"],
-            "base_fee": 3000,
-            "per_kg_fee": 300,
+            "fixed_fee": 3000,  # Flat rate
             "delivery_days": 5
         }
     }
 
     @staticmethod
-    def calculate_delivery_fee(state: str, total_weight_kg: float = 1.0, total_value: float = 0) -> Tuple[float, int, str]:
-        """Calculate delivery fee based on Nigerian state and package details"""
+    def calculate_delivery_fee(state: str, total_weight_kg: float = None, total_value: float = 0) -> Tuple[float, int, str]:
+        """
+        🎯 SIMPLIFIED delivery fee calculation - Location & Tier Based Only
+
+        Args:
+            state: Nigerian state for delivery
+            total_weight_kg: IGNORED - we don't use weight anymore
+            total_value: Order value for high-value free delivery benefits
+
+        Returns:
+            Tuple of (delivery_fee, delivery_days, delivery_zone)
+        """
 
         # Find the delivery zone
         zone_name = "Other States"  # Default
@@ -154,20 +160,31 @@ class NigerianDeliveryCalculator:
         if not zone_info:
             zone_info = NigerianDeliveryCalculator.DELIVERY_ZONES["Other States"]
 
-        # Calculate base delivery fee
-        base_fee = zone_info["base_fee"]
-        weight_fee = zone_info["per_kg_fee"] * max(1.0, total_weight_kg)
+        # 🎯 SIMPLE: Just use the fixed fee - no weight calculation!
+        delivery_fee = zone_info["fixed_fee"]
 
-        # Apply free delivery for high-value orders
-        total_delivery_fee = base_fee + weight_fee
+        # Apply high-value order benefits (before tier benefits)
         if total_value >= 200000:  # Free delivery for orders above ₦200K
-            total_delivery_fee = 0
+            delivery_fee = 0
         elif total_value >= 100000:  # 50% discount for orders above ₦100K
-            total_delivery_fee *= 0.5
+            delivery_fee *= 0.5
 
         delivery_days = zone_info["delivery_days"]
 
-        return total_delivery_fee, delivery_days, zone_name
+        logger.info(f"🚚 Delivery to {state} ({zone_name}): ₦{delivery_fee:,.2f} ({delivery_days} days)")
+        return delivery_fee, delivery_days, zone_name
+
+    @staticmethod
+    def get_delivery_zones_info() -> Dict[str, Any]:
+        """Get all delivery zones information for external use"""
+        return {
+            zone: {
+                "states": info["states"],
+                "fee": info["fixed_fee"],
+                "days": info["delivery_days"]
+            }
+            for zone, info in NigerianDeliveryCalculator.DELIVERY_ZONES.items()
+        }
 
 class OrderManagementSystem:
     """🛒 Advanced Order Management System"""
@@ -273,10 +290,9 @@ class OrderManagementSystem:
                     if not customer:
                         raise ValueError(f"Customer {customer_id} not found")
 
-            # Calculate item subtotals
+            # Calculate item subtotals - NO MORE WEIGHT CALCULATION!
             order_items = []
             subtotal = Decimal('0.00')
-            total_weight = Decimal('0.00')  # 🔧 Fix: Use Decimal for consistency
 
             for item in items:
                 product_check = self.check_product_availability(
@@ -288,7 +304,7 @@ class OrderManagementSystem:
 
                 product_info = product_check['product_info']
                 item_price = Decimal(str(product_info['price']))
-                quantity = Decimal(str(item['quantity']))  # 🔧 Fix: Convert to Decimal
+                quantity = Decimal(str(item['quantity']))
                 item_subtotal = item_price * quantity
 
                 order_items.append(OrderItem(
@@ -297,19 +313,16 @@ class OrderManagementSystem:
                     category=product_info['category'],
                     brand=product_info['brand'],
                     price=float(item_price),
-                    quantity=int(quantity),  # Keep as int for OrderItem
+                    quantity=int(quantity),
                     subtotal=float(item_subtotal),
                     availability_status="Available"
                 ))
 
                 subtotal += item_subtotal
-                # 🔧 Fix: Ensure weight calculation uses Decimal
-                weight_per_item = Decimal(str(product_info.get('weight_kg', 1.0)))
-                total_weight += (weight_per_item * quantity)
 
-            # Calculate delivery fee
+            # 🎯 SIMPLIFIED: Calculate delivery fee based on location and order value only
             delivery_fee, delivery_days, delivery_zone = self.delivery_calculator.calculate_delivery_fee(
-                delivery_state, float(total_weight), float(subtotal)
+                delivery_state, None, float(subtotal)  # No weight needed!
             )
 
             # 🔧 FIX: Apply tier-based delivery benefits
@@ -340,7 +353,6 @@ class OrderManagementSystem:
                 "tier_discount_rate": tier_discount_rate,
                 "tax_amount": float(tax_amount),
                 "total_amount": float(total_amount),
-                "total_weight_kg": float(total_weight),  # 🔧 Fix: Convert back to float for return
                 "customer_tier": customer['account_tier']
             }
 
@@ -617,12 +629,9 @@ class OrderManagementSystem:
                         # Calculate subtotal from actual product prices
                         subtotal = sum(float(product['price']) * int(product['quantity']) for product in products)
 
-                        # Calculate total weight from actual product weights
-                        total_weight = sum(float(product.get('weight_kg', 1.0)) * int(product['quantity']) for product in products)
-
-                        # Calculate delivery fee based on customer's state and ACTUAL WEIGHT
+                        # 🎯 SIMPLIFIED: Calculate delivery fee based on location and order value only
                         delivery_fee, delivery_days, delivery_zone = self.delivery_calculator.calculate_delivery_fee(
-                            order_data['state'], total_weight, subtotal
+                            order_data['state'], None, subtotal  # No weight needed!
                         )
 
                         # Calculate tier discount
