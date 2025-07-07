@@ -425,24 +425,33 @@ class WhatsAppBusinessHandler:
             # The order_summary is a formatted string, we need to parse key information from it
             order_summary_text = ai_response.get('order_summary', '')
 
-            # Get real customer name from database
+            # Get real customer info including tier from database
             customer_name = 'Valued Customer'  # Default fallback
+            customer_tier = 'Bronze'  # Default tier
             if customer_id:
                 try:
                     user_info = self._get_authenticated_user_info(customer_id)
-                    if user_info and user_info.get('name'):
-                        customer_name = user_info['name']
+                    if user_info:
+                        # Extract both name and tier from authenticated user info
+                        if user_info.get('name'):
+                            customer_name = user_info['name']
+                        if user_info.get('tier'):  # 🎯 FIXED: Extract tier from user_info
+                            customer_tier = user_info['tier']
+                        logger.info(f"✅ Retrieved customer info from auth: {customer_name} ({customer_tier} tier)")
                     else:
-                        # Fallback: try to get customer name from customers table
+                        # Fallback: try to get customer info from customers table
                         with self.get_database_connection() as conn:
                             with conn.cursor() as cursor:
-                                cursor.execute("SELECT name FROM customers WHERE customer_id = %s", (customer_id,))
+                                cursor.execute("SELECT name, account_tier FROM customers WHERE customer_id = %s", (customer_id,))
                                 result = cursor.fetchone()
-                                if result and result[0]:
-                                    customer_name = result[0]
-                    logger.info(f"✅ Retrieved customer name from database: {customer_name}")
+                                if result:
+                                    if result[0]:
+                                        customer_name = result[0]
+                                    if result[1]:
+                                        customer_tier = result[1]
+                                logger.info(f"✅ Retrieved customer info from DB fallback: {customer_name} ({customer_tier} tier)")
                 except Exception as e:
-                    logger.warning(f"⚠️ Could not retrieve customer name from database: {e}")
+                    logger.warning(f"⚠️ Could not retrieve customer info from database: {e}")
 
             # Parse basic info from the formatted text
             order_data = {
@@ -450,6 +459,10 @@ class WhatsAppBusinessHandler:
                 'total_amount': 0,
                 'subtotal': 0,
                 'delivery_fee': self._calculate_delivery_fee(customer_id),  # 🎯 Dynamic delivery fee
+                'tier_discount': 0,  # 🎯 NEW: Include tier discount
+                'discount_amount': 0,  # Alternative field name
+                'account_tier': customer_tier,  # 🎯 NEW: Include customer tier
+                'customer_tier': customer_tier,  # Alternative field name
                 'payment_method': 'Not specified',
                 'delivery_address': 'Not specified',
                 'status': 'Pending',  # Default status for placed orders
@@ -501,14 +514,24 @@ class WhatsAppBusinessHandler:
                         # Skip invalid items
                         continue
 
-                # Calculate subtotal and delivery fee
+                # Calculate subtotal and tier discount based on order structure
                 order_data['subtotal'] = total_items_value
 
-                # If total is available, calculate delivery fee
+                # 🎯 NEW: Calculate tier discount if total is different from subtotal + delivery
                 if order_data['total_amount'] > 0 and total_items_value > 0:
-                    calculated_delivery = order_data['total_amount'] - total_items_value
-                    if calculated_delivery > 0:
-                        order_data['delivery_fee'] = calculated_delivery
+                    expected_total_without_discount = total_items_value + order_data['delivery_fee']
+
+                    # If actual total is less than expected, there's a discount
+                    if expected_total_without_discount > order_data['total_amount']:
+                        tier_discount = expected_total_without_discount - order_data['total_amount']
+                        order_data['tier_discount'] = tier_discount
+                        order_data['discount_amount'] = tier_discount
+                        logger.info(f"💰 Calculated tier discount: ₦{tier_discount:,.2f} for {customer_tier} customer")
+                    else:
+                        # Recalculate delivery fee as difference
+                        calculated_delivery = order_data['total_amount'] - total_items_value
+                        if calculated_delivery >= 0:
+                            order_data['delivery_fee'] = calculated_delivery
 
             # Ensure we have at least one item for display
             if not order_data['items']:
@@ -520,7 +543,7 @@ class WhatsAppBusinessHandler:
                 }]
                 order_data['subtotal'] = max(0, order_data['total_amount'] - order_data['delivery_fee'])
 
-            logger.info(f"✅ Extracted order data for image: Order {order_id}, Customer: {customer_name}, Total: ₦{order_data['total_amount']:,.2f}")
+            logger.info(f"✅ Extracted order data for image: Order {order_id}, Customer: {customer_name} ({customer_tier}), Total: ₦{order_data['total_amount']:,.2f}, Discount: ₦{order_data['tier_discount']:,.2f}")
             return order_data
 
         except Exception as e:
@@ -530,6 +553,7 @@ class WhatsAppBusinessHandler:
 
             # Return fallback data with real customer name if available
             fallback_customer_name = 'Valued Customer'
+            fallback_customer_tier = 'Bronze'
             if customer_id:
                 try:
                     user_info = self._get_authenticated_user_info(customer_id)
@@ -543,6 +567,10 @@ class WhatsAppBusinessHandler:
                 'total_amount': 0,
                 'subtotal': 0,
                 'delivery_fee': self._calculate_delivery_fee(customer_id),  # 🎯 Dynamic delivery fee
+                'tier_discount': 0,  # 🎯 NEW: Include tier discount
+                'discount_amount': 0,  # Alternative field name
+                'account_tier': fallback_customer_tier,  # 🎯 NEW: Include customer tier
+                'customer_tier': fallback_customer_tier,  # Alternative field name
                 'payment_method': 'Not specified',
                 'delivery_address': 'Not specified',
                 'status': 'Pending',
@@ -1932,140 +1960,6 @@ If you already have a RaqibTech account with email, you can link it to this What
             logger.error(f"❌ Error calculating delivery fee: {e}")
             # Fallback to Lagos rate
             return 1500.0
-
-    def _extract_order_data_for_image(self, ai_response: Dict, customer_id: int = None) -> Dict[str, Any]:
-        """Extract order data from AI response for image generation with database customer lookup"""
-        try:
-            # Get order ID from AI response
-            order_id = ai_response.get('order_id', 'N/A')
-
-            # The order_summary is a formatted string, we need to parse key information from it
-            order_summary_text = ai_response.get('order_summary', '')
-
-            # Get real customer name from database
-            customer_name = 'Valued Customer'  # Default fallback
-            if customer_id:
-                try:
-                    user_info = self._get_authenticated_user_info(customer_id)
-                    if user_info and user_info.get('name'):
-                        customer_name = user_info['name']
-                    else:
-                        # Fallback: try to get customer name from customers table
-                        with self.get_database_connection() as conn:
-                            with conn.cursor() as cursor:
-                                cursor.execute("SELECT name FROM customers WHERE customer_id = %s", (customer_id,))
-                                result = cursor.fetchone()
-                                if result and result[0]:
-                                    customer_name = result[0]
-                    logger.info(f"✅ Retrieved customer name from database: {customer_name}")
-                except Exception as e:
-                    logger.warning(f"⚠️ Could not retrieve customer name from database: {e}")
-
-            # Parse basic info from the formatted text
-            order_data = {
-                'order_id': order_id,
-                'total_amount': 0,
-                'subtotal': 0,
-                'delivery_fee': self._calculate_delivery_fee(customer_id),  # 🎯 Dynamic delivery fee
-                'payment_method': 'Not specified',
-                'delivery_address': 'Not specified',
-                'status': 'Pending',  # Default status for placed orders
-                'customer_name': customer_name,  # Use real customer name from database
-                'items': []
-            }
-
-            if isinstance(order_summary_text, str):
-                # Extract total amount using regex
-                total_match = re.search(r'Total:\s*₦([\d,]+\.?\d*)', order_summary_text)
-                if total_match:
-                    total_str = total_match.group(1).replace(',', '')
-                    try:
-                        order_data['total_amount'] = float(total_str)
-                    except ValueError:
-                        order_data['total_amount'] = 0
-
-                # Extract payment method
-                payment_match = re.search(r'Payment:\s*([^\n]+)', order_summary_text)
-                if payment_match:
-                    order_data['payment_method'] = payment_match.group(1).strip()
-
-                # Extract delivery address
-                delivery_match = re.search(r'Delivery:\s*([^\n]+)', order_summary_text)
-                if delivery_match:
-                    order_data['delivery_address'] = delivery_match.group(1).strip()
-
-                # Extract items using regex - pattern: "• Product Name x{quantity} - ₦{price}"
-                item_pattern = r'•\s*([^x\n]+?)\s*x(\d+)\s*-\s*₦([\d,]+\.?\d*)'
-                items = re.findall(item_pattern, order_summary_text)
-
-                total_items_value = 0
-                for item_match in items:
-                    product_name = item_match[0].strip()
-                    quantity = int(item_match[1])
-                    subtotal_str = item_match[2].replace(',', '')
-                    try:
-                        subtotal = float(subtotal_str)
-                        price = subtotal / quantity if quantity > 0 else 0
-                        total_items_value += subtotal
-
-                        order_data['items'].append({
-                            'product_name': product_name,
-                            'quantity': quantity,
-                            'price': price,
-                            'subtotal': subtotal
-                        })
-                    except ValueError:
-                        # Skip invalid items
-                        continue
-
-                # Calculate subtotal and delivery fee
-                order_data['subtotal'] = total_items_value
-
-                # If total is available, calculate delivery fee
-                if order_data['total_amount'] > 0 and total_items_value > 0:
-                    calculated_delivery = order_data['total_amount'] - total_items_value
-                    if calculated_delivery > 0:
-                        order_data['delivery_fee'] = calculated_delivery
-
-            # Ensure we have at least one item for display
-            if not order_data['items']:
-                order_data['items'] = [{
-                    'product_name': 'Order Item',
-                    'quantity': 1,
-                    'price': max(0, order_data['total_amount'] - order_data['delivery_fee']),
-                    'subtotal': max(0, order_data['total_amount'] - order_data['delivery_fee'])
-                }]
-                order_data['subtotal'] = max(0, order_data['total_amount'] - order_data['delivery_fee'])
-
-            logger.info(f"✅ Extracted order data for image: Order {order_id}, Customer: {customer_name}, Total: ₦{order_data['total_amount']:,.2f}")
-            return order_data
-
-        except Exception as e:
-            logger.error(f"❌ Error extracting order data for image: {e}")
-            import traceback
-            traceback.print_exc()
-
-            # Return fallback data with real customer name if available
-            fallback_customer_name = 'Valued Customer'
-            if customer_id:
-                try:
-                    user_info = self._get_authenticated_user_info(customer_id)
-                    if user_info and user_info.get('name'):
-                        fallback_customer_name = user_info['name']
-                except:
-                    pass
-
-            return {
-                'order_id': ai_response.get('order_id', 'N/A'),
-                'total_amount': 0,
-                'subtotal': 0,
-                'delivery_fee': self._calculate_delivery_fee(customer_id),  # 🎯 Dynamic delivery fee
-                'payment_method': 'Not specified',
-                'delivery_address': 'Not specified',
-                'status': 'Pending',
-                'customer_name': fallback_customer_name,
-                'items': [{'product_name': 'Order Item', 'quantity': 1, 'price': 0, 'subtotal': 0}]
-            }
 
 # Singleton instance
 whatsapp_handler = None

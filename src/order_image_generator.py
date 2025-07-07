@@ -407,9 +407,13 @@ class OrderImageGenerator:
         return y_pos + 20
 
     def _draw_pricing_breakdown(self, draw: ImageDraw.Draw, image: Image.Image, y_pos: int, order_data: Dict) -> int:
-        """Draw pricing breakdown with emojis"""
+        """Draw comprehensive pricing breakdown with tier discounts"""
         padding = 30
-        section_height = 150
+
+        # Calculate section height based on content
+        base_height = 120
+        has_tier_discount = order_data.get('tier_discount', 0) > 0 or order_data.get('discount_amount', 0) > 0
+        section_height = base_height + (30 if has_tier_discount else 0)
 
         # Background
         draw.rectangle([padding, y_pos, self.width - padding, y_pos + section_height],
@@ -434,21 +438,55 @@ class OrderImageGenerator:
 
         y_pos += 25
 
+        # 🎯 FIXED: Add tier discount if it exists
+        if has_tier_discount:
+            tier_discount = order_data.get('tier_discount', order_data.get('discount_amount', 0))
+            # Get tier information
+            account_tier = order_data.get('account_tier', order_data.get('customer_tier', 'Bronze'))
+
+            # Calculate discount percentage
+            tier_discounts = {'Bronze': 0, 'Silver': 5, 'Gold': 10, 'Platinum': 15}
+            discount_percentage = tier_discounts.get(account_tier, 0)
+
+            # Display tier discount
+            discount_label = f"{account_tier} Discount ({discount_percentage}%):"
+            draw.text((padding + 20, y_pos), discount_label,
+                     fill=self.colors['success'], font=self.fonts['body'])  # Green for discount
+            discount_text = f"-₦{float(tier_discount):,.2f}"
+            discount_width = draw.textlength(discount_text, font=self.fonts['body'])
+            draw.text((self.width - padding - discount_width - 20, y_pos),
+                     discount_text, fill=self.colors['success'], font=self.fonts['body'])
+
+            y_pos += 25
+
         # Delivery fee
-        delivery_fee = order_data.get('delivery_fee', 4350)
-        draw.text((padding + 20, y_pos), "Delivery Fee:",
+        delivery_fee = order_data.get('delivery_fee', 0)
+        delivery_label = "Delivery Fee:"
+
+        # Check if delivery is free (for Gold/Platinum tiers)
+        account_tier = order_data.get('account_tier', order_data.get('customer_tier', 'Bronze'))
+        if delivery_fee == 0 and account_tier in ['Gold', 'Platinum']:
+            delivery_label = f"Delivery Fee (FREE for {account_tier}):"
+
+        draw.text((padding + 20, y_pos), delivery_label,
                  fill=self.colors['text_secondary'], font=self.fonts['body'])
-        delivery_text = f"₦{float(delivery_fee):,.2f}"
-        delivery_width = draw.textlength(delivery_text, font=self.fonts['body'])
-        draw.text((self.width - padding - delivery_width - 20, y_pos),
-                 delivery_text, fill=self.colors['text_primary'], font=self.fonts['body'])
+
+        if delivery_fee == 0:
+            delivery_text = "FREE"
+            draw.text((self.width - padding - 60 - 20, y_pos),  # Approximate width of "FREE"
+                     delivery_text, fill=self.colors['success'], font=self.fonts['body'])
+        else:
+            delivery_text = f"₦{float(delivery_fee):,.2f}"
+            delivery_width = draw.textlength(delivery_text, font=self.fonts['body'])
+            draw.text((self.width - padding - delivery_width - 20, y_pos),
+                     delivery_text, fill=self.colors['text_primary'], font=self.fonts['body'])
 
         y_pos += 35
 
-        # Total
-        total_amount = order_data.get('total_amount', 0)
+        # Total with emphasis
         draw.text((padding + 20, y_pos), "TOTAL:",
                  fill=self.colors['text_primary'], font=self.fonts['heading'])
+        total_amount = order_data.get('total_amount', 0)
         total_text = f"₦{float(total_amount):,.2f}"
         total_width = draw.textlength(total_text, font=self.fonts['total'])
         draw.text((self.width - padding - total_width - 20, y_pos - 5),

@@ -413,9 +413,9 @@ class OrderManagementSystem:
             # Start database transaction
             with self.get_database_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                    # Get customer info
+                    # Get customer info including account_tier for email
                     cursor.execute("""
-                        SELECT name, email, phone, lga FROM customers WHERE customer_id = %s
+                        SELECT name, email, phone, lga, account_tier FROM customers WHERE customer_id = %s
                     """, (customer_id,))
                     customer_info = cursor.fetchone()
 
