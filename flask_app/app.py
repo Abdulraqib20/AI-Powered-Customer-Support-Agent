@@ -3698,6 +3698,211 @@ def get_whatsapp_conversations():
         }), 500
 
 
+# ✅ RATE LIMITING ADMIN ENDPOINTS
+@app.route('/api/admin/rate-limits/stats', methods=['GET'])
+def get_rate_limit_stats():
+    """Get rate limiting statistics for admin monitoring"""
+    try:
+        # Check if user has admin role
+        user_role = session.get('user_role', 'customer')
+        if user_role not in ['admin', 'moderator']:
+            return jsonify({'error': 'Admin access required'}), 403
+
+        # Import rate limiter
+        from src.whatsapp_rate_limiter import rate_limiter
+
+        days = request.args.get('days', 7, type=int)
+        stats = rate_limiter.get_rate_limit_stats(days)
+
+        return jsonify({
+            'success': True,
+            'stats': stats
+        })
+
+    except Exception as e:
+        app_logger.error(f"❌ Get rate limit stats error: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/admin/rate-limits/user/<phone_number>', methods=['GET'])
+def get_user_rate_status(phone_number):
+    """Get rate limiting status for a specific user"""
+    try:
+        # Check if user has admin role
+        user_role = session.get('user_role', 'customer')
+        if user_role not in ['admin', 'moderator']:
+            return jsonify({'error': 'Admin access required'}), 403
+
+        # Import rate limiter
+        from src.whatsapp_rate_limiter import rate_limiter
+
+        status = rate_limiter.get_user_rate_status(phone_number)
+
+        return jsonify({
+            'success': True,
+            'status': status
+        })
+
+    except Exception as e:
+        app_logger.error(f"❌ Get user rate status error: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/admin/rate-limits/block', methods=['POST'])
+def block_user():
+    """Temporarily block a user for rate limit violations"""
+    try:
+        # Check if user has admin role
+        user_role = session.get('user_role', 'customer')
+        if user_role not in ['admin', 'moderator']:
+            return jsonify({'error': 'Admin access required'}), 403
+
+        data = request.get_json()
+        phone_number = data.get('phone_number')
+        duration_hours = data.get('duration_hours', 24)
+
+        if not phone_number:
+            return jsonify({'error': 'Phone number required'}), 400
+
+        # Import rate limiter
+        from src.whatsapp_rate_limiter import rate_limiter
+
+        success = rate_limiter.apply_temporary_block(phone_number, duration_hours)
+
+        if success:
+            app_logger.info(f"🚫 Admin {session.get('user_email')} blocked {phone_number} for {duration_hours}h")
+            return jsonify({
+                'success': True,
+                'message': f'User {phone_number} blocked for {duration_hours} hours'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to apply block'
+            }), 500
+
+    except Exception as e:
+        app_logger.error(f"❌ Block user error: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/admin/rate-limits/config', methods=['GET', 'POST'])
+def manage_rate_limit_config():
+    """Get or update rate limiting configuration"""
+    try:
+        # Check if user has admin role
+        user_role = session.get('user_role', 'customer')
+        if user_role not in ['admin', 'moderator']:
+            return jsonify({'error': 'Admin access required'}), 403
+
+        # Import rate limiter
+        from src.whatsapp_rate_limiter import rate_limiter
+
+        if request.method == 'GET':
+            # Get current rate limit configuration
+            db_config = {
+                'host': os.getenv('DB_HOST', 'localhost'),
+                'port': os.getenv('DB_PORT', '5432'),
+                'database': os.getenv('DB_NAME', 'nigerian_ecommerce'),
+                'user': os.getenv('DB_USER', 'postgres'),
+                'password': os.getenv('DB_PASSWORD', 'oracle'),
+            }
+            with psycopg2.connect(**db_config) as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute("SELECT * FROM whatsapp_rate_limits ORDER BY user_tier")
+                    configs = cursor.fetchall()
+
+                    return jsonify({
+                        'success': True,
+                        'configs': [dict(config) for config in configs]
+                    })
+
+        elif request.method == 'POST':
+            # Update rate limit configuration
+            data = request.get_json()
+            user_tier = data.get('user_tier')
+            conversations_per_day = data.get('conversations_per_day')
+            messages_per_hour = data.get('messages_per_hour')
+            burst_allowance = data.get('burst_allowance')
+
+            if not user_tier:
+                return jsonify({'error': 'User tier required'}), 400
+
+            success = rate_limiter.update_rate_limits(
+                user_tier=user_tier,
+                conversations_per_day=conversations_per_day,
+                messages_per_hour=messages_per_hour,
+                burst_allowance=burst_allowance
+            )
+
+            if success:
+                app_logger.info(f"⚙️ Admin {session.get('user_email')} updated rate limits for {user_tier}")
+                return jsonify({
+                    'success': True,
+                    'message': f'Rate limits updated for {user_tier}'
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': 'Failed to update rate limits'
+                }), 500
+
+    except Exception as e:
+        app_logger.error(f"❌ Manage rate limit config error: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/admin/rate-limits/summary', methods=['GET'])
+def get_rate_limit_summary():
+    """Get summary view of rate limiting status"""
+    try:
+        # Check if user has admin role
+        user_role = session.get('user_role', 'customer')
+        if user_role not in ['admin', 'moderator']:
+            return jsonify({'error': 'Admin access required'}), 403
+
+        db_config = {
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'port': os.getenv('DB_PORT', '5432'),
+            'database': os.getenv('DB_NAME', 'nigerian_ecommerce'),
+            'user': os.getenv('DB_USER', 'postgres'),
+            'password': os.getenv('DB_PASSWORD', 'oracle'),
+        }
+        with psycopg2.connect(**db_config) as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("""
+                    SELECT * FROM v_rate_limit_summary
+                    ORDER BY last_activity DESC
+                    LIMIT 50
+                """)
+
+                summary = cursor.fetchall()
+
+                return jsonify({
+                    'success': True,
+                    'summary': [dict(row) for row in summary]
+                })
+
+    except Exception as e:
+        app_logger.error(f"❌ Get rate limit summary error: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/whatsapp/status', methods=['GET'])
 def whatsapp_integration_status():
     """Get WhatsApp integration status and configuration"""

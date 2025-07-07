@@ -25,6 +25,7 @@ load_dotenv(override=True)
 from .order_ai_assistant import OrderAIAssistant
 from .session_manager import SessionManager
 from .conversation_memory_system import WorldClassMemorySystem
+from .whatsapp_rate_limiter import rate_limiter
 
 logger = logging.getLogger(__name__)
 
@@ -177,10 +178,46 @@ class WhatsAppBusinessHandler:
             customer_id = self._get_or_create_customer(message.from_number)
             session_id = self._get_or_create_session(message.from_number, customer_id)
 
+                        # ✅ RATE LIMITING CHECK - Check if user can send messages
+            rate_check = rate_limiter.check_message_limit(message.from_number, customer_id)
+            if not rate_check.allowed:
+                logger.warning(f"🚫 Rate limit exceeded for {message.from_number}: {rate_check.result.value}")
+
+                # Send rate limit message to user
+                rate_limit_message = rate_limiter.format_rate_limit_message(rate_check)
+
+                # Use the proper WhatsApp sending method
+                try:
+                    self._send_whatsapp_message(message.from_number, rate_limit_message)
+                    logger.info(f"📤 Sent rate limit message to {message.from_number}")
+                except Exception as e:
+                    logger.error(f"❌ Failed to send rate limit message: {e}")
+
+                # Still store the incoming message for audit purposes
+                self._store_message(message, session_id, customer_id, 'inbound')
+
+                # Log the rate limit event
+                self._log_rate_limit_event(message.from_number, customer_id, rate_check)
+
+                return {
+                    'success': False,
+                    'message': 'Rate limit exceeded',
+                    'rate_limited': True,
+                    'rate_limit_type': rate_check.result.value,
+                    'phone_number': message.from_number,
+                    'user_tier': rate_check.user_tier,
+                    'reset_time': rate_check.reset_time.isoformat() if rate_check.reset_time else None
+                }
+
             # Store incoming message
             self._store_message(message, session_id, customer_id, 'inbound')
 
-                        # Check for authentication commands first
+            # Initialize variables to avoid scope issues
+            sent_message = None
+            cleaned_response = None
+            ai_response = None
+
+            # Check for authentication commands first
             auth_response = self._process_authentication_commands(message.content, message.from_number, customer_id, session_id)
 
             if auth_response:
@@ -188,6 +225,8 @@ class WhatsAppBusinessHandler:
                 logger.info(f"🔐 Processing authentication command from {message.from_number}")
                 response_message = auth_response.get('response', 'Authentication command processed.')
                 sent_message = self._send_whatsapp_message(message.from_number, response_message, auth_response)
+                cleaned_response = response_message
+                ai_response = auth_response
             else:
                 # Process message with AI assistant
                 ai_response = self._process_with_ai(message.content, customer_id, session_id, message.from_number)
@@ -225,19 +264,23 @@ class WhatsAppBusinessHandler:
                         logger.info(f"🔍 DEBUG: Cleaned response_message: '{cleaned_response}'")
 
                     sent_message = self._send_whatsapp_message(message.from_number, cleaned_response, ai_response)
+                else:
+                    # Handle failed AI response
+                    if ai_response and not ai_response.get('success'):
+                        fallback_message = ai_response.get('message', 'I apologize, but I encountered an issue processing your request.')
+                        cleaned_response = self._clean_ai_response(fallback_message)
+                        sent_message = self._send_whatsapp_message(message.from_number, cleaned_response, ai_response)
 
-                if sent_message:
-                    # Store outbound message
-                    self._store_outbound_message(message.from_number, cleaned_response, session_id, customer_id, sent_message.get('id'))
+            # Store outbound message if one was sent
+            if sent_message and cleaned_response:
+                self._store_outbound_message(message.from_number, cleaned_response, session_id, customer_id, sent_message.get('id'))
 
-                return {
-                    'customer_id': customer_id,
-                    'session_id': session_id,
-                    'ai_response': ai_response,
-                    'sent_message_id': sent_message.get('id') if sent_message else None
-                }
-
-            return None
+            return {
+                'customer_id': customer_id,
+                'session_id': session_id,
+                'ai_response': ai_response,
+                'sent_message_id': sent_message.get('id') if sent_message else None
+            }
 
         except Exception as e:
             logger.error(f"❌ Error processing incoming message: {e}")
@@ -966,6 +1009,34 @@ class WhatsAppBusinessHandler:
 
         except Exception as e:
             logger.error(f"❌ Error logging webhook event: {e}")
+
+    def _log_rate_limit_event(self, phone_number: str, customer_id: int, rate_check):
+        """Log rate limit violation for monitoring"""
+        try:
+            with self.get_database_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("""
+                        INSERT INTO whatsapp_rate_limit_events (
+                            phone_number, customer_id, event_type, limit_type, details
+                        ) VALUES (%s, %s, %s, %s, %s)
+                    """, (
+                        phone_number,
+                        customer_id,
+                        'limit_exceeded_blocked',  # Indicates user was blocked from sending
+                        rate_check.result.value,
+                        json.dumps({
+                            'user_tier': rate_check.user_tier,
+                            'current_count': rate_check.current_count,
+                            'limit': rate_check.limit,
+                            'reset_time': rate_check.reset_time.isoformat() if rate_check.reset_time else None,
+                            'message_content_preview': 'Message blocked due to rate limit'
+                        })
+                    ))
+                    conn.commit()
+                    logger.info(f"📊 Logged rate limit event for {phone_number}")
+
+        except Exception as e:
+            logger.error(f"❌ Error logging rate limit event: {e}")
 
     def send_order_confirmation(self, customer_id: int, order_details: Dict) -> bool:
         """Send order confirmation via WhatsApp"""
