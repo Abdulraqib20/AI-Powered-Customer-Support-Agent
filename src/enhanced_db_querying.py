@@ -139,14 +139,19 @@ class NigerianBusinessIntelligence:
     """Nigerian business context and intelligence helper"""
 
     @staticmethod
-    def format_naira(amount: float) -> str:
-        """Format amount in Nigerian Naira - only use K for amounts ≥ 100,000"""
-        if amount >= 1_000_000:
-            return f"₦{amount/1_000_000:.1f}M"
-        elif amount >= 100_000:  # 🔧 CRITICAL FIX: Only use K for amounts ≥ 100,000
-            return f"₦{amount/1_000:.0f}K"
+    def format_naira(amount: float, whatsapp_format: bool = False) -> str:
+        """Format amount in Nigerian Naira with optional WhatsApp full format"""
+        if whatsapp_format:
+            # For WhatsApp, always use full format for better readability
+            return f"₦{amount:,.0f}"
         else:
-            return f"₦{amount:,.0f}"  # Show full amount for values less than 100,000
+            # Original abbreviated format for other contexts
+            if amount >= 1_000_000:
+                return f"₦{amount/1_000_000:.1f}M"
+            elif amount >= 100_000:  # 🔧 CRITICAL FIX: Only use K for amounts ≥ 100,000
+                return f"₦{amount/1_000:.0f}K"
+            else:
+                return f"₦{amount:,.0f}"  # Show full amount for values less than 100,000
 
     @staticmethod
     def get_nigerian_timezone_context() -> str:
@@ -2489,7 +2494,7 @@ RESPONSE STYLE:
                 # 🚨 ADMIN RESPONSE GENERATION: Use a separate, brutally direct prompt
                 if user_role in ['admin', 'super_admin']:
                     # Format currency values in the results
-                    formatted_results = self._format_currency_in_results(query_context.execution_result)
+                    formatted_results = self._format_currency_in_results(query_context.execution_result, session_context)
 
                     # Determine if we should use table format (5+ items)
                     result_count = len(query_context.execution_result)
@@ -2533,7 +2538,7 @@ RESPONSE STYLE:
                         max_items_to_show = 10  # Show up to 10 customers for customer analysis queries
 
                     # Format currency values in the results
-                    formatted_results = self._format_currency_in_results(query_context.execution_result[:max_items_to_show])
+                    formatted_results = self._format_currency_in_results(query_context.execution_result[:max_items_to_show], session_context)
 
                     # Determine formatting based on result count
                     result_count = len(query_context.execution_result)
@@ -4467,10 +4472,15 @@ CURRENT TIME CONTEXT:
 
         return f"{schema_context}\n{time_context}"
 
-    def _format_currency_in_results(self, results: List[Dict]) -> List[Dict]:
+    def _format_currency_in_results(self, results: List[Dict], session_context: Dict[str, Any] = None) -> List[Dict]:
         """Format currency values in database results using Nigerian Naira"""
         if not results:
             return results
+
+        # Check if this is a WhatsApp request
+        is_whatsapp = False
+        if session_context:
+            is_whatsapp = session_context.get('channel') == 'whatsapp'
 
         # Currency field names that should be formatted
         currency_fields = [
@@ -4490,7 +4500,7 @@ CURRENT TIME CONTEXT:
                     try:
                         # Convert to float if it's not already
                         if isinstance(value, (int, float, decimal.Decimal)):
-                            formatted_result[key] = NigerianBusinessIntelligence.format_naira(float(value))
+                            formatted_result[key] = NigerianBusinessIntelligence.format_naira(float(value), whatsapp_format=is_whatsapp)
                         else:
                             formatted_result[key] = value
                     except (ValueError, TypeError):
@@ -5049,4 +5059,85 @@ Currency format: Nigerian Naira (₦) with proper thousand separators.
         except Exception as e:
             logger.error(f"❌ Error generating tier benefits response: {e}")
             return "I'd be happy to help you learn about our tier benefits! Please let me check your account status first, or feel free to ask about any specific tier you're interested in."
+
+    def _format_whatsapp_order_table(self, results: List[Dict]) -> str:
+        """Format order information specifically for WhatsApp in a mobile-friendly way"""
+        if not results:
+            return "No orders found. 📭"
+
+        # Format header
+        header = "📋 *Your Orders*\n" + "="*30 + "\n\n"
+
+        formatted_orders = []
+        for i, order in enumerate(results, 1):
+            # Extract order information
+            order_id = order.get('order_id', 'N/A')
+            status = order.get('order_status', order.get('status', 'Unknown'))
+            payment_method = order.get('payment_method', 'N/A')
+            total_amount = order.get('total_amount', 0)
+            delivery_date = order.get('delivery_date', order.get('expected_delivery', 'N/A'))
+            category = order.get('product_category', order.get('category', 'N/A'))
+
+            # Format amount with full display (no K abbreviation)
+            if isinstance(total_amount, (int, float)):
+                amount_str = f"₦{total_amount:,.0f}"
+            else:
+                amount_str = str(total_amount)
+
+            # Choose appropriate emojis for status
+            status_emoji = {
+                'pending': '⏳',
+                'processing': '⚙️',
+                'shipped': '🚚',
+                'delivered': '✅',
+                'cancelled': '❌',
+                'returned': '🔄'
+            }.get(status.lower(), '📦')
+
+            # Choose emoji for payment method
+            payment_emoji = {
+                'pay on delivery': '📦',
+                'bank transfer': '🏦',
+                'card': '💳',
+                'raqibtechpay': '💰'
+            }.get(payment_method.lower(), '💳')
+
+            # Format each order
+            order_text = f"*{i}. Order #{order_id}*\n"
+            order_text += f"{status_emoji} Status: {status}\n"
+            order_text += f"{payment_emoji} Payment: {payment_method}\n"
+            order_text += f"💰 Total: {amount_str}\n"
+            order_text += f"📅 Delivery: {delivery_date}\n"
+            order_text += f"🏷️ Category: {category}\n"
+
+            formatted_orders.append(order_text)
+
+        # Combine all orders
+        orders_text = "\n" + "─"*25 + "\n".join(formatted_orders)
+
+        # Add footer
+        footer = f"\n{'─'*30}\n"
+        footer += f"📊 Total Orders: {len(results)}\n"
+        footer += "💬 Reply with order number for details\n"
+        footer += "🌐 Track all orders: raqibtech.com"
+
+        return header + orders_text + footer
+
+    def _should_use_whatsapp_format(self, session_context: Dict[str, Any], query_context: QueryContext) -> bool:
+        """Determine if WhatsApp-specific formatting should be used"""
+        if not session_context:
+            return False
+
+        # Check if this is a WhatsApp channel
+        is_whatsapp = session_context.get('channel') == 'whatsapp'
+
+        # Check if this is an order-related query
+        is_order_query = (
+            query_context.query_type == QueryType.ORDER_ANALYTICS or
+            'order' in query_context.user_query.lower() or
+            any(field in str(query_context.execution_result).lower()
+                for field in ['order_id', 'order_status', 'payment_method'])
+        )
+
+        return is_whatsapp and is_order_query
 
