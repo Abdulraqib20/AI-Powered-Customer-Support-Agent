@@ -437,4 +437,12 @@ rdt==1.12.1
 redis==5.0.1
 cachetools==5.3.3  # TTL caching for conversation memory
 
+# LangGraph and Agent Memory Components
+langgraph==0.2.50
+langgraph-checkpoint==2.0.8
+langgraph-checkpoint-redis==2.0.8
+redisvl==0.3.8
+sentence-transformers==3.0.1
+ulid-py==1.1.0
+
 # Web framework and server

@@ -10,7 +10,7 @@ import logging
 import re
 import uuid
 from typing import Dict, List, Optional, Any, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import hashlib
@@ -18,6 +18,8 @@ import hmac
 from dotenv import load_dotenv
 from src.order_image_generator import generate_order_image, cleanup_order_image
 import redis
+import time
+from dataclasses import dataclass
 
 load_dotenv(override=True)
 
@@ -25,12 +27,69 @@ load_dotenv(override=True)
 from .order_ai_assistant import OrderAIAssistant
 from .session_manager import SessionManager
 from .conversation_memory_system import WorldClassMemorySystem
-from .whatsapp_rate_limiter import rate_limiter
+from .whatsapp_rate_limiter import rate_limiter, WhatsAppRateLimiter
 
 logger = logging.getLogger(__name__)
 
+@dataclass
+class WhatsAppMessage:
+    """WhatsApp message data structure"""
+    message_id: str
+    from_number: str
+    content: str
+    message_type: str
+    timestamp: datetime
+    raw_data: Dict
+
+    def __init__(self, message_data: Dict):
+        """Initialize from WhatsApp webhook data"""
+        try:
+            self.message_id = message_data.get('id', '')
+            self.from_number = message_data.get('from', '')
+            self.raw_data = message_data  # Store the raw data
+
+            # Handle different message types
+            if 'text' in message_data:
+                self.content = message_data['text'].get('body', '')
+                self.message_type = 'text'
+            elif 'button' in message_data:
+                self.content = message_data['button'].get('text', '')
+                self.message_type = 'button'
+            elif 'interactive' in message_data:
+                # Handle interactive messages (buttons, lists)
+                interactive = message_data['interactive']
+                if 'button_reply' in interactive:
+                    self.content = interactive['button_reply'].get('title', '')
+                elif 'list_reply' in interactive:
+                    self.content = interactive['list_reply'].get('title', '')
+                else:
+                    self.content = 'Interactive message'
+                self.message_type = 'interactive'
+            else:
+                self.content = 'Unsupported message type'
+                self.message_type = 'unknown'
+
+            # Parse timestamp
+            timestamp_str = message_data.get('timestamp', str(int(time.time())))
+            self.timestamp = datetime.fromtimestamp(int(timestamp_str))
+
+        except Exception as e:
+            logger.error(f"❌ Error parsing WhatsApp message: {e}")
+            # Set defaults
+            self.message_id = str(uuid.uuid4())
+            self.from_number = 'unknown'
+            self.content = 'Error parsing message'
+            self.message_type = 'error'
+            self.timestamp = datetime.now()
+            self.raw_data = message_data if message_data else {}
+
+@dataclass
 class WhatsAppConfig:
     """WhatsApp Business API configuration"""
+    verify_token: str
+    access_token: str
+    phone_number_id: str
+    db_config: Dict[str, str]
 
     def __init__(self):
         self.access_token = os.getenv('WHATSAPP_ACCESS_TOKEN')
@@ -39,7 +98,9 @@ class WhatsAppConfig:
         self.webhook_verify_token = os.getenv('WHATSAPP_WEBHOOK_VERIFY_TOKEN')
         self.api_base_url = os.getenv('WHATSAPP_API_BASE_URL', 'https://graph.facebook.com/v23.0')
         self.developer_number = os.getenv('DEVELOPER_WHATSAPP_NUMBER', '+2347025965922')
-
+        self.verify_token = os.getenv('WHATSAPP_VERIFY_TOKEN', 'default_verify_token')
+        self.access_token = os.getenv('WHATSAPP_ACCESS_TOKEN', '')
+        self.phone_number_id = os.getenv('WHATSAPP_PHONE_NUMBER_ID', '')
         # Database configuration
         self.db_config = {
             'host': os.getenv('DB_HOST', 'localhost'),
@@ -50,44 +111,8 @@ class WhatsAppConfig:
         }
 
     def is_configured(self) -> bool:
-        """Check if WhatsApp is properly configured"""
-        required_vars = [
-            self.access_token,
-            self.phone_number_id,
-            self.webhook_verify_token
-        ]
-        return all(var is not None for var in required_vars)
-
-class WhatsAppMessage:
-    """WhatsApp message data structure"""
-
-    def __init__(self, message_data: Dict):
-        self.message_id = message_data.get('id')
-        self.from_number = message_data.get('from')
-        self.timestamp = message_data.get('timestamp')
-        self.message_type = message_data.get('type', 'text')
-
-        # Extract content based on message type
-        if self.message_type == 'text':
-            self.content = message_data.get('text', {}).get('body', '')
-        elif self.message_type == 'image':
-            self.content = message_data.get('image', {}).get('caption', '')
-            self.media_url = message_data.get('image', {}).get('id')
-        elif self.message_type == 'button':
-            self.content = message_data.get('button', {}).get('text', '')
-            self.button_reply = message_data.get('button', {}).get('payload', '')
-        elif self.message_type == 'interactive':
-            interactive = message_data.get('interactive', {})
-            if interactive.get('type') == 'button_reply':
-                self.content = interactive.get('button_reply', {}).get('title', '')
-                self.button_reply = interactive.get('button_reply', {}).get('id', '')
-            elif interactive.get('type') == 'list_reply':
-                self.content = interactive.get('list_reply', {}).get('title', '')
-                self.button_reply = interactive.get('list_reply', {}).get('id', '')
-        else:
-            self.content = str(message_data)
-
-        self.raw_data = message_data
+        """Check if all required configuration is available"""
+        return bool(self.access_token and self.phone_number_id)
 
 class WhatsAppBusinessHandler:
     """Main WhatsApp Business API handler"""
@@ -102,10 +127,24 @@ class WhatsAppBusinessHandler:
             self.memory_system = WorldClassMemorySystem()
             self.ai_assistant = OrderAIAssistant(self.memory_system)
             self.session_manager = SessionManager()
+
+            # Initialize processed messages cache for deduplication
+            self.processed_messages = set()
+            self.processed_messages_ttl = {}  # message_id -> expiry_time
+
             logger.info("✅ WhatsApp handler initialized with existing AI system")
         except Exception as e:
             logger.error(f"❌ Failed to initialize AI components: {e}")
             raise
+
+        # 🤖 Initialize Agent Memory System for persistent learning
+        try:
+            from .agent_memory_system import get_agent_memory_system
+            self.agent_memory = get_agent_memory_system()
+            logger.info("🤖 WhatsApp Agent Memory System integrated successfully")
+        except Exception as e:
+            logger.warning(f"⚠️ WhatsApp Agent Memory System integration failed: {e}")
+            self.agent_memory = None
 
     def get_database_connection(self):
         """Get database connection"""
@@ -118,7 +157,7 @@ class WhatsAppBusinessHandler:
     def verify_webhook(self, mode: str, token: str, challenge: str) -> Optional[str]:
         """Verify WhatsApp webhook"""
         # Use configured token (already has fallback in __init__)
-        expected_token = self.config.webhook_verify_token
+        expected_token = self.config.verify_token
 
         if mode == "subscribe" and token == expected_token:
             logger.info("✅ WhatsApp webhook verified successfully")
@@ -137,6 +176,41 @@ class WhatsAppBusinessHandler:
             entries = webhook_data.get('entry', [])
             responses = []
 
+            # Check if there are any actual messages to process before doing anything
+            has_messages = False
+            total_messages = 0
+
+            for entry in entries:
+                changes = entry.get('changes', [])
+                for change in changes:
+                    if change.get('field') == 'messages':
+                        value = change.get('value', {})
+                        messages = value.get('messages', [])
+                        total_messages += len(messages)
+                        if messages:
+                            has_messages = True
+
+            # If no messages, just process status updates without creating sessions
+            if not has_messages:
+                logger.info(f"📱 Webhook received with {total_messages} messages - processing status updates only")
+                for entry in entries:
+                    changes = entry.get('changes', [])
+                    for change in changes:
+                        if change.get('field') == 'messages':
+                            value = change.get('value', {})
+                            # Process message status updates only
+                            statuses = value.get('statuses', [])
+                            for status in statuses:
+                                self._process_message_status(status)
+
+                return {
+                    'success': True,
+                    'processed_messages': 0,
+                    'responses': [],
+                    'status_updates_processed': True
+                }
+
+            # Process actual messages
             for entry in entries:
                 changes = entry.get('changes', [])
                 for change in changes:
@@ -172,6 +246,15 @@ class WhatsAppBusinessHandler:
         """Process a single incoming WhatsApp message"""
         try:
             message = WhatsAppMessage(message_data)
+
+            # Check for duplicate message processing
+            if self._is_message_processed(message.message_id):
+                logger.info(f"🔄 Skipping duplicate message: {message.message_id}")
+                return None
+
+            # Mark message as being processed
+            self._mark_message_processed(message.message_id)
+
             logger.info(f"📱 Processing WhatsApp message from {message.from_number}: {message.content[:50]}...")
 
             # Get or create customer and session
@@ -287,8 +370,11 @@ class WhatsAppBusinessHandler:
             return None
 
     def _process_with_ai(self, message_content: str, customer_id: int, session_id: str, phone_number: str) -> Dict[str, Any]:
-        """Process message with existing AI system"""
+        """Process message with existing AI system enhanced with agent memory"""
         try:
+            # 🤖 Get agent memory context for personalization
+            agent_memory_context = self._get_agent_memory_context(message_content, customer_id, session_id, phone_number)
+
             # Try shopping conversation first (for orders, cart management, etc.)
             shopping_response = self.ai_assistant.process_shopping_conversation(
                 user_message=message_content,
@@ -331,10 +417,18 @@ class WhatsAppBusinessHandler:
 
             general_response['channel'] = 'whatsapp'
             general_response['phone_number'] = phone_number
+
+            # 🤖 Store insights in agent memory after processing
+            self._store_agent_memory_insights(message_content, general_response, customer_id, session_id, phone_number)
+
             return general_response
 
         except Exception as e:
             logger.error(f"❌ Error processing with AI: {e}")
+
+            # 🤖 Store error insights in agent memory
+            self._store_agent_memory_insights(message_content, {'error': str(e)}, customer_id, session_id, phone_number)
+
             return {
                 'success': False,
                 'message': "I apologize, but I'm having trouble processing your request right now. Please try again in a moment.",
@@ -881,7 +975,7 @@ class WhatsAppBusinessHandler:
             return 1  # Assuming customer ID 1 exists as fallback
 
     def _get_or_create_session(self, phone_number: str, customer_id: int) -> str:
-        """Get or create session for WhatsApp conversation"""
+        """Get or create session for WhatsApp conversation with race condition protection"""
         try:
             user_identifier = f"whatsapp:{phone_number}"
 
@@ -901,38 +995,91 @@ class WhatsAppBusinessHandler:
                         logger.info(f"✅ Using existing authenticated session: {authenticated_session['session_id']} ({authenticated_session['user_identifier']})")
                         return authenticated_session['session_id']
 
-                    # Check for existing WhatsApp session (guest)
-                    cursor.execute("""
-                        SELECT session_id FROM user_sessions
-                        WHERE user_identifier = %s
-                        ORDER BY created_at DESC LIMIT 1
-                    """, (user_identifier,))
-
-                    existing = cursor.fetchone()
-                    if existing:
-                        logger.info(f"✅ Using existing WhatsApp session: {existing['session_id']}")
-                        return existing['session_id']
-
-                    # Create new session with proper UUID
+                    # Use INSERT ... ON CONFLICT to handle race conditions atomically
                     session_id = str(uuid.uuid4())
-                    cursor.execute("""
-                        INSERT INTO user_sessions (session_id, user_identifier, session_data)
-                        VALUES (%s, %s, %s)
-                    """, (session_id, user_identifier, json.dumps({
+                    session_data = json.dumps({
                         'channel': 'whatsapp',
                         'phone_number': phone_number,
                         'customer_id': customer_id,
                         'created_via': 'whatsapp_business_api'
-                    })))
-                    conn.commit()
-                    logger.info(f"✅ Created new WhatsApp session: {session_id}")
+                    })
 
-                    return session_id
+                    cursor.execute("""
+                        INSERT INTO user_sessions (session_id, user_identifier, session_data)
+                        VALUES (%s, %s, %s)
+                        ON CONFLICT (user_identifier) DO UPDATE SET
+                            last_active = CURRENT_TIMESTAMP
+                        RETURNING session_id,
+                                  CASE WHEN xmax = 0 THEN 'inserted' ELSE 'updated' END as action
+                    """, (session_id, user_identifier, session_data))
+
+                    result = cursor.fetchone()
+                    conn.commit()
+
+                    if result['action'] == 'inserted':
+                        logger.info(f"✅ Created new WhatsApp session: {result['session_id']}")
+                    else:
+                        logger.info(f"✅ Using existing WhatsApp session: {result['session_id']}")
+
+                    return result['session_id']
 
         except Exception as e:
             logger.error(f"❌ Error handling WhatsApp session: {e}")
-            # Return a fallback session ID
-            return str(uuid.uuid4())
+            logger.error(f"❌ Exception details: {type(e).__name__}: {str(e)}")
+            import traceback
+            logger.error(f"❌ Full traceback: {traceback.format_exc()}")
+
+            # Fallback: try to get existing session one more time
+            try:
+                user_identifier = f"whatsapp:{phone_number}"
+                with self.get_database_connection() as conn:
+                    with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                        cursor.execute("""
+                            SELECT session_id FROM user_sessions
+                            WHERE user_identifier = %s
+                            ORDER BY created_at DESC LIMIT 1
+                        """, (user_identifier,))
+                        existing = cursor.fetchone()
+                        if existing:
+                            logger.info(f"✅ Fallback: Using existing session {existing['session_id']}")
+                            return existing['session_id']
+            except Exception as fallback_e:
+                logger.error(f"❌ Fallback session retrieval also failed: {fallback_e}")
+
+            # Try creating a simple session without ON CONFLICT as last resort
+            try:
+                user_identifier = f"whatsapp:{phone_number}"
+                session_id = str(uuid.uuid4())
+                session_data = json.dumps({
+                    'channel': 'whatsapp',
+                    'phone_number': phone_number,
+                    'customer_id': customer_id,
+                    'created_via': 'whatsapp_business_api_fallback'
+                })
+
+                with self.get_database_connection() as conn:
+                    with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                        # Simple insert without ON CONFLICT
+                        cursor.execute("""
+                            INSERT INTO user_sessions (session_id, user_identifier, session_data)
+                            VALUES (%s, %s, %s)
+                            RETURNING session_id
+                        """, (session_id, user_identifier, session_data))
+
+                        result = cursor.fetchone()
+                        conn.commit()
+
+                        if result:
+                            logger.info(f"✅ Created fallback session: {result['session_id']}")
+                            return result['session_id']
+
+            except Exception as final_e:
+                logger.error(f"❌ Final fallback session creation failed: {final_e}")
+
+            # Last resort fallback - return UUID but warn it's not in DB
+            fallback_id = str(uuid.uuid4())
+            logger.warning(f"⚠️ Using in-memory fallback session ID (NOT STORED IN DB): {fallback_id}")
+            return fallback_id
 
     def _store_message(self, message: WhatsAppMessage, session_id: str, customer_id: int, direction: str):
         """Store WhatsApp message in database"""
@@ -964,7 +1111,7 @@ class WhatsAppBusinessHandler:
                         direction,
                         message.content,
                         getattr(message, 'button_reply', None),
-                        datetime.fromtimestamp(int(message.timestamp)) if message.timestamp else datetime.now(),
+                        message.timestamp.isoformat() if message.timestamp else datetime.now().isoformat(),
                         json.dumps({
                             'session_id': session_id,
                             'raw_message': message.raw_data
@@ -1960,6 +2107,156 @@ If you already have a RaqibTech account with email, you can link it to this What
             logger.error(f"❌ Error calculating delivery fee: {e}")
             # Fallback to Lagos rate
             return 1500.0
+
+    def _get_agent_memory_context(self, message_content: str, customer_id: int, session_id: str, phone_number: str) -> str:
+        """🤖 Get agent memory context for personalizing WhatsApp responses"""
+        if not self.agent_memory:
+            return ""
+
+        try:
+            # Get authenticated user info for proper user_id
+            is_authenticated = self._is_user_authenticated(customer_id)
+            user_info = self._get_authenticated_user_info(customer_id) if is_authenticated else {}
+            user_id = user_info.get('email', phone_number) if is_authenticated else f'whatsapp_{phone_number}'
+
+            # Get memory context from agent memory system
+            agent_memory_context = self.agent_memory.get_memory_context_for_ai(
+                query=message_content,
+                user_id=user_id,
+                thread_id=session_id,
+                max_memories=3
+            )
+
+            if agent_memory_context:
+                logger.info(f"🤖 Retrieved agent memory context for WhatsApp user {user_id}")
+                return agent_memory_context
+
+            return ""
+
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to get agent memory context for WhatsApp: {e}")
+            return ""
+
+    def _store_agent_memory_insights(self, message_content: str, ai_response: Dict[str, Any],
+                                   customer_id: int, session_id: str, phone_number: str):
+        """🤖 Store insights from WhatsApp conversation in agent memory"""
+        if not self.agent_memory:
+            return
+
+        try:
+            # Get authenticated user info for proper user_id
+            is_authenticated = self._is_user_authenticated(customer_id)
+            user_info = self._get_authenticated_user_info(customer_id) if is_authenticated else {}
+            user_id = user_info.get('email', phone_number) if is_authenticated else f'whatsapp_{phone_number}'
+
+            # Extract insights to store based on message patterns and AI response
+            insights_to_store = []
+            message_lower = message_content.lower()
+
+            # Store meaningful user preferences only (not simple requests)
+            strong_preference_patterns = [
+                'i prefer', 'my favorite', 'i always', 'i usually', 'i love', 'i hate'
+            ]
+            if (any(pattern in message_lower for pattern in strong_preference_patterns) and
+                len(message_content.strip()) > 10):  # Avoid storing very short messages
+                insights_to_store.append({
+                    'content': f"WhatsApp user preference: {message_content}",
+                    'type': 'episodic',
+                    'confidence': 0.9
+                })
+
+            # Store purchase interests (balanced approach)
+            purchase_intent_patterns = [
+                'want to buy', 'planning to order', 'interested in buying', 'need to purchase',
+                'i need', 'i want', 'looking for', 'searching for'
+            ]
+            # Only store substantial queries to avoid noise
+            if (any(pattern in message_lower for pattern in purchase_intent_patterns) and
+                len(message_content.strip()) > 8):  # At least 8 characters
+                insights_to_store.append({
+                    'content': f"WhatsApp product interest: {message_content}",
+                    'type': 'episodic',
+                    'confidence': 0.7
+                })
+
+            # Store delivery preferences
+            if any(word in message_lower for word in ['delivery', 'shipping', 'address', 'location', 'deliver to']):
+                insights_to_store.append({
+                    'content': f"WhatsApp delivery inquiry: {message_content}",
+                    'type': 'episodic',
+                    'confidence': 0.8
+                })
+
+            # Store payment preferences
+            if any(word in message_lower for word in ['payment', 'pay', 'card', 'transfer', 'raqibtechpay', 'cash']):
+                insights_to_store.append({
+                    'content': f"WhatsApp payment inquiry: {message_content}",
+                    'type': 'episodic',
+                    'confidence': 0.8
+                })
+
+            # Store successful order completion
+            if ai_response.get('action') == 'order_placed':
+                insights_to_store.append({
+                    'content': f"User successfully placed order via WhatsApp. Products: {ai_response.get('order_summary', {}).get('items', [])}",
+                    'type': 'episodic',
+                    'confidence': 0.9
+                })
+
+            # Store product searches and interests
+            if ai_response.get('action') in ['product_found', 'products_displayed']:
+                insights_to_store.append({
+                    'content': f"User searched for products via WhatsApp: {message_content}",
+                    'type': 'episodic',
+                    'confidence': 0.7
+                })
+
+            # Store any issues or complaints
+            if any(word in message_lower for word in ['problem', 'issue', 'complaint', 'not working', 'error', 'wrong']):
+                insights_to_store.append({
+                    'content': f"WhatsApp user reported issue: {message_content}",
+                    'type': 'episodic',
+                    'confidence': 0.8
+                })
+
+            # Store the insights in agent memory
+            from .agent_memory_system import MemoryType
+            for insight in insights_to_store:
+                memory_type = MemoryType.EPISODIC if insight['type'] == 'episodic' else MemoryType.SEMANTIC
+
+                success = self.agent_memory.store_memory(
+                    content=insight['content'],
+                    memory_type=memory_type,
+                    user_id=user_id,
+                    thread_id=session_id,
+                    confidence_score=insight['confidence']
+                )
+
+                if success:
+                    logger.info(f"📝 Stored WhatsApp agent memory for {user_id}: {insight['content'][:50]}...")
+
+            # Schedule memory consolidation if we stored insights
+            if insights_to_store:
+                self.agent_memory.schedule_memory_consolidation(user_id)
+
+        except Exception as e:
+            logger.error(f"❌ Error storing WhatsApp agent memory insights: {e}")
+
+    def _is_message_processed(self, message_id: str) -> bool:
+        """Check if message has already been processed (deduplication)"""
+        # Clean up expired entries first
+        current_time = time.time()
+        expired_ids = [mid for mid, expiry in self.processed_messages_ttl.items() if expiry < current_time]
+        for mid in expired_ids:
+            self.processed_messages.discard(mid)
+            del self.processed_messages_ttl[mid]
+
+        return message_id in self.processed_messages
+
+    def _mark_message_processed(self, message_id: str):
+        """Mark message as processed with TTL (1 hour)"""
+        self.processed_messages.add(message_id)
+        self.processed_messages_ttl[message_id] = time.time() + 3600  # 1 hour TTL
 
 # Singleton instance
 whatsapp_handler = None

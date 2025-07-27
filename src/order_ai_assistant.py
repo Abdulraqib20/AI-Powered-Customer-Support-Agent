@@ -361,15 +361,15 @@ class OrderAIAssistant:
                 logger.info(f"🎯 Intent parsed: {intent} (confidence: 0.9, pattern: '{pattern}')")
                 return {'intent': intent, 'entities': {}, 'confidence': 0.9}
 
-        # 4. MEDIUM PRIORITY: Add to cart (improved product name extraction)
+        # 4. MEDIUM PRIORITY: Add to cart (explicit purchase intent only)
         cart_patterns = [
             (r'add\s+(.+?)\s+to\s+(my|the)?\s*cart', 'add_to_cart'),  # "add X to cart"
-            (r'add\s+(.+?)\s+for\s+me', 'add_to_cart'),  # "add X for me"
             (r'put\s+(.+?)\s+in\s+(my|the)?\s*cart', 'add_to_cart'),  # "put X in cart"
             (r'i\s*want\s*to\s*buy\s+(.+)', 'add_to_cart'),  # "I want to buy X"
-            (r'get\s+(me\s+)?(.+)', 'add_to_cart'),  # "get me X" or "get X"
-            (r'buy\s+(.+)', 'add_to_cart'),  # "buy X"
-            (r'add\s+(.+)', 'add_to_cart')  # Fallback "add X" (last to avoid overmatching)
+            (r'buy\s+(.+?)\s*(now|please)', 'add_to_cart'),  # "buy X now/please"
+            (r'add\s+(.+?)\s+to\s*my\s*order', 'add_to_cart'),  # "add X to my order"
+            (r'order\s+(.+)', 'add_to_cart'),  # "order X"
+            (r'purchase\s+(.+)', 'add_to_cart')  # "purchase X"
         ]
         for pattern, intent in cart_patterns:
             match = re.search(pattern, message_lower)
@@ -386,12 +386,29 @@ class OrderAIAssistant:
                 logger.info(f"🎯 Intent parsed: {intent} (confidence: 0.85, pattern: '{pattern}') - Product: {product_name}")
                 return {'intent': intent, 'entities': {'product_name': product_name}, 'confidence': 0.85}
 
-        # 5. CONTEXT-AWARE AFFIRMATIVE/NEGATIVE RESPONSES
-        if message_lower in ['yes', 'yeah', 'yep', 'ok', 'okay', 'sure', 'alright', 'y']:
+        # 5. CHECKOUT FLOW PATTERNS (HIGH PRIORITY)
+        checkout_patterns = [
+            'proceed with checkout', 'continue checkout', 'proceed with my shopping',
+            'continue with my order', 'proceed with order', 'continue shopping',
+            'want to proceed', 'want to continue', 'proceed with my order',
+            'finish checkout', 'complete my order', 'finalize order',
+            'continue with payment', 'proceed to payment'
+        ]
+
+        for pattern in checkout_patterns:
+            if pattern in message_lower:
+                logger.info(f"🎯 Intent parsed: checkout (confidence: 0.95, pattern: '{pattern}')")
+                return {'intent': 'checkout', 'entities': {}, 'confidence': 0.95}
+
+        # 6. CONTEXT-AWARE AFFIRMATIVE/NEGATIVE RESPONSES
+        # Clean message for matching (remove punctuation)
+        clean_message = re.sub(r'[^\w\s]', '', message_lower).strip()
+
+        if clean_message in ['yes', 'yeah', 'yep', 'yup', 'yea', 'ok', 'okay', 'sure', 'alright', 'y']:
             logger.info(f"🎯 Intent parsed: affirmative_confirmation (confidence: 0.95, pattern: 'affirmative_words')")
             return {'intent': 'affirmative_confirmation', 'entities': {}, 'confidence': 0.95}
 
-        if message_lower in ['no', 'nope', 'nah', 'n', 'cancel', 'stop']:
+        if clean_message in ['no', 'nope', 'nah', 'n', 'cancel', 'stop']:
             logger.info(f"🎯 Intent parsed: negative_rejection (confidence: 0.95, pattern: 'negative_words')")
             return {'intent': 'negative_rejection', 'entities': {}, 'confidence': 0.95}
 
@@ -440,16 +457,21 @@ class OrderAIAssistant:
                 'raw_message': user_message
             }
 
-        # 8. VERY LOW PRIORITY: Generic "want/need" (only for clear product mentions)
-        if any(word in message_lower for word in ['want', 'need']) and \
-           any(product in message_lower for product in ['samsung', 'iphone', 'phone', 'galaxy', 'laptop', 'tecno', 'google', 'pixel']):
-            # But exclude if it's clearly about payment
-            if not any(payment_word in message_lower for payment_word in ['pay', 'payment', 'delivery', 'raqib']):
-                logger.info(f"🎯 Intent parsed: add_to_cart (confidence: 0.7, pattern: 'generic_product_want')")
+        # 8. PRODUCT INQUIRY (NOT automatic add to cart) - Show details first
+        inquiry_words = ['want', 'need', 'looking for', 'show me', 'find', 'search for', 'get me']
+        product_keywords = ['samsung', 'iphone', 'phone', 'galaxy', 'laptop', 'tecno', 'google', 'pixel',
+                           'spag', 'rice', 'headphone', 'shoes', 'bag', 'watch', 'tablet', 'earphone',
+                           'camera', 'speaker', 'charger', 'cable', 'mouse', 'keyboard']
+
+        if (any(word in message_lower for word in inquiry_words) and
+            any(product in message_lower for product in product_keywords)):
+            # But exclude if it's clearly about payment or delivery
+            if not any(payment_word in message_lower for payment_word in ['pay', 'payment', 'delivery', 'raqib', 'checkout']):
+                logger.info(f"🎯 Intent parsed: product_inquiry (confidence: 0.8, pattern: 'product_search')")
                 return {
-                    'intent': 'add_to_cart',
-                    'confidence': 0.7,
-                    'matched_pattern': "generic_product_want",
+                    'intent': 'product_inquiry',
+                    'confidence': 0.8,
+                    'matched_pattern': "product_search",
                     'raw_message': user_message
                 }
 
@@ -589,6 +611,7 @@ class OrderAIAssistant:
             with self.get_database_connection() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
 
+                    print_log(f"🔍 DEBUG: Starting Strategy 1 - Direct name match", 'info')
                     # Strategy 1: Direct name match (most reliable)
                     cursor.execute("""
                         SELECT product_id, product_name, category, brand, description, price, currency, in_stock, stock_quantity
@@ -611,18 +634,418 @@ class OrderAIAssistant:
 
                         return product_dict
 
-                    # Strategy 2: Individual word search within the same product
-                    word_patterns = [f"%{word}%" for word in cleaned_words]
-                    placeholders = ' OR '.join(['LOWER(product_name) LIKE LOWER(%s)'] * len(word_patterns))
+                    print_log(f"🔍 DEBUG: Strategy 1 failed, starting Strategy 2 - Smart category mapping", 'info')
+                    # Strategy 2: Smart category and product search with exclusions
+                    # Map search terms to actual categories in database + exclusions
+                    category_mapping = {
+                        'phone': {
+                            'categories': ['Electronics'],  # Mobile phones are in Electronics, not Automotive
+                            'exclude_terms': ['holder', 'mount', 'car'],  # Exclude car accessories
+                            'exact_match_required': False,  # Allow flexible matching
+                            'prefer_terms': ['smartphone', 'mobile', 'iphone', 'samsung', 'tecno', 'infinix'],  # Prioritize actual phones
+                            'priority': 1  # High priority for actual phones
+                        },
+                        'smartphone': {
+                            'categories': ['Electronics'],
+                            'exclude_terms': [],
+                            'exact_match_required': False,
+                            'priority': 1
+                        },
+                        'mobile': {
+                            'categories': ['Electronics'],
+                            'exclude_terms': ['holder', 'mount', 'car'],
+                            'exact_match_required': False,
+                            'priority': 1
+                        },
+                        'laptop': {
+                            'categories': ['Computing', 'Electronics'],
+                            'exclude_terms': [],
+                            'exact_match_required': False,
+                            'priority': 2
+                        },
+                        'headphone': {
+                            'categories': ['Electronics'],
+                            'exclude_terms': [],
+                            'exact_match_required': False,
+                            'priority': 2
+                        },
+                        'television': {
+                            'categories': ['Electronics'],
+                            'exclude_terms': [],
+                            'exact_match_required': False,
+                            'priority': 2
+                        },
+                        'tv': {
+                            'categories': ['Electronics'],
+                            'exclude_terms': [],
+                            'exact_match_required': False,
+                            'priority': 2
+                        },
+                        'rice': {
+                            'categories': ['Food Items'],
+                            'exclude_terms': [],
+                            'exact_match_required': False,
+                            'priority': 3
+                        },
+                        'spag': {
+                            'categories': ['Food Items'],
+                            'exclude_terms': [],
+                            'exact_match_required': False,
+                            'priority': 3
+                        },
+                        'spaghetti': {
+                            'categories': ['Food Items'],
+                            'exclude_terms': [],
+                            'exact_match_required': False,
+                            'priority': 3
+                        },
+                        'car': {
+                            'categories': ['Automotive'],
+                            'exclude_terms': [],
+                            'exact_match_required': False,
+                            'priority': 4
+                        }
+                    }
 
-                    cursor.execute(f"""
-                        SELECT product_id, product_name, category, brand, description, price, currency, in_stock, stock_quantity,
-                               (SELECT COUNT(*) FROM unnest(%s) AS word WHERE LOWER(product_name) LIKE LOWER(word)) as word_matches
-                        FROM products
-                        WHERE ({placeholders}) AND in_stock = TRUE
-                        ORDER BY word_matches DESC, product_name
-                        LIMIT 1
-                    """, [word_patterns] + word_patterns)
+                    # Check if search term matches a category with smart filtering
+                    search_key = cleaned_product_name.lower()
+                    category_config = None
+                    matched_key = None
+
+                    print_log(f"🔍 DEBUG: Processing search_key: '{search_key}'", 'info')
+
+                    # Find the best matching category configuration with priority
+                    best_match = None
+                    best_priority = float('inf')
+
+                    print_log(f"🔍 DEBUG: Starting category mapping search", 'info')
+                    for key, config in category_mapping.items():
+                        if key in search_key:
+                            print_log(f"🔍 DEBUG: Found key '{key}' in search_key", 'info')
+                            # Check for exclusion terms
+                            exclude_terms = config.get('exclude_terms', [])
+                            print_log(f"🔍 DEBUG: Checking exclusion terms: {exclude_terms}", 'info')
+                            has_exclusion = any(exclude_term in search_key for exclude_term in exclude_terms)
+                            if not has_exclusion:
+                                priority = config.get('priority', 5)
+                                print_log(f"🔍 DEBUG: No exclusions, priority: {priority}", 'info')
+                                if priority < best_priority:
+                                    best_match = config
+                                    best_priority = priority
+                                    matched_key = key
+                                    print_log(f"🔍 DEBUG: New best match: {matched_key}", 'info')
+
+                    print_log(f"🔍 DEBUG: Final best_match: {matched_key if best_match else None}", 'info')
+                    if best_match:
+                        category_config = best_match
+
+                        print_log(f"🔍 DEBUG: Processing enhanced search logic", 'info')
+                        # Enhanced search with preference for specific terms
+                        prefer_terms = category_config.get('prefer_terms', [])
+                        categories = category_config['categories']
+                        exclude_terms = category_config.get('exclude_terms', [])
+
+                        print_log(f"🔍 DEBUG: prefer_terms: {prefer_terms}, categories: {categories}, exclude_terms: {exclude_terms}", 'info')
+
+                        # Build exclusion clause
+                        exclusion_clause = ""
+                        if exclude_terms:
+                            exclusion_conditions = ' AND '.join([f"LOWER(product_name) NOT LIKE LOWER('%{term}%')" for term in exclude_terms])
+                            exclusion_clause = f" AND ({exclusion_conditions})"
+                            print_log(f"🔍 DEBUG: Built exclusion_clause: {exclusion_clause}", 'info')
+
+                        # Build preference scoring for actual products vs accessories
+                        preference_score = "0"
+                        if prefer_terms:
+                            preference_conditions = ' + '.join([f"(CASE WHEN LOWER(product_name) LIKE LOWER('%{term}%') THEN 10 ELSE 0 END)" for term in prefer_terms])
+                            preference_score = f"({preference_conditions})"
+                            print_log(f"🔍 DEBUG: Built preference_score: {preference_score}", 'info')
+
+                        # Search with smart prioritization
+                        category_placeholders = ' OR '.join(['LOWER(category) = LOWER(%s)'] * len(categories))
+                        print_log(f"🔍 DEBUG: About to execute enhanced SQL query with {len(categories)} categories", 'info')
+
+                        # Validate categories list before use
+                        print_log(f"🔍 DEBUG: Categories validation - type: {type(categories)}, length: {len(categories)}, content: {categories}", 'info')
+
+                        if not categories or len(categories) == 0:
+                            print_log(f"❌ ERROR: Categories list is empty!", 'error')
+                            return None
+
+                        # Use direct string substitution for the complex CASE statements to avoid parameter conflicts
+                        preference_conditions = []
+                        for term in prefer_terms:
+                            preference_conditions.append(f"(CASE WHEN LOWER(product_name) LIKE LOWER('%{term}%') THEN 10 ELSE 0 END)")
+                        preference_score_sql = " + ".join(preference_conditions) if preference_conditions else "0"
+
+                        # Build exclusion conditions with direct string substitution
+                        exclusion_conditions = []
+                        for term in exclude_terms:
+                            exclusion_conditions.append(f"LOWER(product_name) NOT LIKE LOWER('%{term}%')")
+                        exclusion_clause = f" AND ({' AND '.join(exclusion_conditions)})" if exclusion_conditions else ""
+
+                        # Use the first category directly to avoid list indexing issues
+                        primary_category = categories[0] if len(categories) > 0 else 'Electronics'
+                        print_log(f"🔍 DEBUG: Using primary_category: '{primary_category}'", 'info')
+
+                        # Simplified SQL without complex string substitution to avoid parameter issues
+                        try:
+                            # Basic safe query first
+                            basic_sql = """
+                                SELECT product_id, product_name, category, brand, description, price, currency, in_stock, stock_quantity
+                                FROM products
+                                WHERE LOWER(category) = LOWER(%s) AND in_stock = TRUE
+                                ORDER BY product_name
+                                LIMIT 1
+                            """
+                            print_log(f"🔍 DEBUG: Executing basic safe SQL query", 'info')
+                            cursor.execute(basic_sql, (primary_category,))
+
+                            product = cursor.fetchone()
+                            print_log(f"🔍 DEBUG: cursor.fetchone() completed, result type: {type(product)}", 'info')
+                            print_log(f"🔍 DEBUG: Product result: {product is not None}", 'info')
+
+                            if product:
+                                print_log(f"🔍 DEBUG: About to process product result", 'info')
+
+                                # Safe access to product fields
+                                if hasattr(product, 'get'):  # It's a dict-like object
+                                    product_name = product.get('product_name', 'Unknown Product')
+                                elif hasattr(product, '__getitem__'):  # It's indexable
+                                    try:
+                                        product_name = product['product_name']
+                                    except (KeyError, IndexError):
+                                        product_name = str(product[1]) if len(product) > 1 else 'Unknown Product'
+                                else:
+                                    product_name = 'Unknown Product'
+
+                                print_log(f"✅ Product found via Enhanced Smart mapping: {product_name}", 'success')
+
+                                # Convert to dict safely
+                                if hasattr(product, 'keys'):  # Already dict-like
+                                    product_dict = dict(product)
+                                else:  # Tuple result, need to map to dict
+                                    product_dict = {
+                                        'product_id': product[0] if len(product) > 0 else None,
+                                        'product_name': product[1] if len(product) > 1 else 'Unknown Product',
+                                        'category': product[2] if len(product) > 2 else 'Unknown',
+                                        'brand': product[3] if len(product) > 3 else 'Unknown',
+                                        'description': product[4] if len(product) > 4 else '',
+                                        'price': product[5] if len(product) > 5 else 0,
+                                        'currency': product[6] if len(product) > 6 else 'NGN',
+                                        'in_stock': product[7] if len(product) > 7 else True,
+                                        'stock_quantity': product[8] if len(product) > 8 else 0
+                                    }
+
+                                print_log(f"🔍 DEBUG: Product dict created successfully", 'info')
+
+                                product_dict['match_priority'] = 1  # High priority for enhanced matching
+                                self._last_mentioned_product = product_dict
+
+                                logger.info(f"🎯 ENHANCED SMART MATCH: {product_dict['product_name']} for query: {cleaned_product_name}")
+                                return product_dict
+                            else:
+                                print_log(f"🔍 DEBUG: No product found in enhanced search", 'info')
+
+                        except Exception as sql_error:
+                            print_log(f"❌ SQL EXECUTION ERROR: {str(sql_error)}", 'error')
+                            import traceback
+                            print_log(f"❌ SQL ERROR TRACEBACK: {traceback.format_exc()}", 'error')
+                            # Continue to next strategy instead of failing completely
+
+                    print_log(f"🔍 DEBUG: Starting Strategy 3 - Dynamic product discovery", 'info')
+                    # Strategy 2: Dynamic database-aware product discovery
+                    from product_discovery import get_product_discovery_engine
+
+                    try:
+                        discovery_engine = get_product_discovery_engine()
+                        suggestion_result = discovery_engine.get_smart_suggestions(cleaned_product_name)
+
+                        if suggestion_result and suggestion_result.get('found', False):
+                            best_match = suggestion_result.get('best_match')
+                            if best_match:
+                                alternatives = suggestion_result.get('alternatives', [])
+
+                                print_log(f"✅ Product found via Dynamic Discovery: {best_match['product_name']}", 'success')
+                                product_dict = dict(best_match)
+
+                                # Add world-class customer experience data
+                                product_dict['alternatives'] = alternatives
+                                product_dict['is_popular'] = True  # Default assumption
+                                product_dict['world_class_response'] = True
+
+                                self._last_mentioned_product = product_dict
+                                logger.info(f"🎯 DYNAMIC DISCOVERY: {product_dict['product_name']} found for '{cleaned_product_name}'")
+                                return product_dict
+
+                    except Exception as discovery_error:
+                        logger.warning(f"⚠️ Dynamic discovery failed: {discovery_error}")
+                        print_log(f"❌ Dynamic discovery error: {str(discovery_error)}", 'error')
+
+                    print_log(f"🔍 DEBUG: Starting Strategy 4 - Fallback customer intent mapping", 'info')
+                    # Fallback to legacy smart mapping for specific cases
+                    customer_intent_mapping = {
+                        'phone': {
+                            'customer_expects': 'mobile phones, smartphones, android phones, iphones',
+                            'available_alternatives': ['Car Phone Holder'],
+                            'explanation': "Let me find the best mobile phones available for you.",
+                            'search_categories': ['Electronics'],
+                            'exact_product_names': [],
+                            'prefer_terms': ['smartphone', 'iphone', 'samsung', 'tecno', 'infinix', 'mobile'],
+                            'exclude_terms': ['holder', 'mount', 'car']
+                        },
+                        'smartphone': {
+                            'customer_expects': 'smartphones, mobile phones, android phones, iphones',
+                            'available_alternatives': [],
+                            'explanation': "We have excellent smartphones available.",
+                            'search_categories': ['Electronics'],
+                            'exact_product_names': [],
+                            'prefer_terms': ['smartphone', 'iphone', 'samsung', 'tecno', 'infinix'],
+                            'exclude_terms': ['holder', 'mount', 'car']
+                        },
+                        'mobile': {
+                            'customer_expects': 'mobile phones, smartphones, android phones, iphones',
+                            'available_alternatives': [],
+                            'explanation': "Let me find the best mobile phones for you.",
+                            'search_categories': ['Electronics'],
+                            'exact_product_names': [],
+                            'prefer_terms': ['smartphone', 'iphone', 'samsung', 'tecno', 'infinix', 'mobile'],
+                            'exclude_terms': ['holder', 'mount', 'car']
+                        },
+                        'laptop': {
+                            'customer_expects': 'laptops, computers, notebooks',
+                            'available_alternatives': [],
+                            'explanation': "Let me check what computing devices we have available.",
+                            'search_categories': ['Computing', 'Electronics'],
+                            'exact_product_names': [],
+                            'prefer_terms': ['laptop', 'notebook', 'macbook'],
+                            'exclude_terms': []
+                        },
+                        'headphone': {
+                            'customer_expects': 'headphones, earphones, audio devices',
+                            'available_alternatives': ['Bluetooth Headphones'],
+                            'explanation': "We have audio devices available.",
+                            'search_categories': ['Electronics'],
+                            'exact_product_names': ['Bluetooth Headphones'],
+                            'prefer_terms': ['headphone', 'bluetooth'],
+                            'exclude_terms': []
+                        },
+                        'television': {
+                            'customer_expects': 'televisions, smart TVs, displays',
+                            'available_alternatives': [],
+                            'explanation': "We have various TV options available.",
+                            'search_categories': ['Electronics'],
+                            'exact_product_names': [],
+                            'prefer_terms': ['tv', 'television', 'smart tv', 'oled', 'led'],
+                            'exclude_terms': []
+                        },
+                        'tv': {
+                            'customer_expects': 'televisions, smart TVs, displays',
+                            'available_alternatives': [],
+                            'explanation': "We have various TV options available.",
+                            'search_categories': ['Electronics'],
+                            'exact_product_names': [],
+                            'prefer_terms': ['tv', 'television', 'smart tv', 'oled', 'led'],
+                            'exclude_terms': []
+                        }
+                    }
+
+                    # Check if this is a known customer intent
+                    matched_intent = None
+                    for intent_key, intent_config in customer_intent_mapping.items():
+                        if intent_key in search_key:
+                            matched_intent = intent_config
+                            break
+
+                    if matched_intent:
+                        # First try exact product names if available
+                        exact_products = matched_intent['exact_product_names']
+                        if exact_products:
+                            exact_placeholders = ' OR '.join(['LOWER(product_name) = LOWER(%s)'] * len(exact_products))
+                            cursor.execute(f"""
+                                SELECT product_id, product_name, category, brand, description, price, currency, in_stock, stock_quantity,
+                                       1 as match_priority
+                                FROM products
+                                WHERE ({exact_placeholders}) AND in_stock = TRUE
+                                ORDER BY product_name
+                                LIMIT 1
+                            """, exact_products)
+
+                            product = cursor.fetchone()
+                            if product:
+                                print_log(f"✅ Product found via Smart mapping: {product['product_name']}", 'success')
+                                product_dict = dict(product)
+                                # Add customer education context
+                                product_dict['customer_education'] = matched_intent['explanation']
+                                product_dict['customer_expected'] = matched_intent['customer_expects']
+                                self._last_mentioned_product = product_dict
+                                logger.info(f"🎯 SMART MATCH: {product_dict['product_name']} for customer intent: {matched_intent['customer_expects']}")
+                                return product_dict
+
+                        # If no exact matches, search by category with enhanced logic
+                        categories = matched_intent['search_categories']
+                        prefer_terms = matched_intent.get('prefer_terms', [])
+                        exclude_terms = matched_intent.get('exclude_terms', [])
+
+                        if categories:
+                            # Build exclusion clause
+                            exclusion_clause = ""
+                            if exclude_terms:
+                                exclusion_conditions = ' AND '.join([f"LOWER(product_name) NOT LIKE LOWER('%{term}%')" for term in exclude_terms])
+                                exclusion_clause = f" AND ({exclusion_conditions})"
+
+                            # Build preference scoring for actual products vs accessories
+                            preference_score = "0"
+                            if prefer_terms:
+                                preference_conditions = ' + '.join([f"(CASE WHEN LOWER(product_name) LIKE LOWER('%{term}%') THEN 10 ELSE 0 END)" for term in prefer_terms])
+                                preference_score = f"({preference_conditions})"
+
+                            category_placeholders = ' OR '.join(['LOWER(category) = LOWER(%s)'] * len(categories))
+                            cursor.execute(f"""
+                                SELECT product_id, product_name, category, brand, description, price, currency, in_stock, stock_quantity,
+                                       {preference_score} as preference_score,
+                                       2 as match_priority
+                                FROM products
+                                WHERE ({category_placeholders}) AND in_stock = TRUE {exclusion_clause}
+                                ORDER BY preference_score DESC, product_name
+                                LIMIT 1
+                            """, categories)
+
+                        product = cursor.fetchone()
+                        if product:
+                            print_log(f"✅ Product found via Smart category mapping: {product['product_name']}", 'success')
+                            product_dict = dict(product)
+                            product_dict['match_priority'] = 1  # High priority for enhanced matching
+                            self._last_mentioned_product = product_dict
+                            logger.info(f"🎯 SMART CATEGORY MATCH: {product_dict['product_name']} for customer intent: {matched_intent['customer_expects']}")
+                            return product_dict
+                    else:
+                        # Fallback to word boundary matching (avoid substring issues)
+                        word_patterns = [f"\\y{word}\\y" for word in cleaned_words if len(word) > 2]  # Only words > 2 chars
+                        if word_patterns:
+                            # Simplified approach: score based on how many pattern words match
+                            placeholders = ' OR '.join(['LOWER(product_name) ~ LOWER(%s)'] * len(word_patterns))
+                            # Calculate match score using CASE statements instead of unnest
+                            match_score_cases = ' + '.join([f"(CASE WHEN LOWER(product_name) ~ LOWER(%s) THEN 1 ELSE 0 END)" for _ in word_patterns])
+
+                            cursor.execute(f"""
+                                SELECT product_id, product_name, category, brand, description, price, currency, in_stock, stock_quantity,
+                                       ({match_score_cases}) as word_matches
+                                FROM products
+                                WHERE ({placeholders}) AND in_stock = TRUE
+                                ORDER BY word_matches DESC, product_name
+                                LIMIT 1
+                            """, word_patterns + word_patterns)  # Parameters for match_score_cases + placeholders
+                        else:
+                            # Very basic fallback
+                            cursor.execute("""
+                                SELECT product_id, product_name, category, brand, description, price, currency, in_stock, stock_quantity,
+                                       0 as word_matches
+                                FROM products
+                                WHERE LOWER(product_name) LIKE LOWER(%s) AND in_stock = TRUE
+                                ORDER BY product_name
+                                LIMIT 1
+                            """, (f"%{cleaned_product_name}%",))
 
                     product = cursor.fetchone()
                     if product:
@@ -913,7 +1336,66 @@ class OrderAIAssistant:
 
             response_data = {'success': False, 'message': "Could not process your request.", 'action': intent}
 
-            if intent == 'add_to_cart':
+            if intent == 'product_inquiry':
+                # Show product details and ask for confirmation (don't auto-add to cart)
+                product_name_from_intent = entities.get('product_name')
+                product_info = self.extract_product_info(user_message, product_name_hint=product_name_from_intent)
+
+                if product_info and product_info.get('product_id'):
+                    if product_info.get('stock_quantity', 0) > 0:
+                        # Store the product for potential future reference
+                        active_session_state.last_product_mentioned = product_info
+                        active_session_state.conversation_stage = 'product_discussed'
+
+                                                # Format world-class product response
+                        price_formatted = f"₦{product_info['price']:,.0f}" if product_info.get('price') else "Price not available"
+                        stock_count = product_info.get('stock_quantity', 0)
+
+                        # World-class response template
+                        if product_info.get('world_class_response'):
+                            # Enhanced response for dynamic discovery
+                            popularity_text = "It's a popular choice among our customers" if product_info.get('is_popular') else "It's available"
+
+                            base_message = f"We have **{product_info['product_name']}** available for {price_formatted}. {popularity_text}, and we currently have {stock_count} units in stock."
+
+                            # Add alternatives if available
+                            alternatives = product_info.get('alternatives', [])
+                            if alternatives:
+                                alt_names = [alt['product_name'] for alt in alternatives[:2]]
+                                alt_text = f"\n\n📱 **Similar options**: {', '.join(alt_names)}"
+                                base_message += alt_text
+
+                            base_message += f"\n\nWould you like to add this to your cart or explore other options on raqibtech.com?"
+
+                        else:
+                            # Legacy response with customer education
+                            education_message = ""
+                            if product_info.get('customer_education'):
+                                education_message = f"\n\n💡 **Note**: {product_info['customer_education']}"
+
+                            base_message = f"We have **{product_info['product_name']}** available for {price_formatted}. It's in stock with {stock_count} units available.{education_message}\n\nWould you like to add this to your cart or explore other options on raqibtech.com?"
+
+                        response_data.update({
+                            'success': True,
+                            'message': base_message,
+                            'action': 'product_details_shown',
+                            'product_info': product_info
+                        })
+                    else:
+                        response_data.update({
+                            'success': True,
+                            'message': f"😔 Sorry, {product_info['product_name']} is currently out of stock.",
+                            'action': 'product_out_of_stock'
+                        })
+                        active_session_state.last_product_mentioned = product_info
+                else:
+                    response_data.update({
+                        'success': True,
+                        'message': "🤔 I couldn't find that specific product. Can you try being more specific or browse our catalog?",
+                        'action': 'product_not_found'
+                    })
+
+            elif intent == 'add_to_cart':
                 product_name_from_intent = entities.get('product_name')
 
                 # 🔧 CRITICAL FIX: Check for pronoun usage and use session context
@@ -1376,7 +1858,7 @@ class OrderAIAssistant:
                 conversation_memory = enhanced_db.get_enhanced_conversation_memory(user_id, session_id, limit=5)
 
                 # Look for the most recent product mentioned in conversation context
-                if conversation_memory and conversation_memory.get('mentioned_products'):
+                if conversation_memory and conversation_memory.get('mentioned_products') and len(conversation_memory['mentioned_products']) > 0:
                     last_product_context = conversation_memory['mentioned_products'][0]  # Most recent
                     logger.info(f"🧠 RETRIEVED PRODUCT CONTEXT: {last_product_context.get('product_name')} from conversation memory")
 

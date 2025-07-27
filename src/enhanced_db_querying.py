@@ -268,6 +268,15 @@ class EnhancedDatabaseQuerying:
             logger.warning(f"⚠️ Memory system integration failed: {e}")
             self.memory_system = None
 
+        # 🤖 Initialize Agent Memory System for persistent learning
+        try:
+            from .agent_memory_system import get_agent_memory_system
+            self.agent_memory = get_agent_memory_system()
+            logger.info("🤖 Agent Memory System integrated successfully")
+        except Exception as e:
+            logger.warning(f"⚠️ Agent Memory System integration failed: {e}")
+            self.agent_memory = None
+
         # Initialize conversation context for legacy compatibility
         self.conversation_context = {}
 
@@ -319,6 +328,89 @@ class EnhancedDatabaseQuerying:
         self._memory_store = {}
 
         logger.info("🚀 Enhanced Database Querying System initialized successfully")
+
+    def _schedule_agent_memory_storage(self, user_query: str, session_context: Dict[str, Any], customer_id: int):
+        """🤖 Schedule storage of insights in agent memory system"""
+        if not self.agent_memory or not customer_id:
+            return
+
+        try:
+            # Extract user information
+            user_id = session_context.get('user_id', session_context.get('email', f'customer_{customer_id}'))
+            session_id = session_context.get('session_id', 'default_session')
+
+            # Identify potential memories to store based on query patterns
+            memories_to_store = []
+            query_lower = user_query.lower()
+
+            # Store preferences mentioned in queries (more selective)
+            preference_patterns = [
+                'i prefer', 'my favorite', 'i always buy', 'i usually get',
+                'i like to order', 'i typically want', 'i love'
+            ]
+            if any(pattern in query_lower for pattern in preference_patterns):
+                memory_content = f"User preference: {user_query}"
+                memories_to_store.append({
+                    'content': memory_content,
+                    'type': 'episodic',
+                    'confidence': 0.9
+                })
+
+            # Store product interests (balanced approach - not too restrictive)
+            interest_patterns = [
+                'want to buy', 'planning to purchase', 'interested in buying',
+                'looking to order', 'need to get urgently', 'i need', 'i want'
+            ]
+            # Only store if it's a substantial query (not just "i want" or "i need")
+            if (any(pattern in query_lower for pattern in interest_patterns) and
+                len(user_query.strip()) > 8):  # At least 8 characters to avoid very short queries
+                memory_content = f"User showed interest: {user_query}"
+                memories_to_store.append({
+                    'content': memory_content,
+                    'type': 'episodic',
+                    'confidence': 0.6
+                })
+
+            # Store delivery preferences
+            if any(word in query_lower for word in ['delivery', 'shipping', 'address', 'location']):
+                memory_content = f"User delivery preference/inquiry: {user_query}"
+                memories_to_store.append({
+                    'content': memory_content,
+                    'type': 'episodic',
+                    'confidence': 0.8
+                })
+
+            # Store payment preferences
+            if any(word in query_lower for word in ['payment', 'pay', 'card', 'transfer', 'raqibtechpay']):
+                memory_content = f"User payment preference/inquiry: {user_query}"
+                memories_to_store.append({
+                    'content': memory_content,
+                    'type': 'episodic',
+                    'confidence': 0.8
+                })
+
+            # Store the memories asynchronously
+            for memory in memories_to_store:
+                from .agent_memory_system import MemoryType
+                memory_type = MemoryType.EPISODIC if memory['type'] == 'episodic' else MemoryType.SEMANTIC
+
+                success = self.agent_memory.store_memory(
+                    content=memory['content'],
+                    memory_type=memory_type,
+                    user_id=user_id,
+                    thread_id=session_id,
+                    confidence_score=memory['confidence']
+                )
+
+                if success:
+                    logger.info(f"📝 Stored agent memory for user {user_id}: {memory['content'][:50]}...")
+
+            # Schedule memory consolidation for this user
+            if memories_to_store:
+                self.agent_memory.schedule_memory_consolidation(user_id)
+
+        except Exception as e:
+            logger.error(f"❌ Error scheduling agent memory storage: {e}")
 
     def classify_query_intent(self, user_query: str, conversation_history: List[Dict] = None) -> Tuple[QueryType, Dict[str, Any]]:
         """
@@ -2419,6 +2511,33 @@ RESPONSE STYLE:
                     - CRITICAL: Reference what was just discussed to maintain context!
                     """
 
+            # 🤖 Agent Memory Integration - Get persistent memory context
+            agent_memory_context = ""
+            if self.agent_memory and customer_id:
+                try:
+                    user_id = session_context.get('user_id', session_context.get('email', f'customer_{customer_id}'))
+                    agent_memory_context = self.agent_memory.get_memory_context_for_ai(
+                        query=query_context.user_query,
+                        user_id=user_id,
+                        thread_id=session_id,
+                        max_memories=3
+                    )
+
+                    if agent_memory_context:
+                        memory_guidance += f"""
+
+                        🤖 AGENT MEMORY - LEARNED USER PREFERENCES:
+                        {agent_memory_context}
+                        - CRITICAL: Use this learned information to personalize responses!
+                        """
+                        logger.info(f"🤖 Added agent memory context for user {user_id}")
+
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to get agent memory context: {e}")
+
+            # Store new insights in agent memory after processing
+            self._schedule_agent_memory_storage(query_context.user_query, session_context, customer_id)
+
             # Get intelligent recommendations for product-related queries
             recommendations_data = None
             if query_context.query_type in [QueryType.PRODUCT_PERFORMANCE, QueryType.PRODUCT_RECOMMENDATIONS,
@@ -2441,7 +2560,8 @@ RESPONSE STYLE:
                 'empathetic_style': empathetic_style,  # 🆕 Add emotional response style
                 'support_context': None,
                 'enhanced_memory': enhanced_memory,  # 🆕 Add enhanced memory
-                'memory_guidance': memory_guidance  # 🆕 Add memory guidance
+                'memory_guidance': memory_guidance,  # 🆕 Add memory guidance
+                'agent_memory_context': agent_memory_context  # 🤖 Add agent memory context
             }
 
             # Add support context if available
