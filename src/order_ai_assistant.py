@@ -506,14 +506,30 @@ class OrderAIAssistant:
             'quantity and add'
         ]
 
+        # 🔧 CRITICAL FIX: Improved context detection logic
+        # Extract potential product words (longer than 2 chars, not common words)
+        common_words = ['i', 'to', 'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'by', 'for', 'with', 'this', 'that', 'want', 'need', 'get', 'buy', 'add', 'order', 'purchase']
+        potential_product_words = [word for word in words if len(word) > 2 and word not in common_words]
+
+        # Only treat as context reference if:
+        # 1. Contains pronouns (it, this, that, them), OR
+        # 2. Contains exact context indicator phrases, OR
+        # 3. Short commands with add/buy BUT no specific product mentioned
         is_referring_to_context = (
             any(pronoun in words for pronoun in pronouns) or  # Contains pronouns
             any(indicator in user_message_lower for indicator in context_indicators) or  # Contains context indicators
-            (('add' in words or 'buy' in words) and len([w for w in words if len(w) >= 3]) <= 3)  # Short add/buy commands
+            (('add' in words or 'buy' in words) and len(words) <= 3 and len(potential_product_words) == 0)  # Very short add/buy commands WITHOUT specific products
         )
 
         if is_referring_to_context:
             logger.info(f"🎯 CONTEXT REFERENCE DETECTED: '{user_message}' - checking for last mentioned product")
+
+            # 🔧 EXTRA SAFETY: Check if we have current session state to verify cart wasn't recently cleared
+            current_session_state = getattr(self, '_current_session_state', None)
+            if current_session_state and hasattr(current_session_state, 'conversation_stage'):
+                if current_session_state.conversation_stage == 'cart_cleared':
+                    logger.info(f"🛑 CART RECENTLY CLEARED: Skipping context reference for fresh shopping experience")
+                    return None
 
             # Try to get last mentioned product from session context
             if hasattr(self, '_last_mentioned_product') and self._last_mentioned_product:
@@ -1460,6 +1476,27 @@ class OrderAIAssistant:
             elif intent == 'clear_cart':
                 active_session_state.cart_items = []
                 active_session_state.conversation_stage = 'cart_cleared'
+
+                # CRITICAL FIX: Also clear product context references
+                active_session_state.last_product_mentioned = None
+                if hasattr(self, '_last_mentioned_product'):
+                    self._last_mentioned_product = None
+
+                # 🔧 ENHANCED FIX: Clear product context from database/Redis too
+                try:
+                    from .enhanced_db_querying import EnhancedDatabaseQuerying
+                    enhanced_db = EnhancedDatabaseQuerying()
+                    if hasattr(enhanced_db, 'clear_product_context'):
+                        customer_id = getattr(self, '_current_customer_id', None)
+                        user_id = f"customer_{customer_id}" if customer_id else "anonymous"
+                        session_id = active_session_state.session_id
+                        enhanced_db.clear_product_context(user_id, session_id)
+                        logger.info(f"🗑️ DATABASE CONTEXT CLEARED: Removed product context for {user_id}/{session_id}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Could not clear database product context: {e}")
+
+                logger.info(f"🗑️ CART CLEARED: Cart and ALL product context cleared")
+
                 response_data.update({
                     'success': True,
                     'message': "🗑️ Your cart has been cleared! Start fresh with your shopping.",
@@ -1522,7 +1559,7 @@ class OrderAIAssistant:
                         active_session_state.conversation_stage = 'payment_method_set'
                         response_data.update({
                             'success': True,
-                            'message': f"✅ Payment method set to: {payment_method_entity}",  # Show user-friendly name
+                            'message': f"✅ Payment method set to: {payment_method_entity}. \nType 'place order' to place order",  # Show user-friendly name
                             'action': 'payment_method_set',
                             'payment_method': payment_method_entity
                         })
@@ -1542,6 +1579,14 @@ class OrderAIAssistant:
 
             elif intent == 'checkout' or intent == 'place_order' or \
                  (intent == 'affirmative_confirmation' and active_session_state.conversation_stage in ['awaiting_order_confirmation', 'checkout_summary_shown', 'payment_method_set', 'address_set']):
+
+                # 🔧 CRITICAL FIX: Clear previous checkout data when starting new checkout
+                if intent == 'checkout' and active_session_state.conversation_stage not in ['awaiting_address_confirmation', 'awaiting_payment_confirmation', 'awaiting_order_confirmation']:
+                    # Clear previous address and payment data to force step-by-step confirmation
+                    active_session_state.delivery_address = None
+                    active_session_state.payment_method = None
+                    logger.info(f"🔄 CHECKOUT INITIATED: Cleared previous address/payment data to force step-by-step confirmation")
+
                 checkout_result = self.progressive_checkout(user_message, customer_id, active_session_state)
                 response_data.update(checkout_result)
 
@@ -1550,12 +1595,24 @@ class OrderAIAssistant:
                 action_taken = False
 
                 # 🔧 CRITICAL FIX: Handle checkout flow confirmations FIRST (prioritize checkout flow)
-                if active_session_state.conversation_stage == 'awaiting_address_confirmation' and active_session_state.delivery_address:
-                    active_session_state.conversation_stage = 'address_set'
-                    checkout_result = self.progressive_checkout(user_message, customer_id, active_session_state)
-                    response_data.update(checkout_result)
-                    response_data['message'] = f"✅ Address confirmed! " + response_data.get('message', '')
-                    action_taken = True
+                if active_session_state.conversation_stage == 'awaiting_address_confirmation':
+                    # Get the suggested address from the previous checkout attempt
+                    saved_address = self._get_customer_address(customer_id)
+                    if saved_address:
+                        active_session_state.delivery_address = saved_address
+                        active_session_state.conversation_stage = 'address_set'
+                        self._save_session_state(session_id, active_session_state)
+                        checkout_result = self.progressive_checkout(user_message, customer_id, active_session_state)
+                        response_data.update(checkout_result)
+                        response_data['message'] = f"✅ Address confirmed: {saved_address['full_address']}! " + response_data.get('message', '')
+                        action_taken = True
+                    else:
+                        response_data.update({
+                            'success': False,
+                            'message': "🚚 Please provide your delivery address.",
+                            'action': 'request_delivery_address'
+                        })
+                        action_taken = True
 
                 elif active_session_state.conversation_stage == 'awaiting_payment_confirmation' and active_session_state.payment_method:
                     active_session_state.conversation_stage = 'payment_method_set'
@@ -1684,146 +1741,104 @@ class OrderAIAssistant:
             self._save_session_state(session_state.session_id, session_state) # Save updated stage
             return {'success': False, 'message': "Your cart is empty! Please add some products first. 🛒", 'action': 'empty_cart'}
 
-        # 1. Check/Get Delivery Address from session_state
-        if not session_state.delivery_address:
-            intent_data = self.parse_order_intent(user_message)
-            if intent_data['intent'] == 'set_delivery_address' and intent_data['entities'].get('delivery_address'):
-                addr_entity = intent_data['entities']['delivery_address']
-                session_state.delivery_address = addr_entity
-                session_state.conversation_stage = 'address_set'
-                logger.info(f"🚚 Address parsed during checkout: {addr_entity.get('full_address')}")
-                self._save_session_state(session_state.session_id, session_state) # Save
-                # Fall through to payment check
-            else:
-                # Try to get saved address for customer
-                saved_address = self._get_customer_address(customer_id)
-                if saved_address:
-                    session_state.delivery_address = saved_address # Tentatively set, user needs to confirm
-                    session_state.conversation_stage = 'awaiting_address_confirmation'
-                    action_result.update({
-                        'success': True,  # This is a successful checkout step, not a failure
-                        'message': f"🚚 Should I use your saved address: {saved_address['full_address']} for delivery?",
-                        'action': 'confirm_delivery_address'
-                    })
-                    self._save_session_state(session_state.session_id, session_state) # Save state before returning
-                    return action_result
-                else:
-                    session_state.conversation_stage = 'checkout_initiated_need_address'
-                    action_result.update({
-                        'success': True,  # This is a successful checkout step, not a failure
-                        'message': "🚚 What is your delivery address? (e.g., '123 Main St, Ikeja, Lagos')",
-                        'action': 'request_delivery_address'
-                    })
-                    self._save_session_state(session_state.session_id, session_state) # Save state before returning
-                    return action_result
-
-        # Ensure conversation_stage reflects address is set if we passed the above block
-        if session_state.delivery_address and session_state.conversation_stage not in ['address_set', 'payment_method_set', 'awaiting_payment_confirmation', 'checkout_summary_shown', 'awaiting_order_confirmation']:
-            session_state.conversation_stage = 'address_set'
-            self._save_session_state(session_state.session_id, session_state)
-
-
-        # 2. Check/Get Payment Method from session_state
-        if not session_state.payment_method:
-            intent_data = self.parse_order_intent(user_message)
-            if intent_data['intent'] == 'payment_method_selection' and intent_data['entities'].get('payment_method'):
-                pm_entity = intent_data['entities']['payment_method']
-                if any(pm.value.lower() == pm_entity.lower() for pm in PaymentMethod):
-                    session_state.payment_method = pm_entity
-                    session_state.conversation_stage = 'payment_method_set'
-                    logger.info(f"💳 Payment method parsed during checkout: {pm_entity}")
-                    self._save_session_state(session_state.session_id, session_state)
-                    # Fall through to summary/placement
-                else:
-                    session_state.conversation_stage = 'address_set_need_payment' # Stay here but prompt again
-                    action_result.update({
-                        'success': True,  # This is a successful checkout step, not a failure
-                        'message': f"🤔 '{pm_entity}' isn't valid. Choose RaqibTechPay, Pay on Delivery, Card, or Bank Transfer.",
-                        'action': 'request_payment_method_invalid'
-                    })
-                    self._save_session_state(session_state.session_id, session_state) # Save state before returning
-                    return action_result
-            else:
-                session_state.conversation_stage = 'address_set_need_payment'
-                action_result.update({
-                    'success': True,  # This is a successful checkout step, not a failure
-                    'message': "💳 How would you like to pay? (RaqibTechPay, Pay on Delivery, Card, or Bank Transfer)",
-                    'action': 'request_payment_method'
-                })
-                self._save_session_state(session_state.session_id, session_state) # Save state before returning
-                return action_result
-
-        # Ensure stage reflects payment is set
-        if session_state.payment_method and session_state.conversation_stage not in ['payment_method_set', 'checkout_summary_shown', 'awaiting_order_confirmation']:
-             session_state.conversation_stage = 'payment_method_set'
-             self._save_session_state(session_state.session_id, session_state)
-
-        # 3. All details collected - Show summary and ask for confirmation to place order
-        cart_summary_dict = {
-             'items': session_state.cart_items,
-             'total_items': sum(item['quantity'] for item in session_state.cart_items),
-             'subtotal': sum(item['subtotal'] for item in session_state.cart_items)
-        }
-        order_summary_text = self.order_system.format_potential_order_summary(
-            cart_summary_dict,
-            session_state.delivery_address,
-            session_state.payment_method
-        )
-
-        # Check if user message is an attempt to place order (e.g. "place order", "confirm")
-        # or if user said "yes" and stage was awaiting_order_confirmation
-        is_place_order_command = self.parse_order_intent(user_message)['intent'] == 'place_order'
-        is_affirmative_confirmation_for_order = (self.parse_order_intent(user_message)['intent'] == 'affirmative_confirmation' and
-                                               session_state.conversation_stage == 'awaiting_order_confirmation')
-
-
-        if is_place_order_command or is_affirmative_confirmation_for_order:
-            logger.info(f"Attempting to place order for customer {customer_id} based on command or confirmation.")
-            # Ensure all details are present one last time
-            if not (session_state.cart_items and session_state.delivery_address and session_state.payment_method):
-                 logger.warning(f"Missing details for order placement: Cart: {bool(session_state.cart_items)}, Addr: {bool(session_state.delivery_address)}, PM: {bool(session_state.payment_method)}")
-                 action_result['message'] = "It seems some details are still missing. Let's review. What is your delivery address?"
-                 session_state.conversation_stage = 'checkout_initiated_need_address' # Restart collection
-                 session_state.delivery_address = None # Clear to re-prompt
-                 session_state.payment_method = None # Clear to re-prompt
-                 self._save_session_state(session_state.session_id, session_state)
-                 action_result['action'] = 'request_delivery_address' # Go back to address collection
-                 return action_result
-
-            order_id, order_details, error = self.order_system.place_order(
-                customer_id=customer_id,
-                cart_items=session_state.cart_items,
-                delivery_address=session_state.delivery_address,
-                payment_method=session_state.payment_method,
-                notes="Order placed via AI Assistant"
-            )
-            if order_id:
-                session_state.cart_items = [] # Clear cart in current state
-                session_state.conversation_stage = 'order_placed'
-                session_state.checkout_state = {'last_order_id': order_id, 'details': order_details}
+        # 🔧 CRITICAL FIX: Always ask for user confirmation step by step
+        # Step 1: Address confirmation
+        if not session_state.delivery_address or session_state.conversation_stage == 'cart_updated':
+            # Always ask for address confirmation, never auto-fill
+            saved_address = self._get_customer_address(customer_id)
+            if saved_address:
+                session_state.conversation_stage = 'awaiting_address_confirmation'
                 action_result.update({
                     'success': True,
-                    'message': f"🎉 Your order {order_id} has been placed successfully!",
-                    'action': 'order_placed',
-                    'order_id': order_id,
-                    'order_summary': self.order_system.format_order_summary(order_details)
+                    'message': f"🚚 I found your saved address:\n📍 {saved_address['full_address']}\n\nShould I use this for delivery? Say 'yes' to confirm or provide a new address.",
+                    'action': 'confirm_delivery_address',
+                    'suggested_address': saved_address
                 })
+                self._save_session_state(session_state.session_id, session_state)
+                return action_result
             else:
+                session_state.conversation_stage = 'checkout_initiated_need_address'
                 action_result.update({
-                'success': False,
-                    'message': f"💥 Error placing order: {error}. Please check details or try again.",
-                    'action': 'order_placement_failed'
+                    'success': True,
+                    'message': "🚚 What is your delivery address? (e.g., '123 Main St, Ikeja, Lagos')",
+                    'action': 'request_delivery_address'
                 })
-        else:
-            # Not a direct place order command, so show summary and await confirmation
-            session_state.conversation_stage = 'awaiting_order_confirmation'
-            action_result.update({
-                'success': True, # Success in reaching this stage
-                'message': f"📝 **Order Summary:**\\n{order_summary_text}\\n\\nIs everything correct? Say 'yes' to place your order or tell me what to change.",
-                'action': 'confirm_order_details'
-            })
+                self._save_session_state(session_state.session_id, session_state)
+                return action_result
 
-        self._save_session_state(session_state.session_id, session_state) # Save final stage before returning
+        # Step 2: Payment method confirmation
+        if session_state.delivery_address and not session_state.payment_method:
+            session_state.conversation_stage = 'address_set_need_payment'
+            action_result.update({
+                'success': True,
+                'message': "💳 How would you like to pay?\n\n• RaqibTechPay\n• Pay on Delivery\n• Card Payment\n• Bank Transfer\n\nPlease choose your payment method.",
+                'action': 'request_payment_method'
+            })
+            self._save_session_state(session_state.session_id, session_state)
+            return action_result
+
+        # Step 3: Show order summary and ask for final confirmation
+        if session_state.delivery_address and session_state.payment_method:
+            cart_summary_dict = {
+                'items': session_state.cart_items,
+                'total_items': sum(item['quantity'] for item in session_state.cart_items),
+                'subtotal': sum(item['subtotal'] for item in session_state.cart_items)
+            }
+            order_summary_text = self.order_system.format_potential_order_summary(
+                cart_summary_dict,
+                session_state.delivery_address,
+                session_state.payment_method
+            )
+
+            # Check if user is confirming the order
+            is_place_order_command = self.parse_order_intent(user_message)['intent'] == 'place_order'
+            is_affirmative_confirmation = (self.parse_order_intent(user_message)['intent'] == 'affirmative_confirmation' and
+                                         session_state.conversation_stage == 'awaiting_order_confirmation')
+
+            if is_place_order_command or is_affirmative_confirmation:
+                logger.info(f"Attempting to place order for customer {customer_id} based on command or confirmation.")
+
+                order_id, order_details, error = self.order_system.place_order(
+                    customer_id=customer_id,
+                    cart_items=session_state.cart_items,
+                    delivery_address=session_state.delivery_address,
+                    payment_method=session_state.payment_method,
+                    notes="Order placed via AI Assistant"
+                )
+
+                if order_id:
+                    session_state.cart_items = []
+                    session_state.conversation_stage = 'order_placed'
+                    session_state.checkout_state = {'last_order_id': order_id, 'details': order_details}
+                    session_state.last_product_mentioned = None
+                    if hasattr(self, '_last_mentioned_product'):
+                        self._last_mentioned_product = None
+
+                    logger.info(f"✅ ORDER PLACED & CONTEXT CLEARED: Order {order_id} placed, cart and ALL product context cleared")
+
+                    action_result.update({
+                        'success': True,
+                        'message': f"🎉 Your order {order_id} has been placed successfully!",
+                        'action': 'order_placed',
+                        'order_id': order_id,
+                        'order_summary': self.order_system.format_order_summary(order_details)
+                    })
+                else:
+                    action_result.update({
+                        'success': False,
+                        'message': f"💥 Error placing order: {error}. Please check details or try again.",
+                        'action': 'order_placement_failed'
+                    })
+            else:
+                # Show summary and await confirmation
+                session_state.conversation_stage = 'awaiting_order_confirmation'
+                action_result.update({
+                    'success': True,
+                    'message': f"📝 **Order Summary:**\n{order_summary_text}\n\nIs everything correct? Say 'yes' to place your order or tell me what to change.",
+                    'action': 'confirm_order_details'
+                })
+
+        self._save_session_state(session_state.session_id, session_state)
         return action_result
 
     def _get_or_initialize_session_state(self, session_id: str, customer_id: Optional[int], existing_state: Optional[SessionState]) -> SessionState:

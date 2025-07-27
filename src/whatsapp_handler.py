@@ -547,24 +547,51 @@ class WhatsAppBusinessHandler:
                 except Exception as e:
                     logger.warning(f"⚠️ Could not retrieve customer info from database: {e}")
 
-            # Parse basic info from the formatted text
-            order_data = {
-                'order_id': order_id,
-                'total_amount': 0,
-                'subtotal': 0,
-                'delivery_fee': self._calculate_delivery_fee(customer_id),  # 🎯 Dynamic delivery fee
-                'tier_discount': 0,  # 🎯 NEW: Include tier discount
-                'discount_amount': 0,  # Alternative field name
-                'account_tier': customer_tier,  # 🎯 NEW: Include customer tier
-                'customer_tier': customer_tier,  # Alternative field name
-                'payment_method': 'Not specified',
-                'delivery_address': 'Not specified',
-                'status': 'Pending',  # Default status for placed orders
-                'customer_name': customer_name,  # Use real customer name from database
-                'items': []
-            }
+            # 🔧 CRITICAL FIX: Fetch actual order details from database instead of parsing text
+            order_data = None
+            if order_id and hasattr(self, 'ai_system') and hasattr(self.ai_system, 'order_system'):
+                try:
+                    # Get actual order details from order management system
+                    order_details = self.ai_system.order_system.get_order_details(order_id)
+                    if order_details and order_details.get('success'):
+                        order_data = order_details
+                        # Ensure customer info is set
+                        order_data['customer_name'] = customer_name
+                        order_data['customer_tier'] = customer_tier
+                        order_data['account_tier'] = customer_tier
 
-            if isinstance(order_summary_text, str):
+                        # 🔧 CRITICAL FIX: Ensure discount info is properly set from database
+                        if order_data.get('pricing_breakdown') and order_data['pricing_breakdown'].get('tier_discount'):
+                            order_data['tier_discount'] = order_data['pricing_breakdown']['tier_discount']
+                            order_data['discount_amount'] = order_data['pricing_breakdown']['tier_discount']
+                            logger.info(f"💰 Set discount from database: ₦{order_data['tier_discount']:,.2f}")
+
+                        logger.info(f"✅ Retrieved order details from database for {order_id}")
+                    else:
+                        logger.warning(f"⚠️ Could not fetch order details for {order_id}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Error fetching order details for {order_id}: {e}")
+
+            # Fallback: Parse basic info from the formatted text if database fetch failed
+            if not order_data:
+                order_data = {
+                    'order_id': order_id,
+                    'total_amount': 0,
+                    'subtotal': 0,
+                    'delivery_fee': self._calculate_delivery_fee(customer_id),  # 🎯 Dynamic delivery fee
+                    'tier_discount': 0,  # 🎯 NEW: Include tier discount
+                    'discount_amount': 0,  # Alternative field name
+                    'account_tier': customer_tier,  # 🎯 NEW: Include customer tier
+                    'customer_tier': customer_tier,  # Alternative field name
+                    'payment_method': 'Not specified',
+                    'delivery_address': 'Not specified',
+                    'status': 'Pending',  # Default status for placed orders
+                    'customer_name': customer_name,  # Use real customer name from database
+                    'items': []
+                }
+
+            # 🔧 ENHANCED FIX: Only parse text if we don't have order data from database
+            if not order_data.get('success') and isinstance(order_summary_text, str):
                 # Extract total amount using regex
                 total_match = re.search(r'Total:\s*₦([\d,]+\.?\d*)', order_summary_text)
                 if total_match:
@@ -611,21 +638,27 @@ class WhatsAppBusinessHandler:
                 # Calculate subtotal and tier discount based on order structure
                 order_data['subtotal'] = total_items_value
 
-                # 🎯 NEW: Calculate tier discount if total is different from subtotal + delivery
-                if order_data['total_amount'] > 0 and total_items_value > 0:
-                    expected_total_without_discount = total_items_value + order_data['delivery_fee']
+                                # 🔧 CRITICAL FIX: Use pricing breakdown from order system if available
+                if order_data.get('pricing_breakdown') and order_data['pricing_breakdown'].get('tier_discount'):
+                    # Use the already-calculated correct discount from order system
+                    tier_discount = order_data['pricing_breakdown']['tier_discount']
+                    order_data['tier_discount'] = tier_discount
+                    order_data['discount_amount'] = tier_discount
+                    logger.info(f"💰 Using order system discount: ₦{tier_discount:,.2f} for {customer_tier} customer")
+                elif not order_data.get('tier_discount') and order_data['total_amount'] > 0 and total_items_value > 0:
+                    # Only calculate if no discount was provided and no pricing breakdown
+                    subtotal_plus_delivery = total_items_value + order_data['delivery_fee']
 
-                    # If actual total is less than expected, there's a discount
-                    if expected_total_without_discount > order_data['total_amount']:
-                        tier_discount = expected_total_without_discount - order_data['total_amount']
+                    # Be conservative - only if there's a clear discount pattern
+                    if subtotal_plus_delivery > order_data['total_amount'] and (subtotal_plus_delivery - order_data['total_amount']) <= (total_items_value * 0.2):  # Max 20% discount
+                        tier_discount = subtotal_plus_delivery - order_data['total_amount']
                         order_data['tier_discount'] = tier_discount
                         order_data['discount_amount'] = tier_discount
                         logger.info(f"💰 Calculated tier discount: ₦{tier_discount:,.2f} for {customer_tier} customer")
                     else:
-                        # Recalculate delivery fee as difference
-                        calculated_delivery = order_data['total_amount'] - total_items_value
-                        if calculated_delivery >= 0:
-                            order_data['delivery_fee'] = calculated_delivery
+                        # No clear discount pattern, assume no discount
+                        order_data['tier_discount'] = 0
+                        order_data['discount_amount'] = 0
 
             # Ensure we have at least one item for display
             if not order_data['items']:

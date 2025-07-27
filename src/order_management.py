@@ -335,6 +335,13 @@ class OrderManagementSystem:
             tier_discount_rate = self._get_tier_discount_rate(customer['account_tier'])
             tier_discount = subtotal * Decimal(str(tier_discount_rate))
 
+            # 📊 ENHANCED LOGGING FOR TIER DISCOUNT CALCULATION
+            logger.info(f"💰 TIER DISCOUNT CALCULATION:")
+            logger.info(f"   👤 Customer Tier: {customer['account_tier']}")
+            logger.info(f"   📊 Subtotal: ₦{subtotal:,.2f}")
+            logger.info(f"   🎯 Discount Rate: {tier_discount_rate*100:.1f}%")
+            logger.info(f"   💸 Discount Amount: ₦{tier_discount:,.2f}")
+
             # Calculate tax (VAT - 7.5% in Nigeria, but often included in product price)
             # For simplicity, we'll assume tax is included in product prices
             tax_amount = Decimal('0.00')
@@ -634,74 +641,86 @@ class OrderManagementSystem:
                             order_data['state'], None, subtotal  # No weight needed!
                         )
 
-                        # Calculate tier discount
-                        tier_discount_rate = self._get_tier_discount_rate(order_data['account_tier'])
-                        tier_discount = subtotal * tier_discount_rate
+            # Calculate tier discount
+            tier_discount_rate = self._get_tier_discount_rate(order_data['account_tier'])
+            tier_discount = subtotal * tier_discount_rate
 
-                        # Apply free delivery for Gold and Platinum tiers
-                        original_delivery_fee = delivery_fee
-                        tier_delivery_benefit = False
-                        if order_data['account_tier'] in ['Gold', 'Platinum']:
-                            delivery_fee = 0
-                            tier_delivery_benefit = True
+            # 📊 ENHANCED LOGGING FOR ORDER PRICING BREAKDOWN
+            logger.info(f"🧮 ORDER {order_id} DETAILED PRICING BREAKDOWN:")
+            logger.info(f"   👤 Customer Tier: {order_data['account_tier']}")
+            logger.info(f"   📦 Products Subtotal: ₦{subtotal:,.2f}")
+            logger.info(f"   🎯 Tier Discount Rate: {tier_discount_rate*100:.1f}%")
+            logger.info(f"   💸 Tier Discount Amount: ₦{tier_discount:,.2f}")
+            logger.info(f"   🚚 Original Delivery Fee: ₦{original_delivery_fee:,.2f}")
 
-                        # ✅ CALCULATE CORRECT TOTAL
-                        calculated_total = subtotal - tier_discount + delivery_fee
+            # Apply free delivery for Gold and Platinum tiers
+            original_delivery_fee = delivery_fee
+            tier_delivery_benefit = False
+            if order_data['account_tier'] in ['Gold', 'Platinum']:
+                delivery_fee = 0
+                tier_delivery_benefit = True
+                logger.info(f"   🎁 FREE DELIVERY applied for {order_data['account_tier']} tier")
 
-                        # Get stored total amount for comparison
-                        stored_total = float(order_data['total_amount'])
+            # ✅ CALCULATE CORRECT TOTAL
+            calculated_total = subtotal - tier_discount + delivery_fee
 
-                        # 🎯 ALWAYS USE CALCULATED TOTAL (CORRECT CALCULATION)
-                        # Override stored total with correct calculation
-                        correct_total = calculated_total
+            logger.info(f"   🚚 Final Delivery Fee: ₦{delivery_fee:,.2f}")
+            logger.info(f"   💰 CALCULATED TOTAL: ₦{calculated_total:,.2f}")
 
-                        # Identify any discrepancy for logging
-                        discrepancy = stored_total - calculated_total
-                        if abs(discrepancy) > 0.01:  # More than 1 kobo difference
-                            logger.warning(f"⚠️ Order {order_id} calculation discrepancy: Stored=₦{stored_total:,.2f}, Calculated=₦{calculated_total:,.2f}, Difference=₦{discrepancy:,.2f}")
+            # Get stored total amount for comparison
+            stored_total = float(order_data['total_amount'])
 
-                        # Add detailed pricing breakdown to order data with ALL components
-                        order_data['pricing_breakdown'] = {
-                            'subtotal': subtotal,
-                            'delivery_fee': delivery_fee,
-                            'original_delivery_fee': original_delivery_fee,
-                            'tier_delivery_benefit': tier_delivery_benefit,
-                            'account_tier': order_data['account_tier'],
-                            'tier_discount': tier_discount,
-                            'tier_discount_rate': tier_discount_rate * 100,  # Convert to percentage
-                            'calculated_total': correct_total,  # Use calculated total
-                            'stored_total': stored_total,  # Keep for reference
-                            'discrepancy': discrepancy,
-                            'delivery_zone': delivery_zone,
-                            'delivery_days': delivery_days,
-                            'shows_complete_breakdown': True  # Flag that this is a complete breakdown
-                        }
+            # 🎯 ALWAYS USE CALCULATED TOTAL (CORRECT CALCULATION)
+            # Override stored total with correct calculation
+            correct_total = calculated_total
 
-                        # ✅ UPDATE ORDER DATA WITH CORRECT TOTAL
-                        order_data['total_amount'] = correct_total
+            # Identify any discrepancy for logging
+            discrepancy = stored_total - calculated_total
+            if abs(discrepancy) > 0.01:  # More than 1 kobo difference
+                logger.warning(f"⚠️ Order {order_id} calculation discrepancy: Stored=₦{stored_total:,.2f}, Calculated=₦{calculated_total:,.2f}, Difference=₦{discrepancy:,.2f}")
 
-                        logger.info(f"🧮 Order {order_id} pricing breakdown: Subtotal=₦{subtotal:,.2f}, Delivery=₦{delivery_fee:,.2f}, Discount=₦{tier_discount:,.2f}, Calculated Total=₦{correct_total:,.2f}")
+            # Add detailed pricing breakdown to order data with ALL components
+            order_data['pricing_breakdown'] = {
+                'subtotal': subtotal,
+                'delivery_fee': delivery_fee,
+                'original_delivery_fee': original_delivery_fee,
+                'tier_delivery_benefit': tier_delivery_benefit,
+                'account_tier': order_data['account_tier'],
+                'tier_discount': tier_discount,
+                'tier_discount_rate': tier_discount_rate * 100,  # Convert to percentage
+                'calculated_total': correct_total,  # Use calculated total
+                'stored_total': stored_total,  # Keep for reference
+                'discrepancy': discrepancy,
+                'delivery_zone': delivery_zone,
+                'delivery_days': delivery_days,
+                'shows_complete_breakdown': True  # Flag that this is a complete breakdown
+            }
 
-                    # Ensure proper field formatting
-                    if order_data.get('order_date'):
-                        if isinstance(order_data['order_date'], str):
-                            order_data['order_date'] = order_data['order_date']
-                        else:
-                            order_data['order_date'] = order_data['order_date'].isoformat() if order_data['order_date'] else None
+            # ✅ UPDATE ORDER DATA WITH CORRECT TOTAL
+            order_data['total_amount'] = correct_total
 
-                    # Ensure status is properly set
-                    if not order_data.get('status'):
-                        order_data['status'] = 'Pending'
+            logger.info(f"🧮 Order {order_id} pricing breakdown: Subtotal=₦{subtotal:,.2f}, Delivery=₦{delivery_fee:,.2f}, Discount=₦{tier_discount:,.2f}, Calculated Total=₦{correct_total:,.2f}")
 
-                    # Cache the result
-                    if self.redis_client:
-                        self.redis_client.setex(f"order:{order_id}", 300, json.dumps(order_data, default=str))
+            # Ensure proper field formatting
+            if order_data.get('order_date'):
+                if isinstance(order_data['order_date'], str):
+                    order_data['order_date'] = order_data['order_date']
+                else:
+                    order_data['order_date'] = order_data['order_date'].isoformat() if order_data['order_date'] else None
 
-                    return {
-                        "success": True,
-                        "order": order_data,
-                        "source": "database"
-                    }
+            # Ensure status is properly set
+            if not order_data.get('status'):
+                order_data['status'] = 'Pending'
+
+            # Cache the result
+            if self.redis_client:
+                self.redis_client.setex(f"order:{order_id}", 300, json.dumps(order_data, default=str))
+
+            return {
+                "success": True,
+                "order": order_data,
+                "source": "database"
+            }
 
         except Exception as e:
             logger.error(f"❌ Error getting order status: {e}")
@@ -902,11 +921,13 @@ class OrderManagementSystem:
         """Get discount rate based on account tier"""
         tier_discounts = {
             "Bronze": 0.0,    # No discount
-            "Silver": 0.02,   # 2% discount
-            "Gold": 0.05,     # 5% discount
-            "Platinum": 0.10  # 10% discount
+            "Silver": 0.05,   # 5% discount
+            "Gold": 0.10,     # 10% discount - FIXED FROM 5%
+            "Platinum": 0.15  # 15% discount - FIXED FROM 10%
         }
-        return tier_discounts.get(account_tier, 0.0)
+        discount_rate = tier_discounts.get(account_tier, 0.0)
+        logger.info(f"💰 Tier discount for {account_tier}: {discount_rate*100:.0f}%")
+        return discount_rate
 
     def _update_customer_tier(self, cursor, customer_id: int, order_amount: float):
         """Update customer tier based on total spending with enhanced logic"""
@@ -957,10 +978,10 @@ class OrderManagementSystem:
 
             # Enhanced tier progression logic with order count requirements
             tier_criteria = {
-                'Platinum': {'spending': 2000000, 'orders': 20},
-                'Gold': {'spending': 500000, 'orders': 10},
-                'Silver': {'spending': 100000, 'orders': 3},
-                'Bronze': {'spending': 0, 'orders': 0}
+                'Platinum': {'spending': 2000000, 'orders': 20},  # ₦2M+, 20+ orders
+                'Gold': {'spending': 500000, 'orders': 10},       # ₦500K+, 10+ orders
+                'Silver': {'spending': 100000, 'orders': 3},      # ₦100K+, 3+ orders
+                'Bronze': {'spending': 0, 'orders': 0}            # Default tier
             }
 
             # Determine new tier based on spending and order count
@@ -969,6 +990,12 @@ class OrderManagementSystem:
                 if total_spent >= criteria['spending'] and order_count >= criteria['orders']:
                     new_tier = tier
                     break
+
+            logger.info(f"🎯 TIER EVALUATION for customer {customer_id}:")
+            logger.info(f"   💰 Total Spent: ₦{total_spent:,.2f}")
+            logger.info(f"   📦 Order Count: {order_count}")
+            logger.info(f"   🏆 Current Tier: {current_tier}")
+            logger.info(f"   🎖️ Calculated Tier: {new_tier}")
 
             # Update tier if changed
             if new_tier != current_tier:
