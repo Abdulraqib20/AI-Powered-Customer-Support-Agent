@@ -363,13 +363,14 @@ class OrderAIAssistant:
 
         # 4. MEDIUM PRIORITY: Add to cart (explicit purchase intent only)
         cart_patterns = [
-            (r'add\s+(.+?)\s+to\s+(my|the)?\s*cart', 'add_to_cart'),  # "add X to cart"
-            (r'put\s+(.+?)\s+in\s+(my|the)?\s*cart', 'add_to_cart'),  # "put X in cart"
-            (r'i\s*want\s*to\s*buy\s+(.+)', 'add_to_cart'),  # "I want to buy X"
-            (r'buy\s+(.+?)\s*(now|please)', 'add_to_cart'),  # "buy X now/please"
-            (r'add\s+(.+?)\s+to\s*my\s*order', 'add_to_cart'),  # "add X to my order"
-            (r'order\s+(.+)', 'add_to_cart'),  # "order X"
-            (r'purchase\s+(.+)', 'add_to_cart')  # "purchase X"
+            (r'add\s+(.+?)\s+to\s+(my|the)?\s*cart', 'add_to_cart'),
+            (r'put\s+(.+?)\s+in\s+(my|the)?\s*cart', 'add_to_cart'),
+            (r'i\s*want\s*to\s*buy\s+(.+)', 'add_to_cart'),
+            (r'buy\s+(.+?)\s*(now|please)', 'add_to_cart'),
+            (r'add\s+(.+?)\s+to\s*my\s*order', 'add_to_cart'),
+            (r'purchase\s+(.+)', 'add_to_cart'),
+            # More specific order pattern to avoid false positives
+            (r'^(order|i want to order)\s+(?:\d+\s+)?(.+)', 'add_to_cart')
         ]
         for pattern, intent in cart_patterns:
             match = re.search(pattern, message_lower)

@@ -927,7 +927,7 @@ class OrderManagementSystem:
                 logger.warning(f"⚠️ No customer data found for customer_id {customer_id}")
                 return
 
-            current_tier, total_spent_raw, order_count = result
+            current_tier, total_spent_raw, order_count = result['account_tier'], result['total_spent'], result['order_count']
 
             # 🔧 ROBUST TYPE CONVERSION: Handle PostgreSQL Decimal/numeric types
             try:

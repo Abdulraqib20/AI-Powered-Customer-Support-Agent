@@ -70,6 +70,7 @@ EOL
 *.log
 config/logs/config.log.1
 .cursor/
+.github/
 
 # deploys
 # deploy.ps1
