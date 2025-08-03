@@ -13,21 +13,43 @@ from typing import Dict, List, Optional, Any
 import json
 from datetime import datetime, date
 
-# Database configuration
+def safe_int_env(key: str, default: int) -> int:
+    """Safely parse integer environment variable with robust error handling"""
+    try:
+        value = os.getenv(key, str(default))
+        # Remove all quotes, whitespace, and newlines
+        cleaned_value = value.strip().strip('"').strip("'").strip('\r').strip('\n')
+        return int(cleaned_value)
+    except (ValueError, TypeError):
+        logging.warning(f"Invalid value for {key}: '{value}', using default: {default}")
+        return default
+
+def safe_str_env(key: str, default: str) -> str:
+    """Safely parse string environment variable with robust error handling"""
+    try:
+        value = os.getenv(key, default)
+        # Remove quotes and extra whitespace
+        cleaned_value = value.strip().strip('"').strip("'").strip('\r').strip('\n')
+        return cleaned_value
+    except (ValueError, TypeError):
+        logging.warning(f"Invalid value for {key}: '{value}', using default: {default}")
+        return default
+
+# Database configuration with robust parsing
 DATABASE_CONFIG = {
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'port': os.getenv('DB_PORT', '5432'),
-    'database': os.getenv('DB_NAME', 'nigerian_ecommerce'),
-    'user': os.getenv('DB_USER', 'postgres'),
-    'password': os.getenv('DB_PASSWORD', 'oracle'),
-    'sslmode': os.getenv('DB_SSLMODE', 'prefer'),
-    'connect_timeout': int(os.getenv('DB_CONNECT_TIMEOUT', '10')),
+    'host': safe_str_env('DB_HOST', 'localhost'),
+    'port': safe_str_env('DB_PORT', '5432'),
+    'database': safe_str_env('DB_NAME', 'nigerian_ecommerce'),
+    'user': safe_str_env('DB_USER', 'postgres'),
+    'password': safe_str_env('DB_PASSWORD', 'oracle'),
+    'sslmode': safe_str_env('DB_SSLMODE', 'prefer'),
+    'connect_timeout': safe_int_env('DB_CONNECT_TIMEOUT', 10),
 }
 
-# Connection pool settings
+# Connection pool settings with robust parsing
 POOL_CONFIG = {
-    'minconn': int(os.getenv('DB_POOL_MIN', '2')),
-    'maxconn': int(os.getenv('DB_POOL_MAX', '20')),
+    'minconn': safe_int_env('DB_POOL_MIN', 2),
+    'maxconn': safe_int_env('DB_POOL_MAX', 20),
 }
 
 # Initialize logger

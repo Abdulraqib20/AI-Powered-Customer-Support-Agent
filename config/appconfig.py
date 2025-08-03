@@ -9,7 +9,6 @@ project_root = Path(__file__).resolve().parent.parent
 
 from qdrant_client import QdrantClient
 
-
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -20,17 +19,30 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def safe_env_var(key: str, default: str = None) -> str:
+    """Safely get environment variable with robust error handling"""
+    try:
+        value = os.getenv(key, default)
+        if value is None:
+            logger.warning(f"Environment variable {key} not found, using default: {default}")
+            return default
+        # Remove quotes and extra whitespace
+        cleaned_value = value.strip().strip('"').strip("'").strip('\r').strip('\n')
+        return cleaned_value
+    except Exception as e:
+        logger.warning(f"Error reading environment variable {key}: {e}, using default: {default}")
+        return default
+
 try:
-    # Path configuration for .env located at the project root
+    # Try to load .env file if it exists (for local development)
     env_path = project_root / '.env'
-    
-    if not env_path.exists():
-        logger.critical(f"Missing .env file at {env_path}")
-        sys.exit(1)
+    if env_path.exists():
+        logger.info(f"Loading .env file from {env_path}")
+        load_dotenv(env_path)
+    else:
+        logger.info("No .env file found, using environment variables directly")
 
-    load_dotenv(env_path)
-
-    # Required environment variables
+    # Required environment variables with defaults for production
     REQUIRED_VARS = [
         'QDRANT_URL_CLOUD',
         'QDRANT_URL_LOCAL',
@@ -39,23 +51,31 @@ try:
         'GOOGLE_API_KEY',
     ]
 
-    # Load environment variables
-    config = {var: os.getenv(var) for var in REQUIRED_VARS}
+    # Load environment variables with safe parsing
+    config = {var: safe_env_var(var) for var in REQUIRED_VARS}
 
-    missing_vars = [var for var in REQUIRED_VARS if config[var] is None]
-    if missing_vars:
-        logger.critical(f"Missing required environment variables: {', '.join(missing_vars)}")
-        sys.exit(1)
+    # Check for missing critical variables
+    critical_vars = ['QDRANT_URL_CLOUD', 'QDRANT_API_KEY', 'GROQ_API_KEY']
+    missing_critical = [var for var in critical_vars if not config[var]]
 
-    # Export variables
-    QDRANT_URL_CLOUD = config['QDRANT_URL_CLOUD']
-    QDRANT_URL_LOCAL = config['QDRANT_URL_LOCAL']
-    QDRANT_API_KEY = config['QDRANT_API_KEY']
-    GROQ_API_KEY = config['GROQ_API_KEY']
-    GOOGLE_API_KEY = config['GOOGLE_API_KEY']
+    if missing_critical:
+        logger.error(f"Missing critical environment variables: {', '.join(missing_critical)}")
+        # Don't exit in production, just log the error
+        if os.getenv('FLASK_ENV') == 'production':
+            logger.warning("Running in production mode with missing variables - some features may not work")
+        else:
+            logger.critical("Missing required environment variables")
+            sys.exit(1)
+
+    # Export variables with safe defaults
+    QDRANT_URL_CLOUD = config['QDRANT_URL_CLOUD'] or 'https://your-qdrant-url.cloud'
+    QDRANT_URL_LOCAL = config['QDRANT_URL_LOCAL'] or 'http://localhost:6333'
+    QDRANT_API_KEY = config['QDRANT_API_KEY'] or 'your-qdrant-api-key'
+    GROQ_API_KEY = config['GROQ_API_KEY'] or 'your-groq-api-key'
+    GOOGLE_API_KEY = config['GOOGLE_API_KEY'] or 'your-google-api-key'
 
     # Secure logging for sensitive variables
-    sensitive_vars = ['QDRANT_URL_CLOUD', 'QDRANT_URL_LOCAL', 'QDRANT_API_KEY', 
+    sensitive_vars = ['QDRANT_URL_CLOUD', 'QDRANT_URL_LOCAL', 'QDRANT_API_KEY',
                       'GROQ_API_KEY', 'GOOGLE_API_KEY']
     for var in REQUIRED_VARS:
         value = locals().get(var, '')
@@ -66,6 +86,8 @@ try:
 
 except Exception as e:
     logger.critical(f"Configuration initialization failed: {str(e)}")
-    sys.exit(1)
+    # Don't exit in production, just log the error
+    if os.getenv('FLASK_ENV') != 'production':
+        sys.exit(1)
 
 __all__ = REQUIRED_VARS

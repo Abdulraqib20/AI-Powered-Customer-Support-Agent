@@ -446,3 +446,8 @@ sentence-transformers==3.0.1
 ulid-py==1.1.0
 
 # Web framework and server
+Flask==3.0.2
+Flask-SQLAlchemy==3.1.1
+Flask-Session==0.7.0
+Flask-CORS==4.0.0
+gunicorn==21.2.0

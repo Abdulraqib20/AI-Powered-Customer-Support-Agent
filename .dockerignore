@@ -1,0 +1,99 @@
+# Git
+.git
+.gitignore
+README.md
+README copy.md
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+.env/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-*
+
+# Logs and databases
+*.log
+*.sqlite
+*.db
+config/logs/
+
+# Local development
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Streamlit
+.streamlit/
+.streamlit/secrets.toml
+.toml
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# OS generated
+.DS_Store
+Thumbs.db
+
+# Project-specific
+*.pdf
+EOL
+.cursor/
+.github/
+
+# Session data (will be handled by Cloud SQL)
+session_data/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Documentation
+docs/
+*.md
+
+# Scripts (not needed in production)
+scripts/
+
+# Utils (not needed in production)
+utils/
+
+# WhatsApp webhook server (separate deployment)
+whatsapp_webhook_server.py
+
+# PowerShell scripts
+*.ps1
