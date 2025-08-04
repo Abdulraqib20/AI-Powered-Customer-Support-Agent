@@ -38,7 +38,7 @@ def safe_str_env(key: str, default: str) -> str:
 # Database configuration with robust parsing
 DATABASE_CONFIG = {
     'host': safe_str_env('DB_HOST', 'localhost'),
-    'port': safe_str_env('DB_PORT', '5432'),
+    'port': safe_int_env('DB_PORT', 5432),
     'database': safe_str_env('DB_NAME', 'nigerian_ecommerce'),
     'user': safe_str_env('DB_USER', 'postgres'),
     'password': safe_str_env('DB_PASSWORD', 'oracle'),

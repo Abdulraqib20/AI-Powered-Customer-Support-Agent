@@ -22,6 +22,7 @@ from psycopg2.extras import RealDictCursor
 import logging
 from decimal import Decimal
 from typing import Dict, List, Tuple
+from config.database_config import safe_int_env, safe_str_env
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -29,11 +30,11 @@ logger = logging.getLogger(__name__)
 
 # Database configuration
 DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'port': os.getenv('DB_PORT', '5432'),
-    'database': os.getenv('DB_NAME', 'nigerian_ecommerce'),
-    'user': os.getenv('DB_USER', 'postgres'),
-    'password': os.getenv('DB_PASSWORD', 'oracle'),
+    'host': safe_str_env('DB_HOST', 'localhost'),
+    'port': safe_int_env('DB_PORT', 5432),
+    'database': safe_str_env('DB_NAME', 'nigerian_ecommerce'),
+    'user': safe_str_env('DB_USER', 'postgres'),
+    'password': safe_str_env('DB_PASSWORD', 'oracle'),
 }
 
 # Tier criteria - matches the system criteria exactly

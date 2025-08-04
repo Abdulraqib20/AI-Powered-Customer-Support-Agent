@@ -19,7 +19,13 @@ from dotenv import load_dotenv
 from src.order_image_generator import generate_order_image, cleanup_order_image
 import redis
 import time
+import sys
+from pathlib import Path
 from dataclasses import dataclass
+
+# Add parent directory to path for imports
+sys.path.append(str(Path(__file__).parent.parent))
+from config.database_config import safe_int_env, safe_str_env
 
 load_dotenv(override=True)
 
@@ -103,11 +109,11 @@ class WhatsAppConfig:
         self.phone_number_id = os.getenv('WHATSAPP_PHONE_NUMBER_ID', '')
         # Database configuration
         self.db_config = {
-            'host': os.getenv('DB_HOST', 'localhost'),
-            'port': os.getenv('DB_PORT', '5432'),
-            'database': os.getenv('DB_NAME', 'nigerian_ecommerce'),
-            'user': os.getenv('DB_USER', 'postgres'),
-            'password': os.getenv('DB_PASSWORD', 'oracle'),
+            'host': safe_str_env('DB_HOST', 'localhost'),
+            'port': safe_int_env('DB_PORT', 5432),
+            'database': safe_str_env('DB_NAME', 'nigerian_ecommerce'),
+            'user': safe_str_env('DB_USER', 'postgres'),
+            'password': safe_str_env('DB_PASSWORD', 'oracle'),
         }
 
     def is_configured(self) -> bool:

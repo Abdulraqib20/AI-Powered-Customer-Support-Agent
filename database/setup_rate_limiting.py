@@ -13,6 +13,7 @@ import logging
 
 # Add parent directory to path to import from src
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config.database_config import safe_int_env, safe_str_env
 
 load_dotenv()
 
@@ -22,11 +23,11 @@ logger = logging.getLogger(__name__)
 def get_database_connection():
     """Get database connection"""
     db_config = {
-        'host': os.getenv('DB_HOST', 'localhost'),
-        'port': os.getenv('DB_PORT', '5432'),
-        'database': os.getenv('DB_NAME', 'nigerian_ecommerce'),
-        'user': os.getenv('DB_USER', 'postgres'),
-        'password': os.getenv('DB_PASSWORD', 'oracle')
+        'host': safe_str_env('DB_HOST', 'localhost'),
+        'port': safe_int_env('DB_PORT', 5432),
+        'database': safe_str_env('DB_NAME', 'nigerian_ecommerce'),
+        'user': safe_str_env('DB_USER', 'postgres'),
+        'password': safe_str_env('DB_PASSWORD', 'oracle')
     }
     return psycopg2.connect(**db_config)
 

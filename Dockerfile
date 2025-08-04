@@ -1,5 +1,5 @@
 # Use Python 3.11 slim image for smaller size
-# Build timestamp: 2025-08-03 14:50:00 UTC - Force rebuild for environment variable fixes
+# Build timestamp: 2025-08-03 19:15:00 UTC - Critical fix for DB_PORT environment variable parsing
 FROM python:3.11-slim
 
 # Set working directory
@@ -14,10 +14,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Install system dependencies
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        gcc \
-        g++ \
-        libpq-dev \
-        curl \
+    gcc \
+    g++ \
+    libpq-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -45,5 +45,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
-# Run the application
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "120", "flask_app.app:app"]
+# Run the application with memory-optimized settings
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--worker-class", "sync", "--timeout", "300", "--max-requests", "1000", "--max-requests-jitter", "100", "--preload", "flask_app.app:app"]

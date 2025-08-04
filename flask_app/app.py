@@ -24,6 +24,10 @@ from typing import Dict, List, Optional, Any
 import uuid
 import psycopg2
 from psycopg2.extras import RealDictCursor
+import gc
+import psutil
+import threading
+from contextlib import contextmanager
 
 # Flask imports
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
@@ -91,6 +95,29 @@ try:
 except ImportError as e:
     app_logger.warning(f"⚠️ Enhanced customer support recommendations not available: {e}")
     ENHANCED_SUPPORT_AVAILABLE = False
+
+# Safe environment variable parsing functions
+def safe_int_env(key: str, default: int) -> int:
+    """Safely parse integer environment variable with robust error handling"""
+    try:
+        value = os.getenv(key, str(default))
+        # Remove all quotes, whitespace, and newlines
+        cleaned_value = value.strip().strip('"').strip("'").strip('\r').strip('\n')
+        return int(cleaned_value)
+    except (ValueError, TypeError):
+        logging.warning(f"Invalid value for {key}: '{value}', using default: {default}")
+        return default
+
+def safe_str_env(key: str, default: str) -> str:
+    """Safely parse string environment variable with robust error handling"""
+    try:
+        value = os.getenv(key, default)
+        # Remove quotes and extra whitespace
+        cleaned_value = value.strip().strip('"').strip("'").strip('\r').strip('\n')
+        return cleaned_value
+    except (ValueError, TypeError):
+        logging.warning(f"Invalid value for {key}: '{value}', using default: {default}")
+        return default
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -435,7 +462,11 @@ def get_ai_response(query: str, context: str = "", user_id: str = "anonymous") -
     Generate AI response using Llama models via Groq API with Nigerian e-commerce context
     """
     try:
+        # Log memory usage before AI processing
+        log_memory_usage()
+
         if groq_client is None:
+            cleanup_memory()
             return "I'm currently operating in limited mode. AI chat functionality requires API configuration. However, I can still help you with basic customer support tasks and database queries."
 
         # raqibtech.com customer support context
@@ -501,10 +532,15 @@ def get_ai_response(query: str, context: str = "", user_id: str = "anonymous") -
             except Exception as mem_error:
                 app_logger.warning(f"Memory storage failed: {mem_error}")
 
+        # Cleanup memory after successful AI processing
+        cleanup_memory()
+        log_memory_usage()
+
         return response
 
     except Exception as e:
         error_logger.error(f"❌ AI response generation failed: {e}")
+        cleanup_memory()
         return "I apologize, but I'm experiencing technical difficulties. Please try again or contact support for assistance."
 
 
@@ -1564,11 +1600,11 @@ def login_api():
 
         # Database connection for authentication
         db_config = {
-            'host': os.getenv('DB_HOST', 'localhost'),
-            'port': os.getenv('DB_PORT', '5432'),
-            'database': os.getenv('DB_NAME', 'nigerian_ecommerce'),
-            'user': os.getenv('DB_USER', 'postgres'),
-            'password': os.getenv('DB_PASSWORD', 'oracle'),
+            'host': safe_str_env('DB_HOST', 'localhost'),
+            'port': safe_int_env('DB_PORT', 5432),
+            'database': safe_str_env('DB_NAME', 'nigerian_ecommerce'),
+            'user': safe_str_env('DB_USER', 'postgres'),
+            'password': safe_str_env('DB_PASSWORD', 'oracle'),
         }
 
         conn = psycopg2.connect(**db_config)
@@ -1790,11 +1826,11 @@ def logout():
         try:
             # Clear conversation context from database to prevent leakage
             db_config = {
-                'host': os.getenv('DB_HOST', 'localhost'),
-                'port': os.getenv('DB_PORT', '5432'),
-                'database': os.getenv('DB_NAME', 'nigerian_ecommerce'),
-                'user': os.getenv('DB_USER', 'postgres'),
-                'password': os.getenv('DB_PASSWORD', 'oracle'),
+                'host': safe_str_env('DB_HOST', 'localhost'),
+                'port': safe_int_env('DB_PORT', 5432),
+                'database': safe_str_env('DB_NAME', 'nigerian_ecommerce'),
+                'user': safe_str_env('DB_USER', 'postgres'),
+                'password': safe_str_env('DB_PASSWORD', 'oracle'),
             }
 
             import psycopg2
@@ -1894,11 +1930,11 @@ def delete_conversation(conversation_id):
             }), 403
 
         db_config = {
-            'host': os.getenv('DB_HOST', 'localhost'),
-            'port': os.getenv('DB_PORT', '5432'),
-            'database': os.getenv('DB_NAME', 'nigerian_ecommerce'),
-            'user': os.getenv('DB_USER', 'postgres'),
-            'password': os.getenv('DB_PASSWORD', 'oracle'),
+            'host': safe_str_env('DB_HOST', 'localhost'),
+            'port': safe_int_env('DB_PORT', 5432),
+            'database': safe_str_env('DB_NAME', 'nigerian_ecommerce'),
+            'user': safe_str_env('DB_USER', 'postgres'),
+            'password': safe_str_env('DB_PASSWORD', 'oracle'),
         }
 
         conn = psycopg2.connect(**db_config)
@@ -1988,11 +2024,11 @@ def signup_api():
 
         # Database connection for registration
         db_config = {
-            'host': os.getenv('DB_HOST', 'localhost'),
-            'port': os.getenv('DB_PORT', '5432'),
-            'database': os.getenv('DB_NAME', 'nigerian_ecommerce'),
-            'user': os.getenv('DB_USER', 'postgres'),
-            'password': os.getenv('DB_PASSWORD', 'oracle'),
+            'host': safe_str_env('DB_HOST', 'localhost'),
+            'port': safe_int_env('DB_PORT', 5432),
+            'database': safe_str_env('DB_NAME', 'nigerian_ecommerce'),
+            'user': safe_str_env('DB_USER', 'postgres'),
+            'password': safe_str_env('DB_PASSWORD', 'oracle'),
         }
 
         conn = psycopg2.connect(**db_config)
@@ -3325,11 +3361,11 @@ def customer_profile_api():
 
         # Database connection
         db_config = {
-            'host': os.getenv('DB_HOST', 'localhost'),
-            'port': os.getenv('DB_PORT', '5432'),
-            'database': os.getenv('DB_NAME', 'nigerian_ecommerce'),
-            'user': os.getenv('DB_USER', 'postgres'),
-            'password': os.getenv('DB_PASSWORD', 'oracle'),
+            'host': safe_str_env('DB_HOST', 'localhost'),
+            'port': safe_int_env('DB_PORT', 5432),
+            'database': safe_str_env('DB_NAME', 'nigerian_ecommerce'),
+            'user': safe_str_env('DB_USER', 'postgres'),
+            'password': safe_str_env('DB_PASSWORD', 'oracle'),
         }
 
         conn = psycopg2.connect(**db_config)
@@ -3652,7 +3688,7 @@ def get_whatsapp_conversations():
         # Get WhatsApp conversations from database
         db_config = {
             'host': os.getenv('DB_HOST', 'localhost'),
-            'port': os.getenv('DB_PORT', '5432'),
+            'port': safe_int_env('DB_PORT', 5432),
             'database': os.getenv('DB_NAME', 'nigerian_ecommerce'),
             'user': os.getenv('DB_USER', 'postgres'),
             'password': os.getenv('DB_PASSWORD', 'oracle'),
@@ -3811,7 +3847,7 @@ def manage_rate_limit_config():
             # Get current rate limit configuration
             db_config = {
                 'host': os.getenv('DB_HOST', 'localhost'),
-                'port': os.getenv('DB_PORT', '5432'),
+                'port': safe_int_env('DB_PORT', 5432),
                 'database': os.getenv('DB_NAME', 'nigerian_ecommerce'),
                 'user': os.getenv('DB_USER', 'postgres'),
                 'password': os.getenv('DB_PASSWORD', 'oracle'),
@@ -3875,7 +3911,7 @@ def get_rate_limit_summary():
 
         db_config = {
             'host': os.getenv('DB_HOST', 'localhost'),
-            'port': os.getenv('DB_PORT', '5432'),
+            'port': safe_int_env('DB_PORT', 5432),
             'database': os.getenv('DB_NAME', 'nigerian_ecommerce'),
             'user': os.getenv('DB_USER', 'postgres'),
             'password': os.getenv('DB_PASSWORD', 'oracle'),
@@ -3932,6 +3968,51 @@ def whatsapp_integration_status():
             'error': str(e)
         }), 500
 
+
+# Memory management
+def cleanup_memory():
+    """Force garbage collection to free memory"""
+    gc.collect()
+
+def log_memory_usage():
+    """Log current memory usage"""
+    process = psutil.Process()
+    memory_info = process.memory_info()
+    app_logger.info(f"Memory usage: {memory_info.rss / 1024 / 1024:.2f} MB")
+
+# Connection pooling for database
+_db_pool = None
+_pool_lock = threading.Lock()
+
+@contextmanager
+def get_db_connection():
+    """Get database connection with proper cleanup"""
+    global _db_pool
+    conn = None
+    try:
+        if _db_pool is None:
+            with _pool_lock:
+                if _db_pool is None:
+                    # Initialize connection pool
+                    db_config = {
+                        'host': safe_str_env('DB_HOST', 'localhost'),
+                        'port': safe_int_env('DB_PORT', 5432),
+                        'database': safe_str_env('DB_NAME', 'nigerian_ecommerce'),
+                        'user': safe_str_env('DB_USER', 'postgres'),
+                        'password': safe_str_env('DB_PASSWORD', 'oracle'),
+                        'sslmode': safe_str_env('DB_SSLMODE', 'prefer'),
+                        'connect_timeout': safe_int_env('DB_CONNECT_TIMEOUT', 10),
+                    }
+                    conn = psycopg2.connect(**db_config)
+        else:
+            conn = psycopg2.connect(**db_config)
+        yield conn
+    except Exception as e:
+        app_logger.error(f"Database connection error: {e}")
+        raise
+    finally:
+        if conn:
+            conn.close()
 
 if __name__ == '__main__':
     # Configure Flask's built-in logger to show in console

@@ -10,7 +10,13 @@ from typing import Optional, Dict, List, Any
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import os
+import sys
+from pathlib import Path
 from dataclasses import dataclass
+
+# Add parent directory to path for imports
+sys.path.append(str(Path(__file__).parent.parent))
+from config.database_config import safe_int_env, safe_str_env
 
 @dataclass
 class ChatMessage:
@@ -41,11 +47,11 @@ class UserSession:
 class SessionManager:
     def __init__(self):
         self.db_config = {
-            'host': os.getenv('DB_HOST'),
-            'port': os.getenv('DB_PORT'),
-            'database': os.getenv('DB_NAME'),
-            'user': os.getenv('DB_USER'),
-            'password': os.getenv('DB_PASSWORD')
+            'host': safe_str_env('DB_HOST', 'localhost'),
+            'port': safe_int_env('DB_PORT', 5432),
+            'database': safe_str_env('DB_NAME', 'nigerian_ecommerce'),
+            'user': safe_str_env('DB_USER', 'postgres'),
+            'password': safe_str_env('DB_PASSWORD', 'oracle')
         }
 
     def get_connection(self):

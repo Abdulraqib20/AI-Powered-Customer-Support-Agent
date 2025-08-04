@@ -28,6 +28,12 @@ from psycopg2.extras import RealDictCursor
 import redis
 from groq import Groq
 import logging
+import sys
+from pathlib import Path
+
+# Add parent directory to path for imports
+sys.path.append(str(Path(__file__).parent.parent))
+from config.database_config import safe_int_env, safe_str_env
 import decimal
 import time
 
@@ -250,11 +256,11 @@ class EnhancedDatabaseQuerying:
 
     def __init__(self):
         self.db_config = {
-            'host': os.getenv('DB_HOST', 'localhost'),
-            'port': os.getenv('DB_PORT', '5432'),
-            'database': os.getenv('DB_NAME', 'nigerian_ecommerce'),
-            'user': os.getenv('DB_USER', 'postgres'),
-            'password': os.getenv('DB_PASSWORD', 'oracle'),
+            'host': safe_str_env('DB_HOST', 'localhost'),
+            'port': safe_int_env('DB_PORT', 5432),
+            'database': safe_str_env('DB_NAME', 'nigerian_ecommerce'),
+            'user': safe_str_env('DB_USER', 'postgres'),
+            'password': safe_str_env('DB_PASSWORD', 'oracle'),
         }
 
         # Initialize Groq client
@@ -5361,4 +5367,3 @@ Currency format: Nigerian Naira (₦) with proper thousand separators.
         )
 
         return is_whatsapp and is_order_query
-
