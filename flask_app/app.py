@@ -163,8 +163,9 @@ CORS(app)
 
 # Initialize AI services
 try:
-    # Groq client for chat
-    groq_client = Groq(api_key=GROQ_API_KEY)
+    # Groq client for chat - clean the API key
+    groq_api_key = GROQ_API_KEY.strip() if GROQ_API_KEY else None
+    groq_client = Groq(api_key=groq_api_key)
 
     # Google AI for embeddings
     genai.configure(api_key=GOOGLE_API_KEY)
@@ -469,6 +470,15 @@ def get_ai_response(query: str, context: str = "", user_id: str = "anonymous") -
             cleanup_memory()
             return "I'm currently operating in limited mode. AI chat functionality requires API configuration. However, I can still help you with basic customer support tasks and database queries."
 
+        # Log API key status (without exposing the full key)
+        groq_api_key = os.getenv('GROQ_API_KEY', '')
+        if groq_api_key:
+            app_logger.info(f"🔑 Groq API key available: {groq_api_key[:10]}...")
+        else:
+            app_logger.error("❌ GROQ_API_KEY not found in environment variables")
+            cleanup_memory()
+            return "I'm experiencing configuration issues with the AI service. Please contact support for assistance."
+
         # raqibtech.com customer support context
         system_prompt = """You are a caring, empathetic customer support assistant for raqibtech.com, a Nigerian e-commerce platform.
         Your goal is to genuinely help customers feel heard and supported.
@@ -489,48 +499,62 @@ def get_ai_response(query: str, context: str = "", user_id: str = "anonymous") -
         Remember: You're helping a real person with real concerns. Lead with empathy, be brief and helpful.
         """
 
-        # Prepare the conversation
-        messages = [
-            {"role": "system", "content": system_prompt},
-        ]
+        app_logger.info(f"🤖 Generating AI response for user {user_id}")
 
-        # Add context if provided
-        if context:
-            messages.append({
-                "role": "system",
-                "content": f"Relevant data context: {context}"
-            })
+        try:
+            # Prepare the conversation
+            messages = [
+                {"role": "system", "content": system_prompt},
+            ]
 
-        # Add user query
-        messages.append({"role": "user", "content": query})
+            # Add context if provided
+            if context:
+                messages.append({
+                    "role": "system",
+                    "content": f"Relevant data context: {context}"
+                })
 
-        # Generate response using Groq
-        completion = groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",  # Faster model for real-time customer chat
-            messages=messages,
-            temperature=0.3,
-            max_tokens=300,  # Reduced for more concise responses
-            top_p=0.9,
-            stream=False
-        )
+            # Add user query
+            messages.append({"role": "user", "content": query})
 
-        response = completion.choices[0].message.content
-
-        # Track API usage
-        usage_tracker.track_groq_request(completion.usage.total_tokens if completion.usage else 0)
-
-        # Store conversation in memory if available
-        if memory:
+            # Generate response using Groq
             try:
-                memory.add(
-                    messages=[
-                        {"role": "user", "content": query},
-                        {"role": "assistant", "content": response}
-                    ],
-                    user_id=user_id
+                completion = groq_client.chat.completions.create(
+                    model="llama-3.1-8b-instant",  # Faster model for real-time customer chat
+                    messages=messages,
+                    temperature=0.3,
+                    max_tokens=300,  # Reduced for more concise responses
+                    top_p=0.9,
+                    stream=False,
+                    timeout=30
                 )
-            except Exception as mem_error:
-                app_logger.warning(f"Memory storage failed: {mem_error}")
+            except Exception as e:
+                app_logger.error(f"❌ Groq API error in Flask app: {e}")
+                return "I'm experiencing technical difficulties with the AI service. Please try again later or contact support."
+
+            response = completion.choices[0].message.content
+            app_logger.info(f"✅ AI response generated successfully: {len(response)} characters")
+
+            # Track API usage
+            usage_tracker.track_groq_request(completion.usage.total_tokens if completion.usage else 0)
+
+            # Store conversation in memory if available
+            if memory:
+                try:
+                    memory.add(
+                        messages=[
+                            {"role": "user", "content": query},
+                            {"role": "assistant", "content": response}
+                        ],
+                        user_id=user_id
+                    )
+                except Exception as mem_error:
+                    app_logger.warning(f"Memory storage failed: {mem_error}")
+
+        except Exception as api_error:
+            app_logger.error(f"❌ Groq API call failed: {type(api_error).__name__}: {api_error}")
+            cleanup_memory()
+            return f"I apologize, but I'm experiencing technical difficulties with the AI service. Error: {type(api_error).__name__}. Please try again later or contact support for assistance."
 
         # Cleanup memory after successful AI processing
         cleanup_memory()
@@ -1880,6 +1904,103 @@ def health_check():
         'timestamp': datetime.now().isoformat(),
         'session_id': session.get('session_id', 'none')
     })
+
+@app.route('/api/test-groq')
+def test_groq():
+    """Test Groq API connectivity"""
+    try:
+        import requests
+
+        # Get API key from environment and clean it
+        api_key = os.getenv('GROQ_API_KEY')
+        if not api_key:
+            return jsonify({
+                'status': 'error',
+                'message': 'GROQ_API_KEY not found in environment'
+            }), 400
+
+        # Clean the API key (remove whitespace and newlines)
+        api_key = api_key.strip()
+
+        # Test basic connectivity
+        try:
+            response = requests.get('https://api.groq.com', timeout=10)
+            basic_connectivity = response.status_code == 200
+        except Exception as e:
+            basic_connectivity = False
+            basic_error = str(e)
+
+        # Test models endpoint
+        headers = {
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json'
+        }
+
+        try:
+            response = requests.get('https://api.groq.com/openai/v1/models', headers=headers, timeout=10)
+            models_accessible = response.status_code == 200
+            if models_accessible:
+                models = response.json()
+                available_models = [m['id'] for m in models.get('data', [])[:3]]
+            else:
+                available_models = []
+                models_error = response.text
+        except Exception as e:
+            models_accessible = False
+            models_error = str(e)
+            available_models = []
+
+        # Test chat completion
+        try:
+            chat_data = {
+                "model": "llama-3.1-8b-instant",
+                "messages": [
+                    {"role": "user", "content": "Hello"}
+                ],
+                "max_tokens": 10
+            }
+
+            response = requests.post(
+                'https://api.groq.com/openai/v1/chat/completions',
+                headers=headers,
+                json=chat_data,
+                timeout=30
+            )
+
+            chat_working = response.status_code == 200
+            if chat_working:
+                result = response.json()
+                chat_response = result['choices'][0]['message']['content']
+            else:
+                chat_response = None
+                chat_error = response.text
+        except Exception as e:
+            chat_working = False
+            chat_response = None
+            chat_error = str(e)
+
+        return jsonify({
+            'status': 'success',
+            'timestamp': datetime.now().isoformat(),
+            'api_key_found': bool(api_key),
+            'api_key_preview': api_key[:10] + '...' if api_key else None,
+            'basic_connectivity': basic_connectivity,
+            'models_accessible': models_accessible,
+            'available_models': available_models,
+            'chat_working': chat_working,
+            'chat_response': chat_response,
+            'errors': {
+                'basic_connectivity': basic_error if not basic_connectivity else None,
+                'models': models_error if not models_accessible else None,
+                'chat': chat_error if not chat_working else None
+            }
+        })
+
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Test failed: {str(e)}'
+        }), 500
 
 
 @app.errorhandler(404)
@@ -4013,6 +4134,40 @@ def get_db_connection():
     finally:
         if conn:
             conn.close()
+
+@app.route('/debug/env')
+def debug_environment():
+    """Debug endpoint to check environment variables"""
+    try:
+        # Check if we're in production
+        is_production = os.getenv('FLASK_ENV') == 'production' or os.getenv('K_SERVICE') is not None
+
+        # Get environment variables
+        env_vars = {
+            'FLASK_ENV': os.getenv('FLASK_ENV'),
+            'K_SERVICE': os.getenv('K_SERVICE'),
+            'GROQ_API_KEY': os.getenv('GROQ_API_KEY', 'NOT_FOUND')[:10] + '...' if os.getenv('GROQ_API_KEY') else 'NOT_FOUND',
+            'OPENAI_API_KEY': os.getenv('OPENAI_API_KEY', 'NOT_FOUND')[:10] + '...' if os.getenv('OPENAI_API_KEY') else 'NOT_FOUND',
+            'QDRANT_URL_CLOUD': os.getenv('QDRANT_URL_CLOUD', 'NOT_FOUND'),
+            'QDRANT_API_KEY': os.getenv('QDRANT_API_KEY', 'NOT_FOUND')[:10] + '...' if os.getenv('QDRANT_API_KEY') else 'NOT_FOUND',
+        }
+
+        # Test Groq client
+        groq_status = "NOT_INITIALIZED"
+        if groq_client:
+            groq_status = "INITIALIZED"
+
+        return jsonify({
+            'is_production': is_production,
+            'environment_variables': env_vars,
+            'groq_client_status': groq_status,
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
 
 if __name__ == '__main__':
     # Configure Flask's built-in logger to show in console

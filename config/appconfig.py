@@ -34,13 +34,20 @@ def safe_env_var(key: str, default: str = None) -> str:
         return default
 
 try:
-    # Try to load .env file if it exists (for local development)
-    env_path = project_root / '.env'
-    if env_path.exists():
-        logger.info(f"Loading .env file from {env_path}")
-        load_dotenv(env_path)
+    # Check if we're in production (Cloud Run) or development
+    is_production = os.getenv('FLASK_ENV') == 'production' or os.getenv('K_SERVICE') is not None
+
+    if is_production:
+        logger.info("Running in production mode - using environment variables from Cloud Run")
+        # In production, don't load .env file, use environment variables directly
     else:
-        logger.info("No .env file found, using environment variables directly")
+        # Try to load .env file if it exists (for local development)
+        env_path = project_root / '.env'
+        if env_path.exists():
+            logger.info(f"Loading .env file from {env_path}")
+            load_dotenv(env_path, override=True)
+        else:
+            logger.info("No .env file found, using environment variables directly")
 
     # Required environment variables with defaults for production
     REQUIRED_VARS = [
@@ -53,6 +60,20 @@ try:
 
     # Load environment variables with safe parsing
     config = {var: safe_env_var(var) for var in REQUIRED_VARS}
+
+    # Log all environment variables for debugging
+    logger.info("Environment variables loaded:")
+    for var in REQUIRED_VARS:
+        value = config[var]
+        if value:
+            # Mask sensitive values for logging
+            if 'API_KEY' in var or 'SECRET' in var:
+                masked_value = f"{value[:8]}****{value[-8:]}" if len(value) > 16 else "****"
+                logger.info(f"  {var}: {masked_value}")
+            else:
+                logger.info(f"  {var}: {value}")
+        else:
+            logger.warning(f"  {var}: NOT FOUND")
 
     # Check for missing critical variables
     critical_vars = ['QDRANT_URL_CLOUD', 'QDRANT_API_KEY', 'GROQ_API_KEY']

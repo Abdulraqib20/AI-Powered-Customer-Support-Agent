@@ -264,7 +264,9 @@ class EnhancedDatabaseQuerying:
         }
 
         # Initialize Groq client
-        self.groq_client = Groq(api_key=os.getenv('GROQ_API_KEY'))
+        # Clean the API key to remove any whitespace or newlines
+        groq_api_key = os.getenv('GROQ_API_KEY', '').strip()
+        self.groq_client = Groq(api_key=groq_api_key)
 
         # 🧠 Initialize World-Class Memory System
         try:
@@ -1080,15 +1082,20 @@ RESPONSE FORMAT: Return ONLY the SQL query, nothing else."""
                 if context_parts:
                     context_info = f" (Context: {', '.join(context_parts)})"
 
-            response = self.groq_client.chat.completions.create(
-                model="meta-llama/llama-4-scout-17b-16e-instruct",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Generate SQL query for: {user_query}{context_info}"}
-                ],
-                temperature=0.1,
-                max_tokens=512
-            )
+            try:
+                response = self.groq_client.chat.completions.create(
+                    model="meta-llama/llama-4-scout-17b-16e-instruct",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": f"Generate SQL query for: {user_query}{context_info}"}
+                    ],
+                    temperature=0.1,
+                    max_tokens=512
+                )
+            except Exception as e:
+                logger.error(f"❌ Groq API error: {e}")
+                # Fallback to a simple query
+                return self._get_fallback_query(query_type, entities)
 
             sql_query = response.choices[0].message.content.strip()
 
@@ -2724,15 +2731,20 @@ RESPONSE STYLE:
                     """
 
             # Generate AI response
-            response = self.groq_client.chat.completions.create(
-                model="meta-llama/llama-4-scout-17b-16e-instruct",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": response_content}
-                ],
-                temperature=0.7,
-                max_tokens=2000
-            )
+            try:
+                response = self.groq_client.chat.completions.create(
+                    model="meta-llama/llama-4-scout-17b-16e-instruct",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": response_content}
+                    ],
+                    temperature=0.7,
+                    max_tokens=2000
+                )
+            except Exception as e:
+                logger.error(f"❌ Groq API error in response generation: {e}")
+                # Return a fallback response
+                return self._get_fallback_emotional_response(query_context, sentiment_data)
 
             ai_response = response.choices[0].message.content.strip()
 
@@ -3271,9 +3283,7 @@ could you share your order number or email address? I'm excited to help you get 
 This will help me give you instant, accurate information about your raqibtech.com account! 🚀"""
 
             else:
-                response = f"""I found some helpful information! 😊 To make sure I give you the right details for your raqibtech.com account,
-
-could you please share your order number or email address with me? I'm here to help! ✨💙"""
+                response = f"""I found some helpful information! 😊 To make sure I give you the right details for your raqibtech.com account, could you please share your order number or email address with me? I'm here to help! ✨💙"""
 
         else:
             if emotion == 'confused':
