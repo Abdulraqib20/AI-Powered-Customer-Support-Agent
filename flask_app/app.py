@@ -127,13 +127,15 @@ app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'nigerian-ecommerce-sup
 
 # 🔧 CRITICAL FIX: Implement fallback session configuration for when Redis is unavailable
 try:
-    # Test Redis connection first
-    test_redis = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+    # Test Redis connection first using environment variables
+    redis_host = os.getenv('REDIS_HOST', '10.161.142.19')
+    redis_port = int(os.getenv('REDIS_PORT', '6379'))
+    test_redis = redis.Redis(host=redis_host, port=redis_port, db=0, decode_responses=True)
     test_redis.ping()
 
     # Redis is available, use Redis sessions
     app.config['SESSION_TYPE'] = 'redis'
-    app.config['SESSION_REDIS'] = redis.from_url('redis://localhost:6379')
+    app.config['SESSION_REDIS'] = redis.from_url(f'redis://{redis_host}:{redis_port}')
     app.config['SESSION_PERMANENT'] = True
     app.config['SESSION_USE_SIGNER'] = True
     app.config['SESSION_KEY_PREFIX'] = 'support_agent:'
@@ -189,7 +191,7 @@ try:
             "vector_store": {
                 "provider": "qdrant",
                 "config": {
-                    "url": "http://localhost:6333",
+                    "url": "https://0c39c0f4-e3fe-43a1-ae31-99dcf1d9179d.europe-west3-0.gcp.cloud.qdrant.io:6333",
                     "collection_name": "conversation_memory"
                 }
             },
@@ -240,9 +242,12 @@ except Exception as e:
 
 # Initialize Redis for caching
 try:
-    redis_client = redis.Redis(host='localhost', port=6379, db=1, decode_responses=True)
+    redis_host = os.getenv('REDIS_HOST', '10.161.142.19')
+    redis_port = int(os.getenv('REDIS_PORT', '6379'))
+    redis_db = int(os.getenv('REDIS_DB', '1'))
+    redis_client = redis.Redis(host=redis_host, port=redis_port, db=redis_db, decode_responses=True)
     redis_client.ping()
-    app_logger.info("✅ Redis cache initialized successfully")
+    app_logger.info(f"✅ Redis cache initialized successfully - {redis_host}:{redis_port}")
 except Exception as e:
     error_logger.warning(f"⚠️ Redis not available, caching disabled: {e}")
     redis_client = None
@@ -2023,32 +2028,49 @@ def internal_error(error):
 # 🆕 ADD: Delete conversation endpoint with proper authorization
 @app.route('/api/conversations/<conversation_id>', methods=['DELETE'])
 def delete_conversation(conversation_id):
-    """Delete a specific conversation and all its messages - WITH AUTHORIZATION CHECK"""
+    """Delete a specific conversation and all its messages - supports both authenticated and guest users"""
     try:
-        # 🔧 CRITICAL SECURITY FIX: Only authenticated users can delete conversations
-        if not session.get('user_authenticated', False):
-            return jsonify({
-                'success': False,
-                'message': 'Please log in to delete conversations'
-            }), 401
+        # 🔧 CRITICAL FIX: Support both authenticated and guest users
+        if session.get('user_authenticated', False):
+            # Authenticated user - verify by email
+            user_email = session.get('customer_email')
+            if not user_email:
+                return jsonify({
+                    'success': False,
+                    'message': 'User email not found in session'
+                }), 401
 
-        user_email = session.get('customer_email')
-        if not user_email:
-            return jsonify({
-                'success': False,
-                'message': 'User email not found in session'
-            }), 401
+            user_conversations = session_manager.get_user_conversations_by_email(user_email)
+            conversation_belongs_to_user = any(conv.conversation_id == conversation_id for conv in user_conversations)
 
-        # 🔧 CRITICAL SECURITY FIX: Verify the conversation belongs to the current user
-        user_conversations = session_manager.get_user_conversations_by_email(user_email)
-        conversation_belongs_to_user = any(conv.conversation_id == conversation_id for conv in user_conversations)
+            if not conversation_belongs_to_user:
+                app_logger.warning(f"🚨 Unauthorized conversation deletion attempt: User {user_email} tried to delete conversation {conversation_id}")
+                return jsonify({
+                    'success': False,
+                    'message': 'Conversation not found or access denied'
+                }), 403
 
-        if not conversation_belongs_to_user:
-            app_logger.warning(f"🚨 Unauthorized conversation deletion attempt: User {user_email} tried to delete conversation {conversation_id}")
-            return jsonify({
-                'success': False,
-                'message': 'Conversation not found or access denied'
-            }), 403
+            app_logger.info(f"✅ Authenticated user {user_email} deleting conversation {conversation_id}")
+        else:
+            # Guest user - verify by session
+            session_id = session.get('session_id')
+            if not session_id:
+                return jsonify({
+                    'success': False,
+                    'message': 'No session found'
+                }), 401
+
+            user_conversations = session_manager.get_user_conversations(session_id)
+            conversation_belongs_to_user = any(conv.conversation_id == conversation_id for conv in user_conversations)
+
+            if not conversation_belongs_to_user:
+                app_logger.warning(f"🚨 Unauthorized conversation deletion attempt: Guest session {session_id} tried to delete conversation {conversation_id}")
+                return jsonify({
+                    'success': False,
+                    'message': 'Conversation not found or access denied'
+                }), 403
+
+            app_logger.info(f"✅ Guest session {session_id} deleting conversation {conversation_id}")
 
         db_config = {
             'host': safe_str_env('DB_HOST', 'localhost'),
@@ -2077,7 +2099,13 @@ def delete_conversation(conversation_id):
         if session.get('current_conversation_id') == conversation_id:
             session.pop('current_conversation_id', None)
 
-        app_logger.info(f"✅ User {user_email} deleted conversation {conversation_id}: {messages_deleted} messages, {conversation_deleted} conversation")
+        # Log the deletion with appropriate user info
+        if session.get('user_authenticated', False):
+            user_info = session.get('customer_email', 'unknown')
+        else:
+            user_info = f"guest session {session.get('session_id', 'unknown')}"
+
+        app_logger.info(f"✅ {user_info} deleted conversation {conversation_id}: {messages_deleted} messages, {conversation_deleted} conversation")
 
         return jsonify({
             'success': True,
