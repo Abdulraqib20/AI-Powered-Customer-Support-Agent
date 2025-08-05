@@ -98,15 +98,18 @@ class WhatsAppConfig:
     db_config: Dict[str, str]
 
     def __init__(self):
-        self.access_token = os.getenv('WHATSAPP_ACCESS_TOKEN')
-        self.phone_number_id = os.getenv('WHATSAPP_PHONE_NUMBER_ID')
-        self.business_account_id = os.getenv('WHATSAPP_BUSINESS_ACCOUNT_ID')
-        self.webhook_verify_token = os.getenv('WHATSAPP_WEBHOOK_VERIFY_TOKEN')
-        self.api_base_url = os.getenv('WHATSAPP_API_BASE_URL', 'https://graph.facebook.com/v23.0')
-        self.developer_number = os.getenv('DEVELOPER_WHATSAPP_NUMBER', '+2347025965922')
-        self.verify_token = os.getenv('WHATSAPP_VERIFY_TOKEN', 'default_verify_token')
-        self.access_token = os.getenv('WHATSAPP_ACCESS_TOKEN', '')
-        self.phone_number_id = os.getenv('WHATSAPP_PHONE_NUMBER_ID', '')
+        from config.appconfig import (
+            WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_BUSINESS_ACCOUNT_ID,
+            WHATSAPP_WEBHOOK_VERIFY_TOKEN, WHATSAPP_API_BASE_URL, DEVELOPER_WHATSAPP_NUMBER
+        )
+
+        self.access_token = WHATSAPP_ACCESS_TOKEN
+        self.phone_number_id = WHATSAPP_PHONE_NUMBER_ID
+        self.business_account_id = WHATSAPP_BUSINESS_ACCOUNT_ID
+        self.webhook_verify_token = WHATSAPP_WEBHOOK_VERIFY_TOKEN
+        self.api_base_url = WHATSAPP_API_BASE_URL
+        self.developer_number = DEVELOPER_WHATSAPP_NUMBER
+        self.verify_token = WHATSAPP_WEBHOOK_VERIFY_TOKEN  # Use the same token
         # Database configuration
         self.db_config = {
             'host': safe_str_env('DB_HOST', 'localhost'),

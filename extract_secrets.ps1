@@ -1,28 +1,15 @@
-# Extract all Google Cloud secrets and create .env_cloud file
+# Extract secrets from Google Secret Manager and create .env file for local development
+# This script helps with local development by creating a .env file with the same values as production
 
-Write-Host "Extracting all Google Cloud secrets..." -ForegroundColor Cyan
+Write-Host "Extracting secrets from Google Secret Manager..." -ForegroundColor Green
 
-# Create .env_cloud file
+# Create .env file
 $envFile = ".env_cloud"
-
-# Clear the file if it exists
 if (Test-Path $envFile) {
     Remove-Item $envFile
 }
 
-# Add header
-Add-Content $envFile "# ====================================================================="
-Add-Content $envFile "# GOOGLE CLOUD SECRETS - EXTRACTED FROM SECRET MANAGER"
-Add-Content $envFile "# This file contains all secrets used in the cloud deployment"
-Add-Content $envFile "# ====================================================================="
-Add-Content $envFile ""
-
-Write-Host "Creating .env_cloud file..." -ForegroundColor Yellow
-
 # Database Configuration
-Write-Host "Extracting database secrets..." -ForegroundColor Green
-Add-Content $envFile "# Database Configuration"
-
 $dbHost = gcloud secrets versions access latest --secret="ai-customer-agent-db_host" 2>$null
 if ($dbHost) {
     Add-Content $envFile "DB_HOST=$dbHost"
@@ -65,12 +52,7 @@ if ($dbConnectTimeout) {
     Write-Host "DB_CONNECT_TIMEOUT extracted" -ForegroundColor Green
 }
 
-Add-Content $envFile ""
-
 # Redis Configuration
-Write-Host "Extracting Redis secrets..." -ForegroundColor Green
-Add-Content $envFile "# Redis Configuration"
-
 $redisHost = gcloud secrets versions access latest --secret="ai-customer-agent-redis_host" 2>$null
 if ($redisHost) {
     Add-Content $envFile "REDIS_HOST=$redisHost"
@@ -95,96 +77,62 @@ if ($redisUrl) {
     Write-Host "REDIS_URL extracted" -ForegroundColor Green
 }
 
-Add-Content $envFile ""
-
 # API Keys
-Write-Host "Extracting API keys..." -ForegroundColor Green
-Add-Content $envFile "# API Keys"
-
-$openaiKey = gcloud secrets versions access latest --secret="ai-customer-agent-openai_api_key" 2>$null
-if ($openaiKey) {
-    Add-Content $envFile "OPENAI_API_KEY=$openaiKey"
+$openaiApiKey = gcloud secrets versions access latest --secret="ai-customer-agent-openai_api_key" 2>$null
+if ($openaiApiKey) {
+    Add-Content $envFile "OPENAI_API_KEY=$openaiApiKey"
     Write-Host "OPENAI_API_KEY extracted" -ForegroundColor Green
 }
 
-$groqKey = gcloud secrets versions access latest --secret="ai-customer-agent-groq_api_key" 2>$null
-if ($groqKey) {
-    Add-Content $envFile "GROQ_API_KEY=$groqKey"
+$groqApiKey = gcloud secrets versions access latest --secret="ai-customer-agent-groq_api_key" 2>$null
+if ($groqApiKey) {
+    Add-Content $envFile "GROQ_API_KEY=$groqApiKey"
     Write-Host "GROQ_API_KEY extracted" -ForegroundColor Green
 }
 
-$googleKey = gcloud secrets versions access latest --secret="ai-customer-agent-google_api_key" 2>$null
-if ($googleKey) {
-    Add-Content $envFile "GOOGLE_API_KEY=$googleKey"
+$googleApiKey = gcloud secrets versions access latest --secret="ai-customer-agent-google_api_key" 2>$null
+if ($googleApiKey) {
+    Add-Content $envFile "GOOGLE_API_KEY=$googleApiKey"
     Write-Host "GOOGLE_API_KEY extracted" -ForegroundColor Green
 }
 
-Add-Content $envFile ""
-
 # Qdrant Configuration
-Write-Host "Extracting Qdrant secrets..." -ForegroundColor Green
-Add-Content $envFile "# Qdrant Configuration"
-
-$qdrantUrl = gcloud secrets versions access latest --secret="ai-customer-agent-qdrant_url_cloud" 2>$null
-if ($qdrantUrl) {
-    Add-Content $envFile "QDRANT_URL_CLOUD=$qdrantUrl"
+$qdrantUrlCloud = gcloud secrets versions access latest --secret="ai-customer-agent-qdrant_url_cloud" 2>$null
+if ($qdrantUrlCloud) {
+    Add-Content $envFile "QDRANT_URL_CLOUD=$qdrantUrlCloud"
     Write-Host "QDRANT_URL_CLOUD extracted" -ForegroundColor Green
 }
 
-$qdrantKey = gcloud secrets versions access latest --secret="ai-customer-agent-qdrant_api_key" 2>$null
-if ($qdrantKey) {
-    Add-Content $envFile "QDRANT_API_KEY=$qdrantKey"
+# For local development, QDRANT_URL_LOCAL should be localhost
+Add-Content $envFile "QDRANT_URL_LOCAL=http://localhost:6333"
+Write-Host "QDRANT_URL_LOCAL set to localhost for local development" -ForegroundColor Green
+
+$qdrantApiKey = gcloud secrets versions access latest --secret="ai-customer-agent-qdrant_api_key" 2>$null
+if ($qdrantApiKey) {
+    Add-Content $envFile "QDRANT_API_KEY=$qdrantApiKey"
     Write-Host "QDRANT_API_KEY extracted" -ForegroundColor Green
 }
 
-Add-Content $envFile ""
-
 # WhatsApp Configuration
-Write-Host "Extracting WhatsApp secrets..." -ForegroundColor Green
-Add-Content $envFile "# WhatsApp Configuration"
-
-$whatsappToken = gcloud secrets versions access latest --secret="ai-customer-agent-whatsapp_access_token" 2>$null
-if ($whatsappToken) {
-    Add-Content $envFile "WHATSAPP_ACCESS_TOKEN=$whatsappToken"
+$whatsappAccessToken = gcloud secrets versions access latest --secret="ai-customer-agent-whatsapp_access_token" 2>$null
+if ($whatsappAccessToken) {
+    Add-Content $envFile "WHATSAPP_ACCESS_TOKEN=$whatsappAccessToken"
     Write-Host "WHATSAPP_ACCESS_TOKEN extracted" -ForegroundColor Green
 }
 
-$whatsappPhoneId = gcloud secrets versions access latest --secret="ai-customer-agent-whatsapp_phone_number_id" 2>$null
-if ($whatsappPhoneId) {
-    Add-Content $envFile "WHATSAPP_PHONE_NUMBER_ID=$whatsappPhoneId"
+$whatsappPhoneNumberId = gcloud secrets versions access latest --secret="ai-customer-agent-whatsapp_phone_number_id" 2>$null
+if ($whatsappPhoneNumberId) {
+    Add-Content $envFile "WHATSAPP_PHONE_NUMBER_ID=$whatsappPhoneNumberId"
     Write-Host "WHATSAPP_PHONE_NUMBER_ID extracted" -ForegroundColor Green
 }
 
-$whatsappVerifyToken = gcloud secrets versions access latest --secret="ai-customer-agent-whatsapp_webhook_verify_token" 2>$null
-if ($whatsappVerifyToken) {
-    Add-Content $envFile "WHATSAPP_VERIFY_TOKEN=$whatsappVerifyToken"
-    Write-Host "WHATSAPP_VERIFY_TOKEN extracted" -ForegroundColor Green
+$whatsappWebhookVerifyToken = gcloud secrets versions access latest --secret="ai-customer-agent-whatsapp_webhook_verify_token" 2>$null
+if ($whatsappWebhookVerifyToken) {
+    Add-Content $envFile "WHATSAPP_WEBHOOK_VERIFY_TOKEN=$whatsappWebhookVerifyToken"
+    Write-Host "WHATSAPP_WEBHOOK_VERIFY_TOKEN extracted" -ForegroundColor Green
 }
-
-$whatsappBusinessId = gcloud secrets versions access latest --secret="ai-customer-agent-whatsapp_business_account_id" 2>$null
-if ($whatsappBusinessId) {
-    Add-Content $envFile "WHATSAPP_BUSINESS_ACCOUNT_ID=$whatsappBusinessId"
-    Write-Host "WHATSAPP_BUSINESS_ACCOUNT_ID extracted" -ForegroundColor Green
-}
-
-$whatsappApiUrl = gcloud secrets versions access latest --secret="ai-customer-agent-whatsapp_api_base_url" 2>$null
-if ($whatsappApiUrl) {
-    Add-Content $envFile "WHATSAPP_API_BASE_URL=$whatsappApiUrl"
-    Write-Host "WHATSAPP_API_BASE_URL extracted" -ForegroundColor Green
-}
-
-$developerWhatsapp = gcloud secrets versions access latest --secret="ai-customer-agent-developer_whatsapp_number" 2>$null
-if ($developerWhatsapp) {
-    Add-Content $envFile "DEVELOPER_WHATSAPP_NUMBER=$developerWhatsapp"
-    Write-Host "DEVELOPER_WHATSAPP_NUMBER extracted" -ForegroundColor Green
-}
-
-Add-Content $envFile ""
 
 # Email Configuration
-Write-Host "Extracting email secrets..." -ForegroundColor Green
-Add-Content $envFile "# Email Configuration"
-
 $smtpServer = gcloud secrets versions access latest --secret="ai-customer-agent-smtp_server" 2>$null
 if ($smtpServer) {
     Add-Content $envFile "SMTP_SERVER=$smtpServer"
@@ -221,52 +169,15 @@ if ($fromName) {
     Write-Host "FROM_NAME extracted" -ForegroundColor Green
 }
 
-Add-Content $envFile ""
-
 # Flask Configuration
-Write-Host "Extracting Flask secrets..." -ForegroundColor Green
-Add-Content $envFile "# Flask Configuration"
+Add-Content $envFile "FLASK_ENV=local"
+Add-Content $envFile "FLASK_SECRET_KEY=nigerian-ecommerce-support-2025"
 
-$flaskEnv = gcloud secrets versions access latest --secret="ai-customer-agent-flask_env" 2>$null
-if ($flaskEnv) {
-    Add-Content $envFile "FLASK_ENV=$flaskEnv"
-    Write-Host "FLASK_ENV extracted" -ForegroundColor Green
-}
+# Additional WhatsApp Configuration
+Add-Content $envFile "WHATSAPP_API_BASE_URL=https://graph.facebook.com/v23.0"
+Add-Content $envFile "TEST_PHONE_NUMBER=+15556657520"
+Add-Content $envFile "DEVELOPER_WHATSAPP_NUMBER=+2347025965922"
 
-$flaskSecretKey = gcloud secrets versions access latest --secret="ai-customer-agent-flask_secret_key" 2>$null
-if ($flaskSecretKey) {
-    Add-Content $envFile "FLASK_SECRET_KEY=$flaskSecretKey"
-    Write-Host "FLASK_SECRET_KEY extracted" -ForegroundColor Green
-}
-
-Add-Content $envFile ""
-Add-Content $envFile "# ====================================================================="
-Add-Content $envFile "# END OF GOOGLE CLOUD SECRETS"
-Add-Content $envFile "# ====================================================================="
-
-Write-Host ""
-Write-Host "Successfully created .env_cloud file!" -ForegroundColor Green
-Write-Host "File location: $envFile" -ForegroundColor Cyan
-
-# Show file contents (with sensitive data masked)
-Write-Host ""
-Write-Host "Summary of extracted secrets:" -ForegroundColor Yellow
-Get-Content $envFile | ForEach-Object {
-    if ($_ -match "^([^#][^=]+)=(.*)$") {
-        $varName = $matches[1]
-        $varValue = $matches[2]
-
-        # Mask sensitive values
-        if ($varName -match "(PASSWORD|KEY|TOKEN)") {
-            $maskedValue = if ($varValue.Length -gt 8) { $varValue.Substring(0, 8) + "..." } else { "***" }
-        }
-        else {
-            $maskedValue = $varValue
-        }
-
-        Write-Host "   $varName=$maskedValue" -ForegroundColor Gray
-    }
-    else {
-        Write-Host "   $_" -ForegroundColor DarkGray
-    }
-}
+Write-Host "`nSecrets extraction completed! File created: $envFile" -ForegroundColor Green
+Write-Host "You can now copy this to .env for local development:" -ForegroundColor Yellow
+Write-Host "Copy-Item $envFile .env" -ForegroundColor Cyan

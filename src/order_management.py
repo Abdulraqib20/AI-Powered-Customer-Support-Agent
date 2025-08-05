@@ -206,9 +206,22 @@ class OrderManagementSystem:
 
         # Initialize Redis for order caching
         try:
+            # Safe Redis port parsing - handle secret names and invalid values
+            redis_port_str = os.getenv('REDIS_PORT', '6379')
+            try:
+                # If it's a secret name (contains 'latest' or 'secret'), use default
+                if 'latest' in redis_port_str or 'secret' in redis_port_str:
+                    redis_port = 6379
+                    logger.warning(f"⚠️ Redis port appears to be a secret name, using default: {redis_port}")
+                else:
+                    redis_port = int(redis_port_str)
+            except (ValueError, TypeError):
+                redis_port = 6379
+                logger.warning(f"⚠️ Invalid Redis port '{redis_port_str}', using default: {redis_port}")
+
             self.redis_client = redis.Redis(
                 host=os.getenv('REDIS_HOST', 'localhost'),
-                port=int(os.getenv('REDIS_PORT', '6379')),
+                port=redis_port,
                 db=2,  # Use different db for orders
                 decode_responses=True
             )
@@ -651,6 +664,9 @@ class OrderManagementSystem:
             tier_discount_rate = self._get_tier_discount_rate(order_data['account_tier'])
             tier_discount = subtotal * tier_discount_rate
 
+            # Apply free delivery for Gold and Platinum tiers
+            original_delivery_fee = delivery_fee
+
             # 📊 ENHANCED LOGGING FOR ORDER PRICING BREAKDOWN
             logger.info(f"🧮 ORDER {order_id} DETAILED PRICING BREAKDOWN:")
             logger.info(f"   👤 Customer Tier: {order_data['account_tier']}")
@@ -658,9 +674,6 @@ class OrderManagementSystem:
             logger.info(f"   🎯 Tier Discount Rate: {tier_discount_rate*100:.1f}%")
             logger.info(f"   💸 Tier Discount Amount: ₦{tier_discount:,.2f}")
             logger.info(f"   🚚 Original Delivery Fee: ₦{original_delivery_fee:,.2f}")
-
-            # Apply free delivery for Gold and Platinum tiers
-            original_delivery_fee = delivery_fee
             tier_delivery_benefit = False
             if order_data['account_tier'] in ['Gold', 'Platinum']:
                 delivery_fee = 0

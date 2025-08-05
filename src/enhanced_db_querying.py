@@ -317,10 +317,31 @@ class EnhancedDatabaseQuerying:
 
         # Initialize Redis for conversation memory (fallback)
         try:
+            # Safe Redis port parsing - handle secret names and invalid values
+            redis_port_str = os.getenv('REDIS_PORT', '6379')
+            try:
+                # If it's a secret name (contains 'latest' or 'secret'), use default
+                if 'latest' in redis_port_str or 'secret' in redis_port_str:
+                    redis_port = 6379
+                    logger.warning(f"⚠️ Redis port appears to be a secret name, using default: {redis_port}")
+                else:
+                    redis_port = int(redis_port_str)
+            except (ValueError, TypeError):
+                redis_port = 6379
+                logger.warning(f"⚠️ Invalid Redis port '{redis_port_str}', using default: {redis_port}")
+
+            # Safe Redis DB parsing
+            redis_db_str = os.getenv('REDIS_DB', '0')
+            try:
+                redis_db = int(redis_db_str)
+            except (ValueError, TypeError):
+                redis_db = 0
+                logger.warning(f"⚠️ Invalid Redis DB '{redis_db_str}', using default: {redis_db}")
+
             self.redis_client = redis.Redis(
                 host=os.getenv('REDIS_HOST', 'localhost'),
-                port=int(os.getenv('REDIS_PORT', 6379)),
-                db=int(os.getenv('REDIS_DB', 0)),
+                port=redis_port,
+                db=redis_db,
                 decode_responses=True,
                 socket_connect_timeout=5,
                 socket_timeout=5,

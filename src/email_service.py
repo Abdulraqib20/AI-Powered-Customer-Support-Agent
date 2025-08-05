@@ -24,12 +24,16 @@ class EmailService:
     def __init__(self):
         """Initialize email service with SMTP configuration"""
         # Email configuration - can be set via environment variables
-        self.smtp_server = os.getenv('SMTP_SERVER')
-        self.smtp_port = os.getenv('SMTP_PORT')
-        self.smtp_username = os.getenv('SMTP_USERNAME')
-        self.smtp_password = os.getenv('SMTP_PASSWORD')
-        self.from_email = os.getenv('FROM_EMAIL')
-        self.from_name = os.getenv('FROM_NAME')
+        from config.appconfig import (
+            SMTP_SERVER, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, FROM_EMAIL, FROM_NAME
+        )
+
+        self.smtp_server = SMTP_SERVER
+        self.smtp_port = SMTP_PORT
+        self.smtp_username = SMTP_USERNAME
+        self.smtp_password = SMTP_PASSWORD
+        self.from_email = FROM_EMAIL
+        self.from_name = FROM_NAME
 
         # Email templates
         self.welcome_template = self._get_welcome_template()

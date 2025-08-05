@@ -17,11 +17,13 @@ def fix_all_database_pricing():
 
     try:
         # Database connection
+        from config.appconfig import DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
+
         conn = psycopg2.connect(
-            host=os.getenv('DB_HOST', 'localhost'),
-            database=os.getenv('DB_NAME', 'nigerian_ecommerce'),
-            user=os.getenv('DB_USER', 'postgres'),
-            password=os.getenv('DB_PASSWORD', '')
+            host=DB_HOST,
+            database=DB_NAME,
+            user=DB_USER,
+            password=DB_PASSWORD
         )
         cursor = conn.cursor(cursor_factory=RealDictCursor)
 

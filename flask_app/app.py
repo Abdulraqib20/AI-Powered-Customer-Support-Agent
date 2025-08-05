@@ -50,7 +50,7 @@ warnings.simplefilter(action='ignore')
 # Local imports
 sys.path.append(str(Path(__file__).parent.parent.resolve()))
 from config.database_config import DatabaseManager, CustomerRepository, OrderRepository, AnalyticsRepository
-from config.appconfig import QDRANT_URL_CLOUD, QDRANT_API_KEY, GROQ_API_KEY, GOOGLE_API_KEY
+from config.appconfig import QDRANT_URL, QDRANT_API_KEY, GROQ_API_KEY, GOOGLE_API_KEY, is_production
 from config.logging_config import setup_logging
 
 # Add enhanced database querying import
@@ -129,7 +129,20 @@ app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'nigerian-ecommerce-sup
 try:
     # Test Redis connection first using environment variables
     redis_host = os.getenv('REDIS_HOST', '10.161.142.19')
-    redis_port = int(os.getenv('REDIS_PORT', '6379'))
+
+    # Safe Redis port parsing - handle secret names and invalid values
+    redis_port_str = os.getenv('REDIS_PORT', '6379')
+    try:
+        # If it's a secret name (contains 'latest' or 'secret'), use default
+        if 'latest' in redis_port_str or 'secret' in redis_port_str:
+            redis_port = 6379
+            app_logger.warning(f"⚠️ Redis port appears to be a secret name, using default: {redis_port}")
+        else:
+            redis_port = int(redis_port_str)
+    except (ValueError, TypeError):
+        redis_port = 6379
+        app_logger.warning(f"⚠️ Invalid Redis port '{redis_port_str}', using default: {redis_port}")
+
     test_redis = redis.Redis(host=redis_host, port=redis_port, db=0, decode_responses=True)
     test_redis.ping()
 
@@ -172,10 +185,11 @@ try:
     # Google AI for embeddings
     genai.configure(api_key=GOOGLE_API_KEY)
 
-    # Qdrant client for vector search - Use local instance
+    # Qdrant client for vector search - Use environment-specific URL
+    from config.appconfig import QDRANT_URL, QDRANT_API_KEY
     qdrant_client = QdrantClient(
-        url="https://0c39c0f4-e3fe-43a1-ae31-99dcf1d9179d.europe-west3-0.gcp.cloud.qdrant.io:6333",
-        api_key=QDRANT_API_KEY,  # Local Qdrant doesn't need API key
+        url=QDRANT_URL,
+        api_key=QDRANT_API_KEY,
     )
 
     # Test Qdrant connection
@@ -191,7 +205,7 @@ try:
             "vector_store": {
                 "provider": "qdrant",
                 "config": {
-                    "url": "https://0c39c0f4-e3fe-43a1-ae31-99dcf1d9179d.europe-west3-0.gcp.cloud.qdrant.io:6333",
+                    "url": QDRANT_URL,
                     "collection_name": "conversation_memory"
                 }
             },
@@ -243,8 +257,28 @@ except Exception as e:
 # Initialize Redis for caching
 try:
     redis_host = os.getenv('REDIS_HOST', '10.161.142.19')
-    redis_port = int(os.getenv('REDIS_PORT', '6379'))
-    redis_db = int(os.getenv('REDIS_DB', '1'))
+
+    # Safe Redis port parsing - handle secret names and invalid values
+    redis_port_str = os.getenv('REDIS_PORT', '6379')
+    try:
+        # If it's a secret name (contains 'latest' or 'secret'), use default
+        if 'latest' in redis_port_str or 'secret' in redis_port_str:
+            redis_port = 6379
+            app_logger.warning(f"⚠️ Redis port appears to be a secret name, using default: {redis_port}")
+        else:
+            redis_port = int(redis_port_str)
+    except (ValueError, TypeError):
+        redis_port = 6379
+        app_logger.warning(f"⚠️ Invalid Redis port '{redis_port_str}', using default: {redis_port}")
+
+    # Safe Redis DB parsing
+    redis_db_str = os.getenv('REDIS_DB', '1')
+    try:
+        redis_db = int(redis_db_str)
+    except (ValueError, TypeError):
+        redis_db = 1
+        app_logger.warning(f"⚠️ Invalid Redis DB '{redis_db_str}', using default: {redis_db}")
+
     redis_client = redis.Redis(host=redis_host, port=redis_port, db=redis_db, decode_responses=True)
     redis_client.ping()
     app_logger.info(f"✅ Redis cache initialized successfully - {redis_host}:{redis_port}")

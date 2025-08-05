@@ -34,11 +34,13 @@ try:
     from config.database_config import DATABASE_CONFIG
 except ImportError:
     # Fallback database config
+    from config.appconfig import DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
+
     DATABASE_CONFIG = {
-        'host': os.getenv('DB_HOST'),
-        'database': os.getenv('DB_NAME'),
-        'user': os.getenv('DB_USER'),
-        'password': os.getenv('DB_PASSWORD')
+        'host': DB_HOST,
+        'database': DB_NAME,
+        'user': DB_USER,
+        'password': DB_PASSWORD
     }
 
 # Setup logging

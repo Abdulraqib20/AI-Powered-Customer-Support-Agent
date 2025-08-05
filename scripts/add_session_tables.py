@@ -11,12 +11,14 @@ def add_session_tables():
 
     try:
         # Connect to PostgreSQL using environment variables
+        from config.appconfig import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+
         conn = psycopg2.connect(
-            host=os.getenv('DB_HOST', 'localhost'),
-            port=os.getenv('DB_PORT', 5432),
-            database=os.getenv('DB_NAME', 'ecommerce_ai'),
-            user=os.getenv('DB_USER', 'postgres'),
-            password=os.getenv('DB_PASSWORD', 'password')
+            host=DB_HOST,
+            port=DB_PORT,
+            database=DB_NAME,
+            user=DB_USER,
+            password=DB_PASSWORD
         )
 
         print('🗄️ Connected to database')

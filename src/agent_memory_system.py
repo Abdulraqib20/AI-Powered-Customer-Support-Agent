@@ -30,8 +30,17 @@ import ulid
 from langchain_core.tools import tool
 from langchain_core.messages import BaseMessage, AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.runnables.config import RunnableConfig
-from langgraph.checkpoint.redis import RedisSaver
-from langgraph.graph.message import MessagesState
+
+# LangGraph components (optional)
+try:
+    from langgraph.checkpoint.redis import RedisSaver
+    from langgraph.graph.message import MessagesState
+    LANGGRAPH_AVAILABLE = True
+except ImportError:
+    LANGGRAPH_AVAILABLE = False
+    RedisSaver = None
+    MessagesState = None
+    logging.warning("LangGraph not available, agent memory system will work with limited functionality")
 
 # Redis Vector Library for semantic memory
 try:
@@ -107,7 +116,8 @@ class AgentMemorySystem:
 
     def __init__(self, redis_url: str = None, embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"):
         """Initialize the agent memory system"""
-        self.redis_url = redis_url or os.getenv("REDIS_URL", "redis://localhost:6379")
+        from config.appconfig import REDIS_URL
+        self.redis_url = redis_url or REDIS_URL
         self.embedding_model = embedding_model
 
         # Initialize Redis clients
@@ -132,7 +142,7 @@ class AgentMemorySystem:
             self.redis_client.ping()
 
             # Redis saver for LangGraph checkpointing (short-term memory)
-            if 'langgraph' in globals():
+            if LANGGRAPH_AVAILABLE and RedisSaver:
                 self.redis_saver = RedisSaver(redis_client=redis.from_url(self.redis_url))
                 self.redis_saver.setup()
             else:
