@@ -198,7 +198,8 @@ class WorldClassMemorySystem:
             context['entity_memory'] = entity_context
 
             # Calculate rough token count
-            context_str = json.dumps(context)
+            # context_str = json.dumps(context)
+            context_str = safe_json_dumps(context)
             context['total_tokens'] = len(context_str.split()) * 1.3  # Rough token estimation
 
             logger.info(f"🎯 Retrieved conversation context for {session_id}: ~{context['total_tokens']} tokens")
