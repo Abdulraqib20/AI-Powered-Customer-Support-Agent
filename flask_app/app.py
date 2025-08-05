@@ -174,8 +174,8 @@ try:
 
     # Qdrant client for vector search - Use local instance
     qdrant_client = QdrantClient(
-        url="http://localhost:6333",
-        # api_key=QDRANT_API_KEY,  # Local Qdrant doesn't need API key
+        url="https://0c39c0f4-e3fe-43a1-ae31-99dcf1d9179d.europe-west3-0.gcp.cloud.qdrant.io:6333",
+        api_key=QDRANT_API_KEY,  # Local Qdrant doesn't need API key
     )
 
     # Test Qdrant connection
