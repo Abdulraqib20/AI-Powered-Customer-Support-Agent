@@ -52,3 +52,6 @@ cachelib==0.12.0
 
 # System monitoring
 psutil==6.1.0
+
+# Unique identifiers
+ulid-py==1.1.0

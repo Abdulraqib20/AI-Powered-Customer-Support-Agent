@@ -46,6 +46,7 @@ env/
 .env.development
 .env.test
 .env.production
+.env_cloud
 
 # Streamlit
 .streamlit/
@@ -71,7 +72,3 @@ EOL
 config/logs/config.log.1
 .cursor/
 .github/
-
-# deploys
-# deploy.ps1
-
