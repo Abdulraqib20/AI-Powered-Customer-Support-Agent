@@ -44,7 +44,7 @@ Pillow
 bcrypt
 PyJWT
 
-# Monitoring and logging
+# Monitoring and logging 
 coloredlogs
 
 # Data processing
