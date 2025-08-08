@@ -963,6 +963,40 @@ def api_chat():
         if not query:
             return jsonify({'success': False, 'message': 'Message is required'}), 400
 
+        # Short-circuit trivial greetings to avoid unnecessary DB/AI flows
+        def _is_greeting(text: str) -> bool:
+            if not text:
+                return False
+            cleaned = ''.join(ch for ch in text.lower().strip() if ch.isalnum() or ch.isspace())
+            cleaned = ' '.join(cleaned.split())
+            greeting_phrases = {
+                'hi', 'hello', 'hey', 'yo', 'sup',
+                'good morning', 'good afternoon', 'good evening',
+                'morning', 'afternoon', 'evening',
+                'whats up', 'what up', 'hiya'
+            }
+            if cleaned in greeting_phrases:
+                return True
+            tokens = cleaned.split()
+            return len(tokens) <= 2 and any(t in greeting_phrases for t in ('hi', 'hello', 'hey', 'yo'))
+
+        if _is_greeting(query):
+            friendly_greeting = (
+                "Hello! 😊 Welcome to raqibtech.com. I'm here to help with products, orders, or account questions. "
+                "What would you like to do today?"
+            )
+            return jsonify({
+                'success': True,
+                'response': friendly_greeting,
+                'quick_actions': [
+                    {'text': '🛒 Start Order', 'action': 'start_order'},
+                    {'text': '📦 View My Orders', 'action': 'view_orders'},
+                    {'text': '💬 Talk to Support', 'action': 'general_help'}
+                ],
+                'customer_authenticated': bool(session.get('customer_id')),
+                'timestamp': datetime.now().isoformat()
+            })
+
         # 🛒 NEW: Parse order intent first
         order_intent = parse_order_intent(query)
 
@@ -1117,6 +1151,30 @@ def api_enhanced_query():
                 'message': 'Query is required'
             }), 400
 
+        # Short-circuit trivial greetings to avoid DB flow and internal fallback rows
+        def _is_greeting(text: str) -> bool:
+            if not text:
+                return False
+            cleaned = ''.join(ch for ch in text.lower().strip() if ch.isalnum() or ch.isspace())
+            cleaned = ' '.join(cleaned.split())
+            greeting_phrases = {
+                'hi', 'hello', 'hey', 'yo', 'sup',
+                'good morning', 'good afternoon', 'good evening',
+                'morning', 'afternoon', 'evening',
+                'whats up', 'what up', 'hiya'
+            }
+            if cleaned in greeting_phrases:
+                return True
+            tokens = cleaned.split()
+            return len(tokens) <= 2 and any(t in greeting_phrases for t in ('hi', 'hello', 'hey', 'yo'))
+
+        if _is_greeting(user_query):
+            friendly_greeting = (
+                "Hello! 😊 Welcome to raqibtech.com. I can help you browse products, check orders, or answer questions. "
+                "Try: 'show latest phones', 'view my orders', or 'help with delivery fees'."
+            )
+            return jsonify({'success': True, 'response': friendly_greeting})
+
         # 🔧 CRITICAL FIX: Build proper session context for authentication with RBAC
         session_context = {
             'user_authenticated': session.get('user_authenticated', False),
@@ -1136,6 +1194,15 @@ def api_enhanced_query():
 
         # Process the query with session context
         result = enhanced_db.process_enhanced_query(user_query, session_context)
+
+        # Sanitize any internal fallback messages before returning to the web client
+        if isinstance(result, dict):
+            resp_text = result.get('response')
+            if isinstance(resp_text, str) and 'Invalid query structure detected' in resp_text:
+                result['response'] = (
+                    "Hello! 😊 I'm here to help. Tell me what you'd like to do — for example, "
+                    "'show latest phones', 'view my orders', or 'help with delivery fees'."
+                )
 
         # Store message in chat if we have a conversation
         conversation_id = session.get('current_conversation_id')

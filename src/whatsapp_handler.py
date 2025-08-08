@@ -381,6 +381,37 @@ class WhatsAppBusinessHandler:
     def _process_with_ai(self, message_content: str, customer_id: int, session_id: str, phone_number: str) -> Dict[str, Any]:
         """Process message with existing AI system enhanced with agent memory"""
         try:
+            # Short-circuit trivial greetings to avoid unnecessary DB flow and internal fallback messages
+            def _is_greeting(text: str) -> bool:
+                if not text:
+                    return False
+                cleaned = ''.join(ch for ch in text.lower().strip() if ch.isalnum() or ch.isspace())
+                cleaned = ' '.join(cleaned.split())
+                greeting_phrases = {
+                    'hi', 'hello', 'hey', 'yo', 'sup',
+                    'good morning', 'good afternoon', 'good evening',
+                    'morning', 'afternoon', 'evening',
+                    'whats up', 'what up', 'hiya'
+                }
+                if cleaned in greeting_phrases:
+                    return True
+                # Extremely short non-informational messages (1-2 tokens) are treated as greetings
+                tokens = cleaned.split()
+                return len(tokens) <= 2 and any(t in greeting_phrases for t in ('hi', 'hello', 'hey', 'yo'))
+
+            if _is_greeting(message_content):
+                friendly_greeting = (
+                    "Hello! 😊 Welcome to raqibtech.com. I'm here to help with products, orders, or account questions. "
+                    "What would you like to do today?"
+                )
+                return {
+                    'success': True,
+                    'response': friendly_greeting,
+                    'action': 'general_conversation',
+                    'channel': 'whatsapp',
+                    'phone_number': phone_number
+                }
+
             # 🤖 Get agent memory context for personalization
             agent_memory_context = self._get_agent_memory_context(message_content, customer_id, session_id, phone_number)
 
@@ -423,6 +454,15 @@ class WhatsAppBusinessHandler:
                     'account_tier': user_info.get('tier')
                 }
             )
+
+            # Sanitize any internal fallback messages from DB layer before responding to user
+            if isinstance(general_response, dict):
+                resp_text = general_response.get('response')
+                if isinstance(resp_text, str) and 'Invalid query structure detected' in resp_text:
+                    general_response['response'] = (
+                        "Hello! 😊 I'm here to help. Tell me what you'd like to do — for example, "
+                        "'show latest phones', 'view my orders', or 'help with delivery fees'."
+                    )
 
             general_response['channel'] = 'whatsapp'
             general_response['phone_number'] = phone_number
