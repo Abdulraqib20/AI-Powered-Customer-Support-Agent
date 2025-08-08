@@ -13,10 +13,12 @@ sys.path.append(str(Path(__file__).parent.parent.resolve()))
 
 try:
     from app import app
+    # Get dynamic port from env to avoid hardcoded 5000
+    port = int(os.environ.get('FLASK_RUN_PORT', 5000))
     print("  Nigerian Customer Support Agent - Starting Flask Application")
     print("=" * 60)
-    print("🌐 Local URL: http://localhost:5000")
-    print("📊 Dashboard: http://localhost:5000 (4 tabs available)")
+    print(f"🌐 Local URL: http://localhost:{port}")
+    print(f"📊 Dashboard: http://localhost:{port} (4 tabs available)")
     print("🤖 AI Chat: Navigate to 'Unified Support' tab")
     print("👥 Customers: Navigate to 'Customer Profiles' tab")
     print("📈 Analytics: Navigate to 'Usage Analytics' tab")
@@ -31,12 +33,7 @@ try:
 
     if __name__ == "__main__":
         # Run the Flask application
-        app.run(
-            host="0.0.0.0",
-            port=5000,
-            debug=True,
-            threaded=True
-        )
+        app.run(host="0.0.0.0", port=port, debug=True, threaded=True, use_reloader=False)
 
 except ImportError as e:
     print(f"❌ Import Error: {e}")

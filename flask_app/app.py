@@ -4266,5 +4266,8 @@ if __name__ == '__main__':
     app.logger.info("🚀 Starting Flask application with full logging enabled")
     app.logger.info("📝 All HTTP requests will be logged to console")
 
+    # Get port from environment variable or default to 5000
+    port = int(os.environ.get('FLASK_RUN_PORT', 5000))
+
     # Initialize session
-    app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)
+    app.run(debug=True, host='0.0.0.0', port=port, threaded=True)

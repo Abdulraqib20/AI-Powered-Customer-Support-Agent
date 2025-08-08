@@ -143,6 +143,20 @@ try:
         else:
             config[var] = safe_env_var(var, default)
 
+    # For local development, force Redis to localhost regardless of .env to avoid remote overrides
+    # This preserves production behavior while ensuring reliable local runs
+    if not is_production:
+        if config.get('REDIS_HOST') != 'localhost' or not config.get('REDIS_HOST'):
+            config['REDIS_HOST'] = 'localhost'
+        # Always ensure local URL in development
+        config['REDIS_URL'] = 'redis://localhost:6379'
+        # Ensure DB index is an int and defaults to 0
+        try:
+            _db_val = int(str(config.get('REDIS_DB', 0)))
+        except Exception:
+            _db_val = 0
+        config['REDIS_DB'] = _db_val
+
     # Log all environment variables for debugging (mask sensitive ones)
     logger.info("Environment variables loaded:")
     for var, value in config.items():
