@@ -47,6 +47,10 @@ import warnings
 warnings.filterwarnings('ignore')
 warnings.simplefilter(action='ignore')
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 # Local imports
 sys.path.append(str(Path(__file__).parent.parent.resolve()))
 from config.database_config import DatabaseManager, CustomerRepository, OrderRepository, AnalyticsRepository
@@ -988,13 +992,8 @@ def api_chat():
             return jsonify({
                 'success': True,
                 'response': friendly_greeting,
-                'quick_actions': [
-                    {'text': '🛒 Start Order', 'action': 'start_order'},
-                    {'text': '📦 View My Orders', 'action': 'view_orders'},
-                    {'text': '💬 Talk to Support', 'action': 'general_help'}
-                ],
-                'customer_authenticated': bool(session.get('customer_id')),
-                'timestamp': datetime.now().isoformat()
+                'action': 'greeting',
+                'channel': 'web'
             })
 
         # 🛒 NEW: Parse order intent first
@@ -1145,6 +1144,9 @@ def api_enhanced_query():
         data = request.get_json()
         user_query = data.get('query', '').strip()
 
+        # 🔧 CRITICAL DEBUG: Log ALL incoming messages
+        logger.info(f"🔧 FLASK ENDPOINT: Received message '{user_query}' from client")
+
         if not user_query:
             return jsonify({
                 'success': False,
@@ -1157,6 +1159,25 @@ def api_enhanced_query():
                 return False
             cleaned = ''.join(ch for ch in text.lower().strip() if ch.isalnum() or ch.isspace())
             cleaned = ' '.join(cleaned.split())
+
+            # 🚫 CRITICAL FIX: Exclude shopping/business commands from greeting detection
+            shopping_commands = {
+                'checkout', 'place order', 'show cart', 'view cart', 'add to cart',
+                'buy', 'purchase', 'order', 'cart', 'payment', 'delivery',
+                'i want to buy', 'add this', 'remove from cart', 'clear cart'
+            }
+
+            # 🚫 CRITICAL FIX: Exclude confirmation words during checkout flow
+            confirmation_words = {'yes', 'no', 'confirm', 'proceed', 'continue', 'ok', 'okay'}
+
+            # If it's a shopping command, definitely NOT a greeting
+            if any(cmd in cleaned for cmd in shopping_commands):
+                return False
+
+            # If it's a confirmation word, NOT a greeting (likely part of checkout flow)
+            if cleaned in confirmation_words:
+                return False
+
             greeting_phrases = {
                 'hi', 'hello', 'hey', 'yo', 'sup',
                 'good morning', 'good afternoon', 'good evening',
@@ -1168,12 +1189,22 @@ def api_enhanced_query():
             tokens = cleaned.split()
             return len(tokens) <= 2 and any(t in greeting_phrases for t in ('hi', 'hello', 'hey', 'yo'))
 
-        if _is_greeting(user_query):
+        # 🔧 CRITICAL DEBUG: Log greeting check result
+        is_greeting_result = _is_greeting(user_query)
+        if is_greeting_result:
+            logger.info(f"🔧 GREETING DETECTED: '{user_query}' classified as greeting, returning early")
             friendly_greeting = (
-                "Hello! 😊 Welcome to raqibtech.com. I can help you browse products, check orders, or answer questions. "
-                "Try: 'show latest phones', 'view my orders', or 'help with delivery fees'."
+                "Hello! 😊 Welcome to raqibtech.com. I'm here to help with products, orders, or account questions. "
+                "What would you like to do today?"
             )
-            return jsonify({'success': True, 'response': friendly_greeting})
+            return jsonify({
+                'success': True,
+                'response': friendly_greeting,
+                'action': 'greeting',
+                'channel': 'web'
+            })
+        else:
+            logger.info(f"🔧 NOT A GREETING: '{user_query}' proceeding to normal processing")
 
         # 🔧 CRITICAL FIX: Build proper session context for authentication with RBAC
         session_context = {
@@ -1193,7 +1224,17 @@ def api_enhanced_query():
         app_logger.info(f"🔍 Session context: user_authenticated={session_context['user_authenticated']}, customer_id={session_context['customer_id']}, user_role={session_context['user_role']}, is_staff={session_context['is_staff']}")
 
         # Process the query with session context
-        result = enhanced_db.process_enhanced_query(user_query, session_context)
+        try:
+            logger.info(f"🔧 CALLING enhanced_db.process_enhanced_query with query: '{user_query}'")
+            result = enhanced_db.process_enhanced_query(user_query, session_context)
+            logger.info(f"🔧 RECEIVED RESULT from enhanced_db: {type(result).__name__}, success={result.get('success') if isinstance(result, dict) else 'N/A'}")
+        except Exception as e:
+            logger.error(f"🔧 EXCEPTION in enhanced_db.process_enhanced_query: {e}")
+            result = {
+                'success': False,
+                'response': "Hello! 😊 I'm here to help. Tell me what you'd like to do — for example, 'show latest phones', 'view my orders', or 'help with delivery fees'.",
+                'error': str(e)
+            }
 
         # Sanitize any internal fallback messages before returning to the web client
         if isinstance(result, dict):

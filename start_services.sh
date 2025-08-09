@@ -66,31 +66,29 @@ find_available_port() {
 # Function to get ngrok public URL
 get_ngrok_public_url() {
     local port=${1:-5000}
-    local max_attempts=12
+    local max_attempts=10
     local attempt=0
 
     while [ $attempt -lt $max_attempts ]; do
-        if curl -s http://127.0.0.1:4040/api/tunnels >/dev/null 2>&1; then
-            local response=$(curl -s http://127.0.0.1:4040/api/tunnels)
-            # Use jq if available, otherwise use grep/sed
+        # Try to get tunnels from ngrok API
+        if curl -s http://localhost:4040/api/tunnels >/dev/null 2>&1; then
+            local response=$(curl -s http://localhost:4040/api/tunnels)
+
+            # Use jq if available for better JSON parsing
             if command -v jq >/dev/null 2>&1; then
                 local public_url=$(echo "$response" | jq -r ".tunnels[] | select(.config.addr == \"http://localhost:$port\" and (.public_url | startswith(\"https://\"))) | .public_url" 2>/dev/null | head -1)
             else
-                # Fallback to grep/sed method with better regex
+                # Fallback to grep/sed method - look for the specific port and https URL
                 local public_url=$(echo "$response" | grep -o '"public_url":"https://[^"]*"' | head -1 | sed 's/"public_url":"//g' | sed 's/"//g')
+                # Verify it's actually for our port by checking if the tunnel config matches
+                if [ -n "$public_url" ]; then
+                    local addr_check=$(echo "$response" | grep -A5 -B5 "\"$public_url\"" | grep "\"addr\":\"http://localhost:$port\"")
+                    if [ -z "$addr_check" ]; then
+                        public_url=""
+                    fi
+                fi
             fi
 
-            if [ -n "$public_url" ] && [[ "$public_url" == https://* ]]; then
-                echo "$public_url"
-                return 0
-            fi
-        elif curl -s http://localhost:4040/api/tunnels >/dev/null 2>&1; then
-            local response=$(curl -s http://localhost:4040/api/tunnels)
-            if command -v jq >/dev/null 2>&1; then
-                local public_url=$(echo "$response" | jq -r ".tunnels[] | select(.config.addr == \"http://localhost:$port\" and (.public_url | startswith(\"https://\"))) | .public_url" 2>/dev/null | head -1)
-            else
-                local public_url=$(echo "$response" | grep -o '"public_url":"https://[^"]*"' | head -1 | sed 's/"public_url":"//g' | sed 's/"//g')
-            fi
             if [ -n "$public_url" ] && [[ "$public_url" == https://* ]]; then
                 echo "$public_url"
                 return 0
@@ -120,15 +118,19 @@ start_ngrok_tunnel() {
     # Start ngrok in background with explicit local target; capture logs to file
     local ngrok_log=".ngrok-${port}.log"
     rm -f "$ngrok_log" 2>/dev/null || true
-    nohup ngrok http http://localhost:$port --log=stdout --log-format=json > "$ngrok_log" 2>&1 &
+    nohup ngrok http $port --log=stdout --log-format=json > "$ngrok_log" 2>&1 &
 
     # Wait for ngrok to initialize
-    sleep 6
+    echo "Waiting for ngrok to initialize..." >&2
+    sleep 5
 
-    # Get the public URL
+    # Get the public URL with retry logic
+    echo "Checking for ngrok tunnel..." >&2
     local ngrok_url=$(get_ngrok_public_url $port)
+
+    # If API didn't work, try parsing log file
     if [ -z "$ngrok_url" ] && [ -f "$ngrok_log" ]; then
-        # Fallback: parse from log file
+        echo "Trying to parse ngrok URL from log file..." >&2
         if command -v jq >/dev/null 2>&1; then
             ngrok_url=$(grep -a '"url"' "$ngrok_log" | jq -r 'select(.url? and (.url | startswith("https://"))) | .url' | head -1)
         else
@@ -143,7 +145,10 @@ start_ngrok_tunnel() {
         echo "$ngrok_url"
     else
         echo "Failed to get ngrok URL" >&2
-        [ -f "$ngrok_log" ] && tail -n 20 "$ngrok_log" >&2 || true
+        if [ -f "$ngrok_log" ]; then
+            echo "ngrok log (last 20 lines):" >&2
+            tail -n 20 "$ngrok_log" >&2
+        fi
         return 1
     fi
 }
@@ -395,20 +400,10 @@ if [ "$ngrok_available" = true ]; then
     echo ""
     echo "Setting up ngrok tunnel for WhatsApp webhook..."
 
-    # Check if tunnel already exists before starting
+    # Check if tunnel already exists before starting (mirrors PowerShell logic)
     existing_url=$(get_ngrok_public_url $flask_port)
-    if [ -n "$existing_url" ]; then
-        ngrok_url="$existing_url"
-        is_new_tunnel=false
-        echo "Found existing ngrok tunnel: $ngrok_url"
-        echo "Reusing existing tunnel (no reconfiguration needed)"
-    else
-        # Start new tunnel and capture the URL
-        ngrok_url=$(start_ngrok_tunnel $flask_port)
-        if [ -n "$ngrok_url" ]; then
-            is_new_tunnel=true
-        fi
-    fi
+    ngrok_url=$(start_ngrok_tunnel $flask_port)
+    is_new_tunnel=$([ -z "$existing_url" ] && [ -n "$ngrok_url" ] && echo "true" || echo "false")
 
     if [ -n "$ngrok_url" ]; then
         echo "ngrok tunnel ready: $ngrok_url"

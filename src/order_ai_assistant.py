@@ -367,20 +367,43 @@ class OrderAIAssistant:
                 logger.info(f"🎯 Intent parsed: {intent} (confidence: 0.9, pattern: '{pattern}')")
                 return {'intent': intent, 'entities': {}, 'confidence': 0.9}
 
-        # 4. MEDIUM PRIORITY: Add to cart (explicit purchase intent only)
+        # 4. BROWSING INTENT: Show products when user expresses buying interest
+        browse_patterns = [
+            (r'i\s*want\s*to\s*buy\s+(.+)', 'browse_products_by_interest'),
+            (r'i\s*need\s+(.+)', 'browse_products_by_interest'),
+            (r'looking\s*for\s+(.+)', 'browse_products_by_interest'),
+            (r'show\s*me\s+(.+?)\s*(products|items)', 'browse_products_by_interest'),
+            (r'what\s+(.+?)\s*do\s*you\s*have', 'browse_products_by_interest'),
+            (r'available\s+(.+)', 'browse_products_by_interest')
+        ]
+        for pattern, intent in browse_patterns:
+            match = re.search(pattern, message_lower)
+            if match:
+                product_name = match.group(1).strip()
+                # Clean up common trailing phrases
+                product_name = re.sub(r'\s*(products|items|to\s+buy|please)$', '', product_name, flags=re.IGNORECASE).strip()
+                logger.info(f"🎯 Intent parsed: {intent} (confidence: 0.85, pattern: '{pattern}') - Product: {product_name}")
+                return {'intent': intent, 'entities': {'product_name': product_name}, 'confidence': 0.85}
+
+        # 5. EXPLICIT ADD TO CART: Only direct cart addition commands
         cart_patterns = [
             (r'add\s+(.+?)\s+to\s+(my|the)?\s*cart', 'add_to_cart'),
             (r'put\s+(.+?)\s+in\s+(my|the)?\s*cart', 'add_to_cart'),
-            (r'i\s*want\s*to\s*buy\s+(.+)', 'add_to_cart'),
-            (r'buy\s+(.+?)\s*(now|please)', 'add_to_cart'),
             (r'add\s+(.+?)\s+to\s*my\s*order', 'add_to_cart'),
-            (r'purchase\s+(.+)', 'add_to_cart'),
-            # More specific order pattern to avoid false positives
+            (r'cart\s+(.+)', 'add_to_cart'),
+            # Handle "add to cart" without product name if context is available
+            (r'^\s*add\s+to\s+cart\s*$', 'add_to_cart_contextual'),
+            # Only very specific immediate purchase patterns
+            (r'buy\s+(.+?)\s*(now|immediately)', 'add_to_cart'),
             (r'^(order|i want to order)\s+(?:\d+\s+)?(.+)', 'add_to_cart')
         ]
         for pattern, intent in cart_patterns:
             match = re.search(pattern, message_lower)
             if match:
+                # Handle special case for "add to cart" without product name
+                if intent == 'add_to_cart_contextual':
+                    return {'intent': 'add_to_cart', 'entities': {'product_name': 'contextual'}, 'confidence': 0.85}
+
                 # Extract product name from the appropriate group
                 if r'get\s+(me\s+)' in pattern:
                     product_name = match.group(2).strip() if len(match.groups()) >= 2 else match.group(1).strip()
@@ -393,7 +416,7 @@ class OrderAIAssistant:
                 logger.info(f"🎯 Intent parsed: {intent} (confidence: 0.85, pattern: '{pattern}') - Product: {product_name}")
                 return {'intent': intent, 'entities': {'product_name': product_name}, 'confidence': 0.85}
 
-        # 5. CHECKOUT FLOW PATTERNS (HIGH PRIORITY)
+        # 6. CHECKOUT FLOW PATTERNS (HIGH PRIORITY)
         checkout_patterns = [
             'proceed with checkout', 'continue checkout', 'proceed with my shopping',
             'continue with my order', 'proceed with order', 'continue shopping',
@@ -407,7 +430,7 @@ class OrderAIAssistant:
                 logger.info(f"🎯 Intent parsed: checkout (confidence: 0.95, pattern: '{pattern}')")
                 return {'intent': 'checkout', 'entities': {}, 'confidence': 0.95}
 
-        # 6. CONTEXT-AWARE AFFIRMATIVE/NEGATIVE RESPONSES
+        # 7. CONTEXT-AWARE AFFIRMATIVE/NEGATIVE RESPONSES
         # Clean message for matching (remove punctuation)
         clean_message = re.sub(r'[^\w\s]', '', message_lower).strip()
 
@@ -419,7 +442,7 @@ class OrderAIAssistant:
             logger.info(f"🎯 Intent parsed: negative_rejection (confidence: 0.95, pattern: 'negative_words')")
             return {'intent': 'negative_rejection', 'entities': {}, 'confidence': 0.95}
 
-        # 6. OTHER SPECIFIC INTENTS
+        # 8. OTHER SPECIFIC INTENTS
         other_patterns = {
             'view_cart': [
                 'view cart', 'show cart', 'cart contents', "what's in my cart",
@@ -451,6 +474,9 @@ class OrderAIAssistant:
                         'matched_pattern': pattern,
                         'raw_message': user_message
                     }
+
+        # Debug logging for unmatched messages
+        logger.info(f"🔍 DEBUG: No intent pattern matched for message: '{user_message}' (normalized: '{message_lower}')")
 
         # 7. CONTEXT-AWARE FALLBACK DETECTION
         # Check for delivery address mentions by location - BUT EXCLUDE shipping rate inquiries
@@ -1418,6 +1444,60 @@ class OrderAIAssistant:
                         'action': 'product_not_found'
                     })
 
+            elif intent == 'browse_products_by_interest':
+                # Show available product options instead of auto-adding to cart
+                product_name_from_intent = entities.get('product_name')
+                logger.info(f"🛍️ Browse products intent for: {product_name_from_intent}")
+
+                # First try to find the primary product they mentioned
+                primary_product = self.extract_product_info(user_message, product_name_hint=product_name_from_intent)
+
+                if primary_product and primary_product.get('product_id'):
+                    # Found a specific product - show details and offer to add to cart
+                    active_session_state.conversation_stage = 'browsing_products'
+                    active_session_state.last_product_mentioned = primary_product
+
+                    price_formatted = f"₦{primary_product['price']:,.0f}" if primary_product.get('price') else "Price not available"
+                    stock_status = "✅ In Stock" if primary_product.get('stock_quantity', 0) > 0 else "❌ Out of Stock"
+                    stock_count = primary_product.get('stock_quantity', 0)
+
+                    options_message = f"Great! I found **{primary_product['product_name']}** for you:\n\n"
+                    options_message += f"💰 **Price:** {price_formatted}\n"
+                    options_message += f"📦 **Status:** {stock_status}"
+                    if stock_count > 0:
+                        options_message += f" ({stock_count} units available)\n"
+                    else:
+                        options_message += "\n"
+
+                    if primary_product.get('description'):
+                        options_message += f"📝 **Description:** {primary_product['description'][:100]}...\n"
+
+                    options_message += f"\n💬 **To add to cart, say:** *'Add {primary_product['product_name']} to cart'*\n"
+                    options_message += f"🔍 **For more details, ask:** *'Tell me more about {primary_product['product_name']}'*"
+
+                    response_data.update({
+                        'success': True,
+                        'message': options_message,
+                        'action': 'product_options_shown',
+                        'product_info': primary_product
+                    })
+                else:
+                    # No specific product found - show general guidance
+                    active_session_state.conversation_stage = 'browsing_products'
+
+                    guidance_message = f"I'd love to help you find {product_name_from_intent}! 🛍️\n\n"
+                    guidance_message += f"To get the best results, try being more specific:\n"
+                    guidance_message += f"• *'I want to buy Samsung phone'*\n"
+                    guidance_message += f"• *'Show me rice products'*\n"
+                    guidance_message += f"• *'I need 25kg rice'*\n\n"
+                    guidance_message += f"What specific type or brand of {product_name_from_intent} are you looking for?"
+
+                    response_data.update({
+                        'success': True,
+                        'message': guidance_message,
+                        'action': 'need_product_clarification'
+                    })
+
             elif intent == 'add_to_cart':
                 product_name_from_intent = entities.get('product_name')
 
@@ -1467,15 +1547,27 @@ class OrderAIAssistant:
 
             elif intent == 'view_cart':
                 if active_session_state.cart_items:
+                    # Calculate cart summary
+                    total_items = sum(item['quantity'] for item in active_session_state.cart_items)
+                    subtotal = sum(item['subtotal'] for item in active_session_state.cart_items)
+
+                    cart_summary = {
+                        'items': active_session_state.cart_items,
+                        'total_items': total_items,
+                        'subtotal': subtotal,
+                        'subtotal_formatted': f"₦{subtotal:,.2f}"
+                    }
+
                     response_data.update({
                         'success': True,
                         'message': "🛒 Here's what's in your cart:",
                         'action': 'cart_displayed',
+                        'cart_summary': cart_summary
                     })
                 else:
                     response_data.update({
                         'success': True,
-                        'message': "🛒 Your cart is currently empty!",
+                        'message': "🛒 Your cart is currently empty!\n\n💬 Say 'I want to buy [product]' to start shopping!",
                         'action': 'empty_cart',
                     })
 

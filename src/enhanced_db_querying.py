@@ -3639,8 +3639,13 @@ How can I help you with your raqibtech.com experience today? 🌟"""
                     shopping_related_intents = [
                         'add_to_cart', 'view_cart', 'clear_cart', 'remove_from_cart', 'update_cart_item',
                         'checkout', 'place_order', 'set_delivery_address', 'payment_method_selection',
-                        'affirmative_confirmation', 'negative_rejection'
+                        'affirmative_confirmation', 'negative_rejection',
+                        'browse_products_by_interest', 'product_inquiry', 'calculate_total', 'track_order'
                     ]
+
+                    # 🔧 CRITICAL DEBUG: Force code reload verification
+                    logger.info(f"🔧 UPDATED CODE LOADED: intent='{intent_from_parser}' in shopping_list? {intent_from_parser in shopping_related_intents}")
+
                     is_potentially_shopping_action = intent_from_parser in shopping_related_intents
 
                     # 🔧 CRITICAL FIX: Exclude queries asking about multiple customers from shopping actions
@@ -3652,6 +3657,12 @@ How can I help you with your raqibtech.com experience today? 🌟"""
                         logger.info(f"🚫 Cross-customer query detected, overriding shopping action: {user_query[:50]}...")
 
                     logger.info(f"🔍 Shopping intent check: query='{user_query[:50]}...', parsed_intent='{intent_from_parser}', is_shopping_action={is_potentially_shopping_action}")
+
+                    if is_potentially_shopping_action:
+                        logger.info(f"🎯 Routing to OrderAIAssistant for shopping intent: {intent_from_parser}")
+                    else:
+                        logger.info(f"🔄 Intent '{intent_from_parser}' not in shopping_related_intents: {shopping_related_intents}")
+
 
                     if is_potentially_shopping_action:
                         logger.info(f"🎯 Potential Shopping Action via intent parser: {intent_from_parser}")

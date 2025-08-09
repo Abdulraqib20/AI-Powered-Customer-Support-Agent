@@ -13,10 +13,13 @@ import os
 import sys
 from pathlib import Path
 from dataclasses import dataclass
+import logging
 
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent))
 from config.database_config import safe_int_env, safe_str_env
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class ChatMessage:
@@ -88,7 +91,7 @@ class SessionManager:
                         result = cur.fetchone()
                         if result:
                             conn.commit()
-                            print(f"✅ Session created successfully: {result['session_id']}")
+                            logger.debug(f"✅ Session created successfully: {result['session_id']}")
                             return result['session_id']
                         else:
                             raise Exception("Session creation returned no result")
@@ -106,7 +109,7 @@ class SessionManager:
                         result = cur.fetchone()
                         if result:
                             conn.commit()
-                            print(f"✅ Session created successfully on retry: {result['session_id']}")
+                            logger.debug(f"✅ Session created successfully on retry: {result['session_id']}")
                             return result['session_id']
                         else:
                             raise Exception("Session creation failed on retry")
