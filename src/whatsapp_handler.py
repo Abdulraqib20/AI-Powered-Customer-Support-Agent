@@ -387,6 +387,25 @@ class WhatsAppBusinessHandler:
                     return False
                 cleaned = ''.join(ch for ch in text.lower().strip() if ch.isalnum() or ch.isspace())
                 cleaned = ' '.join(cleaned.split())
+
+                # 🚫 CRITICAL FIX: Exclude shopping/business commands from greeting detection
+                shopping_commands = {
+                    'checkout', 'place order', 'show cart', 'view cart', 'add to cart',
+                    'buy', 'purchase', 'order', 'cart', 'payment', 'delivery',
+                    'i want to buy', 'add this', 'remove from cart', 'clear cart'
+                }
+
+                # 🚫 CRITICAL FIX: Exclude confirmation words during checkout flow
+                confirmation_words = {'yes', 'no', 'confirm', 'proceed', 'continue', 'ok', 'okay'}
+
+                # If it's a shopping command, definitely NOT a greeting
+                if any(cmd in cleaned for cmd in shopping_commands):
+                    return False
+
+                # If it's a confirmation word, NOT a greeting (likely part of checkout flow)
+                if cleaned in confirmation_words:
+                    return False
+
                 greeting_phrases = {
                     'hi', 'hello', 'hey', 'yo', 'sup',
                     'good morning', 'good afternoon', 'good evening',
